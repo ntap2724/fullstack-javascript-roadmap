@@ -1025,16 +1025,23 @@ git commit -m "docs: add task and verification contracts"
 
 **Files:**
 - Create: `scripts/verify-wp-00-01.mjs`
+- Create: `scripts/wp-00-01-gate.integration.mjs`
 - Modify: `package.json`
 
 **Interfaces:**
 - Consumes: all WP-00–01 root commands and policy tests
 - Produces: `pnpm verify:wp-00-01` and a clean evidence report for the next work package
 
+The `.integration.mjs` suffix is intentional so the direct gate test cannot match
+`scripts/*.test.mjs` on any supported platform. Do not replace this finite execution design
+with an environment-variable recursion guard, recursion-depth counter, timeout, conditional
+test skipping, weakened gate assertion, omitted bootstrap tests, or a warning in place of a
+failing verifier.
+
 - [ ] **Step 1: Write the failing gate test**
 
 ```js
-// scripts/wp-00-01-gate.test.mjs
+// scripts/wp-00-01-gate.integration.mjs
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -1051,10 +1058,10 @@ test('WP-00–01 gate command succeeds', () => {
 - [ ] **Step 2: Run the test and confirm the gate module is missing**
 
 ```bash
-node --test scripts/wp-00-01-gate.test.mjs
+node --test scripts/wp-00-01-gate.integration.mjs
 ```
 
-Expected: non-zero exit.
+Expected: non-zero exit because `scripts/verify-wp-00-01.mjs` does not yet exist.
 
 - [ ] **Step 3: Implement the gate as a sequence of exact commands**
 
@@ -1077,6 +1084,7 @@ Add:
 {
   "scripts": {
     "test:bootstrap": "node --test scripts/*.test.mjs",
+    "test:wp-00-01-gate": "node --test scripts/wp-00-01-gate.integration.mjs",
     "verify:wp-00-01": "node scripts/verify-wp-00-01.mjs",
     "verify": "node scripts/run-pipeline.mjs check test:bootstrap"
   }
@@ -1091,6 +1099,9 @@ Vitest remains the domain test runner from WP-02 onward; `test:bootstrap` ensure
 rm -rf node_modules
 pnpm install --frozen-lockfile
 pnpm verify:wp-00-01
+pnpm test:wp-00-01-gate
+pnpm verify:templates
+pnpm verify:release
 ```
 
 On Windows, use PowerShell:
@@ -1099,17 +1110,24 @@ On Windows, use PowerShell:
 Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 pnpm install --frozen-lockfile
 pnpm verify:wp-00-01
+pnpm test:wp-00-01-gate
+pnpm verify:templates
+pnpm verify:release
 ```
 
-Expected: all commands exit `0`.
+Expected: installation, `verify:wp-00-01`, and `test:wp-00-01-gate` exit `0`.
+`verify:templates` and `verify:release` each exit `2`.
 
 - [ ] **Step 5: Review and commit**
 
 ```bash
 git status --short
 git diff --check
-git add scripts/verify-wp-00-01.mjs scripts/wp-00-01-gate.test.mjs package.json
+git add scripts/verify-wp-00-01.mjs scripts/wp-00-01-gate.integration.mjs package.json
 git commit -m "test: add bootstrap governance gate"
 ```
 
-WP-00–01 exit evidence must include the exact Node and pnpm versions, fresh-install result, root command results, and confirmation that `verify:templates` and `verify:release` still fail closed until their owning work packages replace them.
+WP-00–01 exit evidence must include the exact Node and pnpm versions, fresh-install result,
+`pnpm verify:wp-00-01`, `pnpm test:wp-00-01-gate`, and confirmation that
+`verify:templates` and `verify:release` still fail closed with exit `2` until their owning work
+packages replace them.
