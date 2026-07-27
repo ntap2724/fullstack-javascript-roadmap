@@ -1372,11 +1372,56 @@ git commit -m "build: add strict repository checks"
 - Create: `scripts/run-pipeline.mjs`
 - Create: `scripts/run-pipeline.test.mjs`
 - Create: `scripts/unavailable-command.mjs`
+- Modify: `.prettierignore`
+- Modify: `scripts/config-contract.test.mjs`
 - Modify: `package.json`
+- Update in ignored SDD state: `.superpowers/sdd/2026-07-26-wp-00-01-bootstrap-governance/task-4-report.md`
+- Update in ignored SDD state: `.superpowers/sdd/2026-07-26-wp-00-01-bootstrap-governance/progress.md`
 
 **Interfaces:**
 - Consumes: named npm scripts from `package.json`
 - Produces: `runPipeline(scriptNames): Promise<void>` and the stable root public commands
+- Preserves: source files remain formatter-owned while the repository-root `.superpowers/`
+  generated SDD workspace is outside Prettier ownership
+
+The original Task 4 implementation commit is:
+
+```text
+c521e38
+```
+
+Do not amend, squash, or rewrite it. The following human-approved continuation adds a
+plan-amendment commit and an implementation-fix commit on top of the existing history.
+
+The root formatter ownership boundary is exactly:
+
+```text
+/docs/superpowers/
+/pnpm-lock.yaml
+/.superpowers/
+```
+
+The three root-anchored entries have distinct meanings:
+
+```text
+/docs/superpowers/
+└── Canonical plans and specifications that must not be reformatted
+    incidentally by implementation tasks
+
+/pnpm-lock.yaml
+└── Root generated lockfile whose formatting is owned by pnpm
+
+/.superpowers/
+└── Root-local generated SDD execution state, including briefs, reports,
+    ledgers, review packages, and temporary evidence
+```
+
+Do not broaden these patterns to `docs/`, `.superpowers`, `**/.superpowers/`, `*.md`, or
+`scripts/`. Do not move the SDD workspace, change Git ignore policy, reformat generated
+evidence, remove `format:check` from `pnpm verify`, turn formatter failures into warnings,
+or add an environment-dependent bypass. Canonical `docs/superpowers/` documents and the
+generated root `pnpm-lock.yaml` remain outside Prettier ownership for their existing
+reasons; source scripts and configuration remain formatter-owned.
 
 - [ ] **Step 1: Write tests for order, failure propagation, and unknown scripts**
 
@@ -1516,6 +1561,234 @@ Expected: bootstrap tests and `pnpm verify` pass. `pnpm verify:templates` must e
 git add scripts/run-pipeline.mjs scripts/run-pipeline.test.mjs scripts/unavailable-command.mjs package.json
 git commit -m "build: add fail closed root pipeline"
 ```
+
+- [ ] **Step 7: Commit the human-approved canonical plan correction separately**
+
+Before changing `.prettierignore`, commit only this canonical plan correction:
+
+```bash
+git add docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md
+git commit -m "docs: exclude SDD workspace from Task 4 formatting"
+```
+
+Record the exact plan-amendment commit hash in the ignored Task 4 report and ledger, then
+regenerate the Task 4 brief. The ledger must contain an entry equivalent to:
+
+```text
+Task 4: human-approved plan amendment — the repository-root .superpowers
+directory is generated, Git-ignored SDD execution state and is outside
+Prettier ownership; canonical docs and source-code ownership boundaries
+remain unchanged
+```
+
+Do not force-add the ignored report, ledger, brief, or any other `.superpowers/` content.
+
+- [ ] **Step 8: Extend the behavioral Prettier ownership regression before the fix**
+
+Extend the existing Prettier ownership test in `scripts/config-contract.test.mjs`; do not
+add a plain-text comparison of `.prettierignore`. Import the additional helpers:
+
+```js
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+```
+
+Replace the existing Prettier ownership test with behavior equivalent to:
+
+```js
+test('Prettier ownership excludes only root governance and generated-state boundaries', async () => {
+  const temporaryDirectory = await mkdtemp(
+    path.join('.superpowers', 'sdd', 'prettier-regression-'),
+  );
+  const generatedArtifact = path.join(
+    temporaryDirectory,
+    `generated-${randomUUID()}.md`,
+  );
+
+  try {
+    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+
+    const cases = [
+      [
+        'docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md',
+        true,
+      ],
+      [
+        'docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md',
+        true,
+      ],
+      ['pnpm-lock.yaml', true],
+      [generatedArtifact, true],
+      ['scripts/pin-toolchain.mjs', false],
+      ['scripts/toolchain.test.mjs', false],
+      ['eslint.config.mjs', false],
+    ];
+
+    for (const [filePath, expectedIgnored] of cases) {
+      const info = await getFileInfo(filePath, {
+        ignorePath: path.resolve('.prettierignore'),
+      });
+      assert.equal(info.ignored, expectedIgnored, filePath);
+    }
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+```
+
+This creates and removes only its uniquely named temporary directory and generated file
+under the root `.superpowers/sdd/` workspace. It must not open, rewrite, or delete an
+existing brief, report, ledger, review package, or evidence artifact.
+
+- [ ] **Step 9: Run the focused regression and preserve RED evidence**
+
+Before adding `/.superpowers/`, run:
+
+```bash
+node --test scripts/config-contract.test.mjs
+```
+
+Expected: non-zero exit caused by the generated root `.superpowers` artifact reporting
+`ignored === false` when the assertion requires `true`. Record the exact command, exit
+status, actual test count, relevant failure message, generated temporary path, and
+confirmation that the temporary directory was removed in `finally`. The failure must not
+come from a syntax error or missing dependency.
+
+Also preserve the existing pre-fix evidence:
+
+```text
+pnpm verify
+└── exit 1 because a generated, Git-ignored Task 4 brief is formatter-owned
+```
+
+Do not reformat the Task 4 brief to make this command green.
+
+- [ ] **Step 10: Add the minimal root formatter boundary**
+
+Add exactly this third line to the root `.prettierignore`:
+
+```text
+/.superpowers/
+```
+
+The resulting file must be:
+
+```text
+/docs/superpowers/
+/pnpm-lock.yaml
+/.superpowers/
+```
+
+Do not modify existing SDD artifacts merely to satisfy formatting.
+
+- [ ] **Step 11: Correct unavailable-command evidence with current replays**
+
+Run these commands separately:
+
+```bash
+pnpm verify:templates
+pnpm verify:release
+```
+
+Each command must exit `2`. For each, append the exact command, exit status, current
+stdout, and current stderr to the Task 4 report. If the original channel-separated output
+was not retained, label the evidence exactly:
+
+```text
+current replay evidence; original historical channel-separated capture unavailable
+```
+
+Remove or explicitly correct the inaccurate exit-`1` claims. Do not call either command
+successful or passing. Use the Task 4 contract already defined above:
+
+```text
+Command executed as designed and returned the intentional unavailable or
+not-yet-implemented status 2
+```
+
+A fresh replay does not replace or reinterpret a historical capture.
+
+- [ ] **Step 12: Run complete GREEN verification**
+
+Run the focused ownership test first, followed by the complete Task 4 verification:
+
+```bash
+node --test scripts/config-contract.test.mjs
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test:bootstrap
+pnpm verify
+pnpm verify:templates
+pnpm verify:release
+git diff --check
+```
+
+Expected: the focused test, formatting, lint, typecheck, bootstrap tests, full verifier,
+and `git diff --check` exit `0`; `verify:templates` and `verify:release` each execute as
+designed and exit `2`. Record actual test counts rather than carrying forward earlier
+counts without verification.
+
+Also confirm:
+
+- no existing SDD artifact was reformatted;
+- no `.superpowers/` content became tracked;
+- source scripts and `eslint.config.mjs` remain formatter-owned through the behavioral
+  assertions;
+- the worktree contains no unintended tracked changes; and
+- Task 2 focused tests remain passing if Task 2-owned source or configuration changed.
+
+- [ ] **Step 13: Commit the implementation fix separately**
+
+After GREEN verification:
+
+```bash
+git add .prettierignore scripts/config-contract.test.mjs
+git commit -m "chore: exclude SDD scratch from formatting"
+```
+
+Do not include ignored Task 4 evidence in the commit, and do not amend `c521e38`.
+
+- [ ] **Step 14: Finish the Task 4 report and scoped independent re-review**
+
+Append the fix-round evidence to the existing ignored Task 4 report with these clearly
+separated sections:
+
+```text
+Original Task 4 implementation evidence
+Pre-fix formatter failure
+Human-approved plan amendment
+Regression RED evidence
+Configuration GREEN evidence
+Fresh unavailable-command exit evidence
+```
+
+Include the plan-amendment and implementation-fix hashes, exact commands, exit statuses,
+actual test counts, relevant stdout and stderr, generated temporary path, cleanup
+confirmation, and remaining limitations. Do not claim that the canonical plan was
+unmodified, that either unavailable command passed, or that a non-zero status is success.
+
+Dispatch an independent scoped re-review after the evidence is complete. The reviewer must
+verify:
+
+1. `/.superpowers/` is root-anchored and excludes only the root SDD execution workspace.
+2. Source scripts remain formatter-covered.
+3. The regression exercises Prettier's actual ignore behavior and does not use existing SDD
+   artifacts as disposable fixtures.
+4. RED evidence predates the ignore change.
+5. `pnpm verify` exits `0`.
+6. `verify:templates` and `verify:release` are each accurately reported as exit `2`, and
+   neither non-zero result is mislabeled as passing.
+7. The inaccurate report statements are corrected.
+8. No tracked source or implementation behavior changed outside this approved Task 4
+   amendment.
+
+Treat a broad `**/.superpowers/` exclusion, formatter-ignored source scripts, rewritten
+existing SDD evidence, an exit-`2` result reported as exit `0`, removal of formatting from
+the root verification pipeline, or missing behavioral regression coverage as Important.
+Task 4 is complete only when the scoped reviewer reports both specification compliance and
+task quality with no open Critical or Important findings.
 
 ### Task 5: Add root and scoped `AGENTS.md` governance
 
