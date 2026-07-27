@@ -208,6 +208,7 @@ Expected: tests pass and the commit contains no generated files.
 
 **Files:**
 - Create: `.node-version`
+- Create: `.pnpm-version`
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `scripts/pin-toolchain.mjs`
@@ -260,25 +261,125 @@ node --test scripts/toolchain.test.mjs
 
 Expected: non-zero exit because `.node-version` and `package.json` do not exist.
 
-- [ ] **Step 3: Add the toolchain-recording script**
+- [ ] **Step 3: Add the direct-invocation regression test and verify RED**
+
+Replace the current import block in `scripts/toolchain.test.mjs` with the imports below, keep
+the three existing tests, and append the new test body:
+
+```js
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+test('pin script resolves pnpm without npm_execpath', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'roadmap-toolchain-'));
+
+  try {
+    await writeFile(
+      path.join(root, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'pin-toolchain-regression',
+          version: '0.0.0',
+          private: true,
+          type: 'module',
+          engines: { node: '>=24 <25' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const script = fileURLToPath(new URL('./pin-toolchain.mjs', import.meta.url));
+    const env = { ...process.env };
+
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'npm_execpath') {
+        delete env[key];
+      }
+    }
+
+    const result = spawnSync(process.execPath, [script], {
+      cwd: root,
+      encoding: 'utf8',
+      env,
+      shell: false,
+    });
+    const diagnostic = [
+      `stdout:\n${result.stdout ?? ''}`,
+      `stderr:\n${result.stderr ?? ''}`,
+      `error:\n${result.error?.stack ?? String(result.error ?? '')}`,
+    ].join('\n');
+
+    assert.equal(result.status, 0, diagnostic);
+
+    const nodeVersion = (await readFile(path.join(root, '.node-version'), 'utf8')).trim();
+    const pnpmVersion = (await readFile(path.join(root, '.pnpm-version'), 'utf8')).trim();
+    const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+
+    assert.equal(nodeVersion, process.versions.node);
+    assert.match(pnpmVersion, /^\d+\.\d+\.\d+$/);
+    assert.equal(packageJson.packageManager, `pnpm@${pnpmVersion}`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+```
+
+Add the regression test before changing `scripts/pin-toolchain.mjs`, then run on Windows:
+
+```powershell
+node --test --test-name-pattern="pin script resolves pnpm without npm_execpath" scripts/toolchain.test.mjs
+```
+
+Expected: non-zero exit. The temporary direct invocation reaches the existing
+`corepack.cmd` fallback and reports `spawnSync corepack.cmd EINVAL`.
+
+- [ ] **Step 4: Correct the toolchain-recording script**
 
 ```js
 // scripts/pin-toolchain.mjs
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 
+function resolvePnpmVersion() {
+  const npmExecPath = process.env.npm_execpath;
+
+  if (npmExecPath) {
+    return execFileSync(process.execPath, [npmExecPath, '--version'], {
+      encoding: 'utf8',
+      shell: false,
+    }).trim();
+  }
+
+  if (process.platform === 'win32') {
+    const commandProcessor = process.env.ComSpec ?? 'cmd.exe';
+
+    return execFileSync(
+      commandProcessor,
+      ['/d', '/s', '/c', 'corepack pnpm --version'],
+      {
+        encoding: 'utf8',
+        shell: false,
+        windowsHide: true,
+      },
+    ).trim();
+  }
+
+  return execFileSync('corepack', ['pnpm', '--version'], {
+    encoding: 'utf8',
+    shell: false,
+  }).trim();
+}
+
 const nodeVersion = process.versions.node;
 if (!nodeVersion.startsWith('24.')) {
   throw new Error(`Expected Node.js 24.x, observed ${nodeVersion}`);
 }
 
-const npmExecPath = process.env.npm_execpath;
-const pnpmVersion = npmExecPath
-  ? execFileSync(process.execPath, [npmExecPath, '--version'], { encoding: 'utf8', shell: false }).trim()
-  : execFileSync(process.platform === 'win32' ? 'corepack.cmd' : 'corepack', ['pnpm', '--version'], {
-      encoding: 'utf8',
-      shell: false,
-    }).trim();
+const pnpmVersion = resolvePnpmVersion();
 
 await writeFile('.node-version', `${nodeVersion}\n`);
 await writeFile('.pnpm-version', `${pnpmVersion}\n`);
@@ -289,7 +390,26 @@ packageJson.packageManager = `pnpm@${pnpmVersion}`;
 await writeFile('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
 ```
 
-- [ ] **Step 4: Create the root workspace files and pin the active approved versions**
+The `npm_execpath` branch is preferred inside a pnpm lifecycle. Outside a lifecycle, Windows
+uses the explicitly selected command processor with the fixed internal literal
+`corepack pnpm --version`; Linux invokes `corepack` directly. Every Node subprocess keeps
+`shell: false`, and failure to resolve pnpm remains fatal.
+
+Do not use `shell: true`, `execSync`, direct `corepack.cmd` execution, a PowerShell-only
+command, a pnpm-lifecycle requirement, or an assumed or hard-coded pnpm version. Do not
+interpolate environment values, paths, user input, or package metadata into the fixed command
+after `/c`.
+
+Rerun the same focused regression test:
+
+```powershell
+node --test --test-name-pattern="pin script resolves pnpm without npm_execpath" scripts/toolchain.test.mjs
+```
+
+Expected: exit `0`; the temporary invocation generates consistent `.node-version`,
+`.pnpm-version`, and `package.json.packageManager` values.
+
+- [ ] **Step 5: Create the root workspace files and pin the active approved versions**
 
 ```json
 {
@@ -334,7 +454,7 @@ pnpm add -Dw --save-exact typescript zod vitest eslint @eslint/js typescript-esl
 
 The commands write exact versions into `package.json` and `pnpm-lock.yaml`; no `latest` string is committed.
 
-- [ ] **Step 5: Write the toolchain ADR and verify consistency**
+- [ ] **Step 6: Write the toolchain ADR and verify consistency**
 
 `docs/decisions/0001-toolchain.md` must record:
 
@@ -356,11 +476,40 @@ Run:
 ```bash
 node --test scripts/toolchain.test.mjs
 pnpm install --frozen-lockfile
+git diff --check
 ```
 
-Expected: both commands exit `0`.
+Expected: all commands exit `0`.
 
-- [ ] **Step 6: Commit**
+On Windows, also verify the actual direct command outside a pnpm lifecycle:
+
+```powershell
+$SavedNpmExecPath = $env:npm_execpath
+
+try {
+    Remove-Item Env:npm_execpath -ErrorAction SilentlyContinue
+    node scripts/pin-toolchain.mjs
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Direct pin-toolchain invocation failed"
+    }
+}
+finally {
+    if ($null -ne $SavedNpmExecPath) {
+        $env:npm_execpath = $SavedNpmExecPath
+    }
+}
+
+node --test scripts/toolchain.test.mjs
+pnpm install --frozen-lockfile
+git diff --check
+```
+
+Expected: the direct invocation and all three verification commands exit `0`. The temporary
+regression invocation writes only inside its temporary directory; it never rewrites the
+repository's real pin files or `package.json`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add .node-version .pnpm-version package.json pnpm-workspace.yaml pnpm-lock.yaml scripts/pin-toolchain.mjs scripts/toolchain.test.mjs docs/decisions/0001-toolchain.md
