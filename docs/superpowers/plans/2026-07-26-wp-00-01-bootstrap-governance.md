@@ -819,6 +819,7 @@ git commit -m "build: pin release zero toolchain"
 ### Task 3: Add strict TypeScript, lint, format, and Vitest project configuration
 
 **Files:**
+- Create: `.prettierignore`
 - Create: `tsconfig.base.json`
 - Create: `tsconfig.json`
 - Create: `eslint.config.mjs`
@@ -826,20 +827,50 @@ git commit -m "build: pin release zero toolchain"
 - Create: `vitest.config.ts`
 - Create: `scripts/config-contract.test.mjs`
 - Modify: `package.json`
+- Modify (Prettier-only): `scripts/pin-toolchain.mjs`
+- Modify (Prettier-only): `scripts/toolchain.test.mjs`
+- Modify only if the direct `globals` dependency is missing: `pnpm-workspace.yaml`
+- Modify only if the direct `globals` dependency is missing: `pnpm-lock.yaml`
 
 **Interfaces:**
 - Consumes: exact dependencies from Task 2
-- Produces: root `check` and `test` scripts used by every later plan
+- Produces: root `check`, `test`, and `test:bootstrap` scripts used by every later plan; strict typed linting for TypeScript; untyped JavaScript linting whose ESM and CommonJS globals remain distinct
+
+For the resumed Task 3 execution, preserve the pre-amendment RED evidence before changing
+`.prettierignore` or `eslint.config.mjs`:
+
+```bash
+pnpm format:check
+pnpm lint
+```
+
+Expected:
+
+```text
+pnpm format:check
+└── exit 1 on the nine canonical plan/specification files, pnpm-lock.yaml,
+    scripts/pin-toolchain.mjs, and scripts/toolchain.test.mjs
+
+pnpm lint
+└── exit 2 because @typescript-eslint/await-thenable requires type
+    information while linting eslint.config.mjs
+```
+
+Record each command, exit status, stdout, and stderr in the Task 3 report. These failures are
+the known configuration defects; do not turn them into warnings.
 
 - [ ] **Step 1: Write the failing configuration contract test**
 
 ```js
 // scripts/config-contract.test.mjs
+import { ESLint } from 'eslint';
 import { readFile } from 'node:fs/promises';
+import { getFileInfo } from 'prettier';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
+const eslint = new ESLint({ cwd: process.cwd() });
 
 test('TypeScript base config is strict and emits no build artifacts', async () => {
   const config = await readJson('tsconfig.base.json');
@@ -859,18 +890,116 @@ test('root scripts expose check and bootstrap tests', async () => {
   const packageJson = await readJson('package.json');
   assert.equal(typeof packageJson.scripts.check, 'string');
   assert.equal(packageJson.scripts.test, 'node --test scripts/*.test.mjs');
+  assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
+});
+
+test('Prettier ownership excludes only canonical governance docs and the root lockfile', async () => {
+  const cases = [
+    ['docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md', true],
+    ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
+    ['pnpm-lock.yaml', true],
+    ['scripts/pin-toolchain.mjs', false],
+    ['scripts/toolchain.test.mjs', false],
+    ['eslint.config.mjs', false],
+  ];
+
+  for (const [filePath, expectedIgnored] of cases) {
+    const info = await getFileInfo(filePath, {
+      ignorePath: '.prettierignore',
+    });
+    assert.equal(info.ignored, expectedIgnored, filePath);
+  }
+});
+
+test('globals is a direct dependency with exact catalog and lock resolution', async () => {
+  const packageJson = await readJson('package.json');
+  const workspace = await readFile('pnpm-workspace.yaml', 'utf8');
+  const lockfile = await readFile('pnpm-lock.yaml', 'utf8');
+
+  assert.equal(packageJson.devDependencies?.globals, 'catalog:');
+  assert.match(workspace, /^  globals: 17\.7\.0$/m);
+  assert.match(
+    lockfile,
+    /importers:\r?\n\r?\n  \.:[\s\S]*?\n      globals:\r?\n        specifier: 'catalog:'\r?\n        version: 17\.7\.0(?:\r?\n|$)/,
+  );
+});
+
+test('TypeScript keeps type-aware linting without CommonJS globals', async () => {
+  const config = await eslint.calculateConfigForFile('vitest.config.ts');
+
+  assert.equal(config.languageOptions.parserOptions.projectService, true);
+  assert.equal(config.rules['@typescript-eslint/await-thenable'][0], 2);
+  assert.equal(config.languageOptions.globals.require, undefined);
+});
+
+test('MJS and CJS lint without project-information parser failures', async () => {
+  const [mjsResult] = await eslint.lintText('void 0;\n', {
+    filePath: 'scripts/config-contract-fixture.mjs',
+  });
+  const [cjsResult] = await eslint.lintText('void 0;\n', {
+    filePath: 'scripts/config-contract-fixture.cjs',
+  });
+
+  assert.equal(mjsResult.fatalErrorCount, 0);
+  assert.equal(cjsResult.fatalErrorCount, 0);
+
+  const mjsConfig = await eslint.calculateConfigForFile(
+    'scripts/config-contract-fixture.mjs',
+  );
+  const cjsConfig = await eslint.calculateConfigForFile(
+    'scripts/config-contract-fixture.cjs',
+  );
+
+  assert.equal(mjsConfig.languageOptions.parserOptions.projectService, false);
+  assert.equal(cjsConfig.languageOptions.parserOptions.projectService, false);
+});
+
+test('require is undefined in MJS and defined in CJS', async () => {
+  const source = "require('node:fs');\n";
+  const [mjsResult] = await eslint.lintText(source, {
+    filePath: 'scripts/config-contract-fixture.mjs',
+  });
+  const [cjsResult] = await eslint.lintText(source, {
+    filePath: 'scripts/config-contract-fixture.cjs',
+  });
+
+  const mjsRequireErrors = mjsResult.messages.filter(
+    (message) => message.ruleId === 'no-undef' && message.message.includes("'require'"),
+  );
+  const cjsRequireErrors = cjsResult.messages.filter(
+    (message) => message.ruleId === 'no-undef' && message.message.includes("'require'"),
+  );
+
+  assert.equal(mjsRequireErrors.length, 1);
+  assert.equal(cjsRequireErrors.length, 0);
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm the configuration files are missing**
+- [ ] **Step 2: Run the focused tests and verify the amended contract is RED**
 
 ```bash
 node --test scripts/config-contract.test.mjs
 ```
 
-Expected: non-zero exit for `tsconfig.base.json`.
+Expected in the resumed Task 3 execution: non-zero exit caused by the missing
+`.prettierignore`, missing `test:bootstrap` script, and untyped JavaScript receiving the
+type-aware preset without project information. The tests must load successfully and fail
+because configuration is missing or incorrect, not because the test has a syntax error.
 
-- [ ] **Step 3: Add strict compiler and formatter configuration**
+- [ ] **Step 3: Establish the formatter ownership boundary and strict compiler configuration**
+
+Create the root-anchored ignore file exactly:
+
+```text
+/docs/superpowers/
+/pnpm-lock.yaml
+```
+
+The leading `/` characters are required. `docs/superpowers/` is excluded because approved
+design and implementation-plan documents must not be reformatted incidentally; it remains
+subject to placeholder, fence-balance, link, schema, and review checks. `pnpm-lock.yaml` is
+excluded because pnpm owns its generated serialization. Do not add broader Markdown, YAML,
+docs, or scripts patterns, and do not exclude either Task 2 script.
 
 ```json
 {
@@ -913,13 +1042,13 @@ export default {
 };
 ```
 
-- [ ] **Step 4: Add ESLint flat configuration and Vitest projects**
+- [ ] **Step 4: Add typed TypeScript and separate untyped ESM/CommonJS lint configuration**
 
 ```js
 // eslint.config.mjs
 import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/coverage/**', '**/.generated/**', '**/.tmp/**'] },
@@ -928,7 +1057,9 @@ export default tseslint.config(
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
-      globals: globals.node,
+      globals: {
+        ...globals.nodeBuiltin,
+      },
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
@@ -940,8 +1071,37 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'error',
     },
   },
+  {
+    files: ['**/*.mjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        ...globals.nodeBuiltin,
+      },
+    },
+  },
+  {
+    files: ['**/*.cjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
 );
 ```
+
+The untyped overrides occur after the typed base so their parser options and rules win for
+their matching files. Do not use a combined `**/*.{js,mjs,cjs}` override, disable `no-undef`,
+add JavaScript to the TypeScript project, or grant CommonJS globals to ESM files.
+
+The current repository contains no first-party `.js` files, so Task 3 adds no repository-wide
+`.js` override. If a later package adds `.js`, its package-scoped configuration must use
+`globals.nodeBuiltin` when that package has `"type": "module"` and `globals.node` only when it
+has `"type": "commonjs"`.
 
 ```ts
 // vitest.config.ts
@@ -959,7 +1119,23 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: Add the root scripts and run them**
+- [ ] **Step 5: Confirm the exact direct globals dependency, add root scripts, and format owned source**
+
+Task 2 already declares `globals` directly in the root `devDependencies` through the strict
+default catalog, whose exact value and root-lock resolution are both 17.7.0. Preserve that
+direct declaration and record the three assertions from Step 1. Do not churn the dependency
+graph merely to replace an already-direct exact catalog dependency.
+
+If this task is re-executed in a state where `package.json.devDependencies.globals` is absent,
+add it with:
+
+```bash
+pnpm add -Dw --save-exact globals@17.7.0
+```
+
+In that case, commit the resulting `package.json`, `pnpm-workspace.yaml`, and
+`pnpm-lock.yaml` changes and require the final root importer to resolve 17.7.0. Never rely on
+a transitive copy.
 
 Set these scripts in `package.json`:
 
@@ -971,27 +1147,64 @@ Set these scripts in `package.json`:
     "lint": "eslint .",
     "typecheck": "tsc --project tsconfig.json",
     "check": "node scripts/run-pipeline.mjs format:check lint typecheck",
-    "test": "node --test scripts/*.test.mjs"
+    "test": "node --test scripts/*.test.mjs",
+    "test:bootstrap": "node --test scripts/*.test.mjs"
   }
 }
 ```
 
-Task 4 creates `run-pipeline.mjs`; before that task, run the individual commands:
+Task 4 creates `run-pipeline.mjs`; do not run `pnpm check` before Task 4. Format all
+Prettier-owned source:
 
 ```bash
 pnpm format
+```
+
+Expected: canonical files under `docs/superpowers/` and the generated root lockfile remain
+unchanged by Prettier. The two Task 2 scripts receive formatting-only changes and remain
+formatter-covered. Inspect their diff and do not mix in behavioral refactoring or remove an
+assertion.
+
+- [ ] **Step 6: Run focused and full GREEN verification**
+
+Run the focused configuration tests first, then the complete verification sequence:
+
+```bash
+node --test scripts/config-contract.test.mjs
 pnpm format:check
 pnpm lint
 pnpm typecheck
-node --test scripts/config-contract.test.mjs
+node --test scripts/toolchain.test.mjs
+node scripts/pin-toolchain.mjs
+node --test scripts/toolchain.test.mjs
+pnpm test:bootstrap
+pnpm install --frozen-lockfile
+git diff --check
 ```
 
-Expected: all commands exit `0`.
+Expected: every command exits `0` with no formatter or linter warnings. The focused Task 3
+file has 8/8 passing tests. The Task 2 toolchain tests pass 7/7 before and after the direct pin
+invocation. The bootstrap count changes from the prior 9/9 baseline to 17/17 because Task 3
+adds eight `scripts/*.test.mjs` tests. Record the old and new counts explicitly, plus:
 
-- [ ] **Step 6: Commit**
+```text
+Direct pin invocation         exit 0
+Frozen install                exit 0
+```
+
+The Task 3 reviewer must inspect the Prettier-only diff for
+`scripts/pin-toolchain.mjs` and `scripts/toolchain.test.mjs` and confirm that no intended
+behavior or assertion was removed. Treat either of these as Important:
+
+- an `.mjs` file receives CommonJS globals
+- a source script becomes excluded from Prettier
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add tsconfig.base.json tsconfig.json eslint.config.mjs prettier.config.mjs vitest.config.ts scripts/config-contract.test.mjs package.json pnpm-lock.yaml
+git add .prettierignore tsconfig.base.json tsconfig.json eslint.config.mjs prettier.config.mjs vitest.config.ts scripts/config-contract.test.mjs scripts/pin-toolchain.mjs scripts/toolchain.test.mjs package.json
+# Only when Step 5 had to add the missing direct dependency:
+git add pnpm-workspace.yaml pnpm-lock.yaml
 git commit -m "build: add strict repository checks"
 ```
 
