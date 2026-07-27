@@ -1,6 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 
+const EXACT_STABLE_SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
 function resolvePnpmVersion() {
   const npmExecPath = process.env.npm_execpath;
 
@@ -37,6 +40,11 @@ if (!nodeVersion.startsWith('24.')) {
 }
 
 const pnpmVersion = resolvePnpmVersion();
+if (!EXACT_STABLE_SEMVER.test(pnpmVersion)) {
+  throw new Error(
+    `Expected an exact stable pnpm version (major.minor.patch), observed ${JSON.stringify(pnpmVersion)}`,
+  );
+}
 
 await writeFile('.node-version', `${nodeVersion}\n`);
 await writeFile('.pnpm-version', `${pnpmVersion}\n`);
