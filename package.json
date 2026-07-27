@@ -14,7 +14,9 @@
     "policy:check": "node scripts/check-repository-policy.mjs",
     "test": "node --test scripts/*.test.mjs",
     "test:bootstrap": "node --test scripts/*.test.mjs",
-    "verify": "node scripts/run-pipeline.mjs check test",
+    "test:wp-00-01-gate": "node --test scripts/wp-00-01-gate.integration.mjs",
+    "verify:wp-00-01": "node scripts/verify-wp-00-01.mjs",
+    "verify": "node scripts/run-pipeline.mjs check test:bootstrap",
     "verify:templates": "node scripts/unavailable-command.mjs verify:templates",
     "verify:release": "node scripts/unavailable-command.mjs verify:release"
   },
