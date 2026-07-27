@@ -218,30 +218,56 @@ Expected: tests pass and the commit contains no generated files.
 
 **Interfaces:**
 - Consumes: an installed, security-supported Node.js 24.x runtime and an approved stable pnpm release
-- Produces: exact runtime records, an ESM private workspace root, and a frozen dependency graph
+- Produces: exact runtime records independently checked against the active tools, an ESM private workspace root, and a frozen dependency graph whose direct Node typings remain on the exact Node 24 line
 
-- [ ] **Step 1: Write the failing consistency test**
+- [ ] **Step 1: Capture the old fail-open pnpm mutation result**
+
+Run this command before changing `scripts/toolchain.test.mjs`:
+
+```bash
+node --input-type=module -e 'import assert from "node:assert/strict"; const pinned = "latest"; const packageJson = { packageManager: "pnpm@latest" }; assert.equal(packageJson.packageManager, `pnpm@${pinned}`);'
+```
+
+Expected: exit `0`, with empty stdout and stderr. Record this exact evidence in the Task 2 report:
+
+```text
+Before fix:
+.pnpm-version  = latest
+packageManager = pnpm@latest
+old canonical test exit status = 0
+```
+
+Because this command uses only in-memory values, it does not mutate repository files. Confirm
+the working tree remains unchanged before adding the regressions:
+
+```bash
+git diff --check
+git status --short
+```
+
+- [ ] **Step 2: Add the exact-pin policy regressions before changing production or dependency policy**
+
+Use an independent test-side observer rather than importing `scripts/pin-toolchain.mjs`,
+because importing the pin script would rewrite repository files. Replace the pnpm-pin test
+semantics in `scripts/toolchain.test.mjs`. The complete import and common-helper block is:
 
 ```js
-// scripts/toolchain.test.mjs
-import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-async function text(path) {
-  return (await readFile(path, 'utf8')).trim();
+async function text(filePath) {
+  return (await readFile(filePath, 'utf8')).trim();
 }
 
 test('Node.js runtime is an exact 24.x version and matches .node-version', async () => {
   const pinned = await text('.node-version');
   assert.match(pinned, /^24\.\d+\.\d+$/);
   assert.equal(process.versions.node, pinned);
-});
-
-test('packageManager pins the active pnpm version', async () => {
-  const packageJson = JSON.parse(await text('package.json'));
-  const expected = await text('.pnpm-version');
-  assert.equal(packageJson.packageManager, `pnpm@${expected}`);
 });
 
 test('workspace policy rejects cycles and empty filters', async () => {
@@ -251,28 +277,176 @@ test('workspace policy rejects cycles and empty filters', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm the pin files are missing**
-
-Run:
-
-```bash
-node --test scripts/toolchain.test.mjs
-```
-
-Expected: non-zero exit because `.node-version` and `package.json` do not exist.
-
-- [ ] **Step 3: Add the direct-invocation regression test and verify RED**
-
-Replace the current import block in `scripts/toolchain.test.mjs` with the imports below, keep
-the three existing tests, and append the new test body:
+Add these exact pnpm observer and policy definitions:
 
 ```js
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+const EXACT_STABLE_SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
+function resolveActivePnpmVersion() {
+  const npmExecPath = process.env.npm_execpath;
+  let command;
+  let args;
+
+  if (npmExecPath) {
+    command = process.execPath;
+    args = [npmExecPath, '--version'];
+  } else if (process.platform === 'win32') {
+    command = process.env.ComSpec ?? 'cmd.exe';
+    args = ['/d', '/s', '/c', 'corepack pnpm --version'];
+  } else {
+    command = 'corepack';
+    args = ['pnpm', '--version'];
+  }
+
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: process.platform === 'win32' && !npmExecPath,
+  });
+  const diagnostic = [
+    `stdout:\n${result.stdout ?? ''}`,
+    `stderr:\n${result.stderr ?? ''}`,
+    `error:\n${result.error?.stack ?? String(result.error ?? '')}`,
+  ].join('\n');
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, diagnostic);
+
+  const active = (result.stdout ?? '').trim();
+  assert.notEqual(active, '', diagnostic);
+  assert.match(active, EXACT_STABLE_SEMVER, diagnostic);
+  return active;
+}
+
+function assertPnpmPinContract(packageJson, pinned, active) {
+  assert.match(pinned, EXACT_STABLE_SEMVER);
+  assert.match(active, EXACT_STABLE_SEMVER);
+  assert.equal(pinned, active);
+  assert.equal(packageJson.packageManager, `pnpm@${active}`);
+}
+
+test('packageManager pins the exact active pnpm version', async () => {
+  const packageJson = JSON.parse(await text('package.json'));
+  const pinned = await text('.pnpm-version');
+  const active = resolveActivePnpmVersion();
+
+  assertPnpmPinContract(packageJson, pinned, active);
+});
+
+test('pnpm pin policy rejects latest even when repository records agree', () => {
+  const active = resolveActivePnpmVersion();
+
+  assert.throws(
+    () =>
+      assertPnpmPinContract(
+        { packageManager: 'pnpm@latest' },
+        'latest',
+        active,
+    ),
+    (error) => {
+      assert.equal(error.code, 'ERR_ASSERTION');
+      assert.equal(error.actual, 'latest');
+      assert.match(error.message, /expected to match|did not match/i);
+      return true;
+    },
+  );
+});
+
+test('direct Node typings stay on the exact Node 24 line', async () => {
+  const packageJson = JSON.parse(await text('package.json'));
+  const nodeTypesVersion = packageJson.devDependencies?.['@types/node'];
+
+  assert.match(
+    nodeTypesVersion,
+    /^24\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
+  );
+  assert.equal(nodeTypesVersion, '24.13.3');
+
+  const lockfile = await text('pnpm-lock.yaml');
+  assert.match(
+    lockfile,
+    /importers:\r?\n\r?\n  \.:[\s\S]*?\n      '@types\/node':\r?\n        specifier: 24\.13\.3\r?\n        version: 24\.13\.3(?:\r?\n|$)/,
+  );
+});
+```
+
+`EXACT_STABLE_SEMVER` intentionally rejects `latest`, `next`, `10`, `10.2`,
+`v10.2.3`, `^10.2.3`, `~10.2.3`, `>=10.2.3`, `10.2.3-beta.1`, and
+`10.2.3+metadata`.
+
+Add this regression to the same file. It makes a fake lifecycle pnpm executable return
+`latest`, requires the pin script to fail, and proves all three target files retain their
+exact original bytes:
+
+```js
+test('pin script rejects a non-exact pnpm version before writing files', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'roadmap-toolchain-invalid-pnpm-'));
+  const packageJsonPath = path.join(root, 'package.json');
+  const nodeVersionPath = path.join(root, '.node-version');
+  const pnpmVersionPath = path.join(root, '.pnpm-version');
+  const fakePnpmPath = path.join(root, 'fake-pnpm.mjs');
+  const originalPackageJson =
+    `${JSON.stringify(
+      {
+        name: 'pin-toolchain-invalid-pnpm',
+        version: '0.0.0',
+        private: true,
+        type: 'module',
+        engines: { node: '>=24 <25' },
+        packageManager: 'pnpm@11.9.0',
+      },
+      null,
+      2,
+    )}\n`;
+  const originalNodeVersion = 'sentinel-node\n';
+  const originalPnpmVersion = 'sentinel-pnpm\n';
+
+  try {
+    await writeFile(packageJsonPath, originalPackageJson);
+    await writeFile(nodeVersionPath, originalNodeVersion);
+    await writeFile(pnpmVersionPath, originalPnpmVersion);
+    await writeFile(fakePnpmPath, "process.stdout.write('latest\\n');\n");
+
+    const script = fileURLToPath(new URL('./pin-toolchain.mjs', import.meta.url));
+    const env = { ...process.env };
+
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'npm_execpath') {
+        delete env[key];
+      }
+    }
+
+    env.npm_execpath = fakePnpmPath;
+
+    const result = spawnSync(process.execPath, [script], {
+      cwd: root,
+      encoding: 'utf8',
+      env,
+      shell: false,
+    });
+    const diagnostic = [
+      `stdout:\n${result.stdout ?? ''}`,
+      `stderr:\n${result.stderr ?? ''}`,
+      `error:\n${result.error?.stack ?? String(result.error ?? '')}`,
+    ].join('\n');
+
+    assert.notEqual(result.status, 0, diagnostic);
+    assert.match(result.stderr ?? '', /exact stable pnpm version/i);
+    assert.deepEqual(await readFile(packageJsonPath), Buffer.from(originalPackageJson));
+    assert.deepEqual(await readFile(nodeVersionPath), Buffer.from(originalNodeVersion));
+    assert.deepEqual(await readFile(pnpmVersionPath), Buffer.from(originalPnpmVersion));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+```
+
+Add the direct-invocation regression below. It resolves the pin script by absolute path,
+removes every case variant of `npm_execpath`, includes stdout, stderr, and `result.error`
+in its failure message, and never touches repository pin files:
+
+```js
 test('pin script resolves pnpm without npm_execpath', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'roadmap-toolchain-'));
 
@@ -320,7 +494,7 @@ test('pin script resolves pnpm without npm_execpath', async () => {
     const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 
     assert.equal(nodeVersion, process.versions.node);
-    assert.match(pnpmVersion, /^\d+\.\d+\.\d+$/);
+    assert.match(pnpmVersion, EXACT_STABLE_SEMVER);
     assert.equal(packageJson.packageManager, `pnpm@${pnpmVersion}`);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -328,21 +502,91 @@ test('pin script resolves pnpm without npm_execpath', async () => {
 });
 ```
 
-Add the regression test before changing `scripts/pin-toolchain.mjs`, then run on Windows:
+- [ ] **Step 3: Run the new regressions and verify RED**
 
-```powershell
-node --test --test-name-pattern="pin script resolves pnpm without npm_execpath" scripts/toolchain.test.mjs
+Run:
+
+```bash
+node --test scripts/toolchain.test.mjs
 ```
 
-Expected: non-zero exit. The temporary direct invocation reaches the existing
-`corepack.cmd` fallback and reports `spawnSync corepack.cmd EINVAL`.
+Expected in fix round 1: non-zero exit. The invalid-output regression fails because the
+current pin script exits `0` after accepting and writing `latest`; the direct Node typings
+assertion fails because the current declaration is `catalog:` and resolves to 26.1.1. Capture
+the exact command, exit status, stdout, and stderr in the Task 2 report.
 
-- [ ] **Step 4: Correct the toolchain-recording script**
+Also prove that the amended canonical test itself exits non-zero for the same
+`latest`/`pnpm@latest` mutation without modifying repository files:
+
+```powershell
+$FixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roadmap-pnpm-mutation-$([guid]::NewGuid())"
+
+try {
+    New-Item -ItemType Directory -Path $FixtureRoot | Out-Null
+    Copy-Item (Resolve-Path "scripts/toolchain.test.mjs") (Join-Path $FixtureRoot "toolchain.test.mjs")
+
+    $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText(
+        (Join-Path $FixtureRoot "package.json"),
+        "{`"packageManager`":`"pnpm@latest`"}`n",
+        $Utf8NoBom
+    )
+    [System.IO.File]::WriteAllText(
+        (Join-Path $FixtureRoot ".pnpm-version"),
+        "latest`n",
+        $Utf8NoBom
+    )
+
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = (Get-Command node).Source
+    $StartInfo.WorkingDirectory = $FixtureRoot
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    $StartInfo.ArgumentList.Add("--test")
+    $StartInfo.ArgumentList.Add("--test-name-pattern=packageManager pins the exact active pnpm version")
+    $StartInfo.ArgumentList.Add("toolchain.test.mjs")
+
+    $Process = [System.Diagnostics.Process]::new()
+    $Process.StartInfo = $StartInfo
+    [void]$Process.Start()
+    $Stdout = $Process.StandardOutput.ReadToEnd()
+    $Stderr = $Process.StandardError.ReadToEnd()
+    $Process.WaitForExit()
+    $MutationStatus = $Process.ExitCode
+
+    "stdout:`n$Stdout"
+    "stderr:`n$Stderr"
+    "MUTATION_EXIT_STATUS=$MutationStatus"
+
+    if ($MutationStatus -eq 0) {
+        throw "Amended canonical test accepted latest/pnpm@latest"
+    }
+}
+finally {
+    Remove-Item -LiteralPath $FixtureRoot -Recurse -Force
+}
+```
+
+Expected child exit: non-zero. Its output identifies the invalid exact-version contract.
+Record the child exit status, stdout, and stderr in the Task 2 report, then run:
+
+```bash
+git diff --check
+git status --short
+```
+
+Expected: no mutation remains beyond the intentional uncommitted fix files.
+
+- [ ] **Step 4: Harden the pin script before any write**
 
 ```js
 // scripts/pin-toolchain.mjs
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+
+const EXACT_STABLE_SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function resolvePnpmVersion() {
   const npmExecPath = process.env.npm_execpath;
@@ -380,6 +624,11 @@ if (!nodeVersion.startsWith('24.')) {
 }
 
 const pnpmVersion = resolvePnpmVersion();
+if (!EXACT_STABLE_SEMVER.test(pnpmVersion)) {
+  throw new Error(
+    `Expected an exact stable pnpm version (major.minor.patch), observed ${JSON.stringify(pnpmVersion)}`,
+  );
+}
 
 await writeFile('.node-version', `${nodeVersion}\n`);
 await writeFile('.pnpm-version', `${pnpmVersion}\n`);
@@ -393,21 +642,24 @@ await writeFile('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
 The `npm_execpath` branch is preferred inside a pnpm lifecycle. Outside a lifecycle, Windows
 uses the explicitly selected command processor with the fixed internal literal
 `corepack pnpm --version`; Linux invokes `corepack` directly. Every Node subprocess keeps
-`shell: false`, and failure to resolve pnpm remains fatal.
+`shell: false`. Spawn errors, non-zero exits, empty output, and output that does not match
+`EXACT_STABLE_SEMVER` are fatal. The exact-version check occurs before `.node-version`,
+`.pnpm-version`, or `package.json` is written.
 
 Do not use `shell: true`, `execSync`, direct `corepack.cmd` execution, a PowerShell-only
 command, a pnpm-lifecycle requirement, or an assumed or hard-coded pnpm version. Do not
 interpolate environment values, paths, user input, or package metadata into the fixed command
-after `/c`.
+after `/c`. Do not derive the active version from `.pnpm-version`,
+`package.json.packageManager`, the lockfile, a package range, or a registry tag.
 
-Rerun the same focused regression test:
+Rerun the invalid-output regression:
 
 ```powershell
-node --test --test-name-pattern="pin script resolves pnpm without npm_execpath" scripts/toolchain.test.mjs
+node --test --test-name-pattern="pin script rejects a non-exact pnpm version before writing files" scripts/toolchain.test.mjs
 ```
 
-Expected: exit `0`; the temporary invocation generates consistent `.node-version`,
-`.pnpm-version`, and `package.json.packageManager` values.
+Expected: exit `0`; the child invocation fails for the exact-version contract and all three
+fixture files retain their original bytes.
 
 - [ ] **Step 5: Create the root workspace files and pin the active approved versions**
 
@@ -449,10 +701,36 @@ Before running the pin script, verify from the official Node.js release page tha
 ```bash
 corepack enable
 node scripts/pin-toolchain.mjs
-pnpm add -Dw --save-exact typescript zod vitest eslint @eslint/js typescript-eslint prettier yaml @types/node tsx globals
+pnpm add -Dw --save-exact typescript zod vitest eslint @eslint/js typescript-eslint prettier yaml tsx globals
+pnpm add -Dw --save-exact @types/node@24.13.3
 ```
 
-The commands write exact versions into `package.json` and `pnpm-lock.yaml`; no `latest` string is committed.
+The approved Node runtime is `24.18.0`, and the direct Node typings declaration must be the
+literal exact version:
+
+```json
+{
+  "devDependencies": {
+    "@types/node": "24.13.3"
+  }
+}
+```
+
+When correcting an existing strict catalog, first change its `@types/node` value from 26.1.1
+to 24.13.3 so the exact `pnpm add` command is accepted. If pnpm retains a `catalog:` reference
+in `package.json`, replace only that direct reference with the literal `24.13.3`, then run:
+
+```bash
+pnpm install --lockfile-only
+```
+
+Allow `cleanupUnusedCatalogs: true` to remove the now-unused `@types/node` catalog entry. Do
+not weaken `catalogMode: strict`. The root importer in `pnpm-lock.yaml` must record both
+`specifier: 24.13.3` and `version: 24.13.3`. The commands and final edits must update both
+`package.json` and `pnpm-lock.yaml`; no `latest`, range, prerelease, metadata, or Node 26
+typings declaration is committed. Do not claim that `@types/node@24.13.3` models every API
+added through Node 24.18.0; the purpose is to prevent Node 26-only APIs from being accepted
+for the pinned Node 24 runtime.
 
 - [ ] **Step 6: Write the toolchain ADR and verify consistency**
 
@@ -474,6 +752,8 @@ The commands write exact versions into `package.json` and `pnpm-lock.yaml`; no `
 Run:
 
 ```bash
+node --test scripts/toolchain.test.mjs
+node scripts/pin-toolchain.mjs
 node --test scripts/toolchain.test.mjs
 pnpm install --frozen-lockfile
 git diff --check
@@ -505,9 +785,29 @@ pnpm install --frozen-lockfile
 git diff --check
 ```
 
-Expected: the direct invocation and all three verification commands exit `0`. The temporary
-regression invocation writes only inside its temporary directory; it never rewrites the
-repository's real pin files or `package.json`.
+Expected: the direct invocation and all final verification commands exit `0`. The temporary
+regressions write only inside their temporary directories; they never rewrite the repository's
+real pin files or `package.json`.
+
+Confirm and record:
+
+```text
+.node-version                 = 24.18.0
+.pnpm-version                 = the independently observed active exact pnpm version
+packageManager                = pnpm@<same independently observed active exact version>
+devDependencies.@types/node   = 24.13.3
+lockfile direct resolution    = 24.13.3
+```
+
+The direct invocation regression with every case variant of `npm_execpath` removed must remain
+passing. Record the non-Windows fallback honestly as:
+
+```text
+Implemented and statically reviewed, but not executed in this Windows workspace
+```
+
+Do not call the Linux branch passed, failed, verified, or passing here. Its execution remains a
+mandatory Release 0 requirement for the Linux job in WP-09 cross-platform CI.
 
 - [ ] **Step 7: Commit**
 
