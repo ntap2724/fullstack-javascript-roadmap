@@ -1,6 +1,7 @@
 import { ESLint } from 'eslint';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { getFileInfo } from 'prettier';
 import path from 'node:path';
 import test from 'node:test';
@@ -12,6 +13,68 @@ const eslint = new ESLint({ cwd: process.cwd() });
 function severityOf(ruleSetting) {
   if (Array.isArray(ruleSetting)) return ruleSetting[0];
   return ruleSetting ?? 0;
+}
+
+async function ensureDirectory(directoryPath, ownedDirectories) {
+  try {
+    const metadata = await stat(directoryPath);
+
+    if (!metadata.isDirectory()) {
+      throw new Error(`Expected a directory at ${directoryPath}`);
+    }
+
+    return;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
+  try {
+    await mkdir(directoryPath);
+    ownedDirectories.push(directoryPath);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+
+    const metadata = await stat(directoryPath);
+
+    if (!metadata.isDirectory()) {
+      throw new Error(`Expected a directory at ${directoryPath}`, { cause: error });
+    }
+  }
+}
+
+async function removeOwnedDirectoryIfEmpty(directoryPath) {
+  try {
+    await rmdir(directoryPath);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTEMPTY') return;
+    throw error;
+  }
+}
+
+async function withTemporarySddArtifact(rootDirectory, prefix, callback) {
+  const superpowersDirectory = path.join(rootDirectory, '.superpowers');
+  const sddDirectory = path.join(superpowersDirectory, 'sdd');
+  const ownedDirectories = [];
+  let temporaryDirectory;
+
+  try {
+    await ensureDirectory(superpowersDirectory, ownedDirectories);
+    await ensureDirectory(sddDirectory, ownedDirectories);
+
+    temporaryDirectory = await mkdtemp(path.join(sddDirectory, prefix));
+
+    const generatedArtifact = path.join(temporaryDirectory, `generated-${randomUUID()}.md`);
+    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+    return await callback(generatedArtifact);
+  } finally {
+    if (temporaryDirectory !== undefined) {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+
+    for (let index = ownedDirectories.length - 1; index >= 0; index -= 1) {
+      await removeOwnedDirectoryIfEmpty(ownedDirectories[index]);
+    }
+  }
 }
 
 test('TypeScript base config is strict and emits no build artifacts', async () => {
@@ -36,32 +99,82 @@ test('root scripts expose check and bootstrap tests', async () => {
 });
 
 test('Prettier ownership excludes only root governance and generated-state boundaries', async () => {
-  const temporaryDirectory = await mkdtemp(
-    path.join('.superpowers', 'sdd', 'prettier-regression-'),
+  await withTemporarySddArtifact(
+    process.cwd(),
+    'prettier-regression-',
+    async (generatedArtifact) => {
+      const cases = [
+        ['docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md', true],
+        ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
+        ['pnpm-lock.yaml', true],
+        [generatedArtifact, true],
+        ['scripts/pin-toolchain.mjs', false],
+        ['scripts/toolchain.test.mjs', false],
+        ['eslint.config.mjs', false],
+      ];
+
+      for (const [filePath, expectedIgnored] of cases) {
+        const info = await getFileInfo(filePath, {
+          ignorePath: path.resolve('.prettierignore'),
+        });
+        assert.equal(info.ignored, expectedIgnored, filePath);
+      }
+    },
   );
-  const generatedArtifact = path.join(temporaryDirectory, `generated-${randomUUID()}.md`);
+});
+
+test('temporary SDD fixtures own only paths they create', async () => {
+  const syntheticRoot = await mkdtemp(path.join(tmpdir(), 'roadmap-sdd-fixture-'));
+  const superpowersDirectory = path.join(syntheticRoot, '.superpowers');
+  const sddDirectory = path.join(superpowersDirectory, 'sdd');
 
   try {
-    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
 
-    const cases = [
-      ['docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md', true],
-      ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
-      ['pnpm-lock.yaml', true],
-      [generatedArtifact, true],
-      ['scripts/pin-toolchain.mjs', false],
-      ['scripts/toolchain.test.mjs', false],
-      ['eslint.config.mjs', false],
-    ];
+    let generatedArtifact;
 
-    for (const [filePath, expectedIgnored] of cases) {
-      const info = await getFileInfo(filePath, {
-        ignorePath: path.resolve('.prettierignore'),
-      });
-      assert.equal(info.ignored, expectedIgnored, filePath);
-    }
+    await withTemporarySddArtifact(syntheticRoot, 'missing-parents-', async (artifactPath) => {
+      generatedArtifact = artifactPath;
+      assert.equal((await stat(superpowersDirectory)).isDirectory(), true);
+      assert.equal((await stat(sddDirectory)).isDirectory(), true);
+      assert.equal((await stat(artifactPath)).isFile(), true);
+    });
+
+    await assert.rejects(stat(generatedArtifact), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+
+    let callbackFailureArtifact;
+
+    await assert.rejects(
+      withTemporarySddArtifact(syntheticRoot, 'callback-failure-', async (artifactPath) => {
+        callbackFailureArtifact = artifactPath;
+        throw new Error('fixture callback failure');
+      }),
+      /fixture callback failure/,
+    );
+
+    await assert.rejects(stat(callbackFailureArtifact), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+
+    await mkdir(superpowersDirectory);
+    await mkdir(sddDirectory);
+
+    const sentinelPath = path.join(superpowersDirectory, 'sentinel.txt');
+    const sentinelBytes = Buffer.from([0x00, 0x7f, 0xff, 0x0a]);
+    await writeFile(sentinelPath, sentinelBytes);
+
+    await withTemporarySddArtifact(syntheticRoot, 'existing-parents-', async (artifactPath) => {
+      assert.equal((await stat(artifactPath)).isFile(), true);
+    });
+
+    assert.equal((await stat(superpowersDirectory)).isDirectory(), true);
+    assert.equal((await stat(sddDirectory)).isDirectory(), true);
+    assert.deepEqual(await readFile(sentinelPath), sentinelBytes);
   } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
+    await rm(syntheticRoot, { recursive: true, force: true });
   }
 });
 
