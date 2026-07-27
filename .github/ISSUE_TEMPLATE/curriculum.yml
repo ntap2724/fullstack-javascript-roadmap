@@ -1,0 +1,89 @@
+name: Curriculum task
+description: Define a bounded curriculum change and its learner evidence requirements.
+title: '[Curriculum]: '
+labels:
+  - curriculum
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the learner outcome this task must achieve.
+    validations:
+      required: true
+  - type: textarea
+    id: in_scope
+    attributes:
+      label: In scope
+      description: List the curriculum behavior and artifacts this task may change.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: List related curriculum work this task must not change.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      description: Select the highest risk level that applies.
+      options:
+        - R0 — text or obvious link correction
+        - R1 — lesson or focused exercise
+        - R2 — package logic or website behavior
+        - R3 — schema, graph, or template publisher
+        - R4 — authentication, publication, or release tooling
+    validations:
+      required: true
+  - type: textarea
+    id: competency_ids
+    attributes:
+      label: Competency IDs
+      description: List the declared competency IDs this work adds or changes.
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: List learner prerequisites and their source material.
+    validations:
+      required: true
+  - type: textarea
+    id: assessment_alignment
+    attributes:
+      label: Assessment alignment
+      description: Explain how the assessment demonstrates the stated competencies.
+    validations:
+      required: true
+  - type: textarea
+    id: learner_misconception_risks
+    attributes:
+      label: Learner misconception risks
+      description: Identify likely misconceptions and how the material addresses them.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that demonstrate completion.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands
+      description: List the commands required to verify this task.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Record expected outputs, exits, or review artifacts.
+    validations:
+      required: true
