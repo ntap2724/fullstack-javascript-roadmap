@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - packages/*
+  - tooling/*
+  - exercises/*/*
+  - templates/*
+
+catalogMode: strict
+cleanupUnusedCatalogs: true
+disallowWorkspaceCycles: true
+engineStrict: true
+failIfNoMatch: true
+sharedWorkspaceLockfile: true
+strictPeerDependencies: true
+saveWorkspaceProtocol: rolling
+
+allowBuilds:
+  esbuild: true
+catalog:
+  '@eslint/js': 10.0.1
+  '@types/node': 26.1.1
+  eslint: 10.8.0
+  globals: 17.7.0
+  prettier: 3.9.6
+  tsx: 4.23.1
+  typescript: 7.0.2
+  typescript-eslint: 8.65.0
+  vitest: 4.1.10
+  yaml: 2.9.0
+  zod: 4.4.3

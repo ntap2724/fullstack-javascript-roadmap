@@ -1,0 +1,25 @@
+{
+  "name": "fullstack-javascript-roadmap",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Repository-first competency-based Fullstack JavaScript curriculum",
+  "scripts": {},
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "globals": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
+  }
+}
