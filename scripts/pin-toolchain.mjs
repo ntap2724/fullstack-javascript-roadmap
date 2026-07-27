@@ -1,8 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 
-const EXACT_STABLE_SEMVER =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const EXACT_STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function resolvePnpmVersion() {
   const npmExecPath = process.env.npm_execpath;
@@ -17,15 +16,11 @@ function resolvePnpmVersion() {
   if (process.platform === 'win32') {
     const commandProcessor = process.env.ComSpec ?? 'cmd.exe';
 
-    return execFileSync(
-      commandProcessor,
-      ['/d', '/s', '/c', 'corepack pnpm --version'],
-      {
-        encoding: 'utf8',
-        shell: false,
-        windowsHide: true,
-      },
-    ).trim();
+    return execFileSync(commandProcessor, ['/d', '/s', '/c', 'corepack pnpm --version'], {
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    }).trim();
   }
 
   return execFileSync('corepack', ['pnpm', '--version'], {

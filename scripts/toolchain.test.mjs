@@ -22,8 +22,7 @@ test('workspace policy rejects cycles and empty filters', async () => {
   assert.match(workspace, /failIfNoMatch:\s*true/);
 });
 
-const EXACT_STABLE_SEMVER =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const EXACT_STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function resolveActivePnpmVersion() {
   const npmExecPath = process.env.npm_execpath;
@@ -80,12 +79,7 @@ test('pnpm pin policy rejects latest even when repository records agree', () => 
   const active = resolveActivePnpmVersion();
 
   assert.throws(
-    () =>
-      assertPnpmPinContract(
-        { packageManager: 'pnpm@latest' },
-        'latest',
-        active,
-      ),
+    () => assertPnpmPinContract({ packageManager: 'pnpm@latest' }, 'latest', active),
     (error) => {
       assert.equal(error.code, 'ERR_ASSERTION');
       assert.equal(error.actual, 'latest');
@@ -99,16 +93,13 @@ test('direct Node typings stay on the exact Node 24 line', async () => {
   const packageJson = JSON.parse(await text('package.json'));
   const nodeTypesVersion = packageJson.devDependencies?.['@types/node'];
 
-  assert.match(
-    nodeTypesVersion,
-    /^24\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
-  );
+  assert.match(nodeTypesVersion, /^24\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   assert.equal(nodeTypesVersion, '24.13.3');
 
   const lockfile = await text('pnpm-lock.yaml');
   assert.match(
     lockfile,
-    /importers:\r?\n\r?\n  \.[\s\S]*?\n      '@types\/node':\r?\n        specifier: 24\.13\.3\r?\n        version: 24\.13\.3(?:\r?\n|$)/,
+    /importers:\r?\n\r?\n {2}\.[\s\S]*?\n {6}'@types\/node':\r?\n {8}specifier: 24\.13\.3\r?\n {8}version: 24\.13\.3(?:\r?\n|$)/,
   );
 });
 
@@ -118,19 +109,18 @@ test('pin script rejects a non-exact pnpm version before writing files', async (
   const nodeVersionPath = path.join(root, '.node-version');
   const pnpmVersionPath = path.join(root, '.pnpm-version');
   const fakePnpmPath = path.join(root, 'fake-pnpm.mjs');
-  const originalPackageJson =
-    `${JSON.stringify(
-      {
-        name: 'pin-toolchain-invalid-pnpm',
-        version: '0.0.0',
-        private: true,
-        type: 'module',
-        engines: { node: '>=24 <25' },
-        packageManager: 'pnpm@11.9.0',
-      },
-      null,
-      2,
-    )}\n`;
+  const originalPackageJson = `${JSON.stringify(
+    {
+      name: 'pin-toolchain-invalid-pnpm',
+      version: '0.0.0',
+      private: true,
+      type: 'module',
+      engines: { node: '>=24 <25' },
+      packageManager: 'pnpm@11.9.0',
+    },
+    null,
+    2,
+  )}\n`;
   const originalNodeVersion = 'sentinel-node\n';
   const originalPnpmVersion = 'sentinel-pnpm\n';
 
