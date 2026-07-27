@@ -1790,6 +1790,387 @@ the root verification pipeline, or missing behavioral regression coverage as Imp
 Task 4 is complete only when the scoped reviewer reports both specification compliance and
 task quality with no open Critical or Important findings.
 
+- [ ] **Step 15: Amend the canonical plan for a self-contained SDD fixture**
+
+The first independent Task 4 review found that the Step 8 fixture calls `mkdtemp()` beneath
+`.superpowers/sdd/` and therefore passes only when an active SDD controller has already
+created those ignored parent directories. A clean checkout may contain neither
+`.superpowers/` nor `.superpowers/sdd/`; root verification must not depend on controller
+state.
+
+Commit only this second canonical Task 4 correction:
+
+```bash
+git add docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md
+git commit -m "docs: make Task 4 SDD fixture self-contained"
+```
+
+Record the exact commit hash in the ignored Task 4 report and ledger, then regenerate the
+Task 4 brief. The ledger must contain an entry equivalent to:
+
+```text
+Task 4: human-approved fix-round amendment — configuration tests must create
+their own missing root .superpowers/sdd fixture parents, track directory
+ownership, and remove only test-owned directories when empty; clean-checkout
+behavior must have permanent regression coverage
+```
+
+The fixture may create only `<root>/.superpowers`, `<root>/.superpowers/sdd`, and its own
+uniquely named temporary child. It must track which parents it created, remove only
+test-owned parents when they remain empty, and never recursively remove `.superpowers` or
+`.superpowers/sdd`. Existing briefs, reports, ledgers, review packages, and other SDD
+artifacts remain untouched. Do not amend or rewrite `c521e38`, `4b2e46a`, or `2823b76`.
+Do not force-add ignored execution state or change ignore policy.
+
+- [ ] **Step 16: Extract the current fixture behavior without changing semantics**
+
+Before adding the missing-parent regression, refactor the direct `mkdtemp()` setup in
+`scripts/config-contract.test.mjs` into a test-only helper. The initial extraction must
+preserve the current assumption that `.superpowers/sdd/` already exists:
+
+```js
+async function withTemporarySddArtifact(rootDirectory, prefix, callback) {
+  const temporaryDirectory = await mkdtemp(
+    path.join(rootDirectory, '.superpowers', 'sdd', prefix),
+  );
+  const generatedArtifact = path.join(
+    temporaryDirectory,
+    `generated-${randomUUID()}.md`,
+  );
+
+  try {
+    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+    return await callback(generatedArtifact);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+```
+
+Apply it to the existing Prettier ownership test:
+
+```js
+test('Prettier ownership excludes only root governance and generated-state boundaries', async () => {
+  await withTemporarySddArtifact(
+    process.cwd(),
+    'prettier-regression-',
+    async (generatedArtifact) => {
+      const cases = [
+        [
+          'docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md',
+          true,
+        ],
+        [
+          'docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md',
+          true,
+        ],
+        ['pnpm-lock.yaml', true],
+        [generatedArtifact, true],
+        ['scripts/pin-toolchain.mjs', false],
+        ['scripts/toolchain.test.mjs', false],
+        ['eslint.config.mjs', false],
+      ];
+
+      for (const [filePath, expectedIgnored] of cases) {
+        const info = await getFileInfo(filePath, {
+          ignorePath: path.resolve('.prettierignore'),
+        });
+        assert.equal(info.ignored, expectedIgnored, filePath);
+      }
+    },
+  );
+});
+```
+
+Run:
+
+```bash
+node --test scripts/config-contract.test.mjs
+```
+
+Expected in the current SDD worktree: the existing nine focused tests still pass. This is
+test-infrastructure refactoring only; do not change `.prettierignore` or production
+configuration.
+
+- [ ] **Step 17: Add the missing-parent regression and preserve RED**
+
+Import the operating-system temporary root and the filesystem operations needed by the
+permanent lifecycle regression:
+
+```js
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  rmdir,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+```
+
+Add one focused test that uses the same helper as the real Prettier ownership test:
+
+```js
+test('temporary SDD fixtures own only paths they create', async () => {
+  const syntheticRoot = await mkdtemp(path.join(tmpdir(), 'roadmap-sdd-fixture-'));
+  const superpowersDirectory = path.join(syntheticRoot, '.superpowers');
+  const sddDirectory = path.join(superpowersDirectory, 'sdd');
+
+  try {
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
+
+    let generatedArtifact;
+
+    await withTemporarySddArtifact(
+      syntheticRoot,
+      'missing-parents-',
+      async (artifactPath) => {
+        generatedArtifact = artifactPath;
+        assert.equal((await stat(superpowersDirectory)).isDirectory(), true);
+        assert.equal((await stat(sddDirectory)).isDirectory(), true);
+        assert.equal((await stat(artifactPath)).isFile(), true);
+      },
+    );
+
+    await assert.rejects(stat(generatedArtifact), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+
+    let callbackFailureArtifact;
+
+    await assert.rejects(
+      withTemporarySddArtifact(
+        syntheticRoot,
+        'callback-failure-',
+        async (artifactPath) => {
+          callbackFailureArtifact = artifactPath;
+          throw new Error('fixture callback failure');
+        },
+      ),
+      /fixture callback failure/,
+    );
+
+    await assert.rejects(stat(callbackFailureArtifact), { code: 'ENOENT' });
+    await assert.rejects(stat(sddDirectory), { code: 'ENOENT' });
+    await assert.rejects(stat(superpowersDirectory), { code: 'ENOENT' });
+
+    await mkdir(superpowersDirectory);
+    await mkdir(sddDirectory);
+
+    const sentinelPath = path.join(superpowersDirectory, 'sentinel.txt');
+    const sentinelBytes = Buffer.from([0x00, 0x7f, 0xff, 0x0a]);
+    await writeFile(sentinelPath, sentinelBytes);
+
+    await withTemporarySddArtifact(
+      syntheticRoot,
+      'existing-parents-',
+      async (artifactPath) => {
+        assert.equal((await stat(artifactPath)).isFile(), true);
+      },
+    );
+
+    assert.equal((await stat(superpowersDirectory)).isDirectory(), true);
+    assert.equal((await stat(sddDirectory)).isDirectory(), true);
+    assert.deepEqual(await readFile(sentinelPath), sentinelBytes);
+  } finally {
+    await rm(syntheticRoot, { recursive: true, force: true });
+  }
+});
+```
+
+Before hardening the helper, run:
+
+```bash
+node --test scripts/config-contract.test.mjs
+```
+
+Expected RED: exit `1`, ten tests total, nine passing and the new lifecycle regression
+failing with `ENOENT` from `mkdtemp()` beneath the missing synthetic
+`.superpowers/sdd/` parent. Record the exact command, actual count, failure output,
+synthetic-root path, and confirmation that the synthetic outer root was removed by its
+`finally` block. The failure must not come from imports, syntax, a missing helper, an
+invalid assertion, or a changed `.prettierignore`.
+
+- [ ] **Step 18: Harden the helper with explicit directory ownership**
+
+Add these test-only helpers:
+
+```js
+async function ensureDirectory(directoryPath, ownedDirectories) {
+  try {
+    const metadata = await stat(directoryPath);
+
+    if (!metadata.isDirectory()) {
+      throw new Error(`Expected a directory at ${directoryPath}`);
+    }
+
+    return;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
+  try {
+    await mkdir(directoryPath);
+    ownedDirectories.push(directoryPath);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+
+    const metadata = await stat(directoryPath);
+
+    if (!metadata.isDirectory()) {
+      throw new Error(`Expected a directory at ${directoryPath}`);
+    }
+  }
+}
+
+async function removeOwnedDirectoryIfEmpty(directoryPath) {
+  try {
+    await rmdir(directoryPath);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTEMPTY') return;
+    throw error;
+  }
+}
+```
+
+Then replace the extracted helper with:
+
+```js
+async function withTemporarySddArtifact(rootDirectory, prefix, callback) {
+  const superpowersDirectory = path.join(rootDirectory, '.superpowers');
+  const sddDirectory = path.join(superpowersDirectory, 'sdd');
+  const ownedDirectories = [];
+  let temporaryDirectory;
+
+  try {
+    await ensureDirectory(superpowersDirectory, ownedDirectories);
+    await ensureDirectory(sddDirectory, ownedDirectories);
+
+    temporaryDirectory = await mkdtemp(path.join(sddDirectory, prefix));
+
+    const generatedArtifact = path.join(
+      temporaryDirectory,
+      `generated-${randomUUID()}.md`,
+    );
+    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+
+    return await callback(generatedArtifact);
+  } finally {
+    if (temporaryDirectory !== undefined) {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+
+    for (let index = ownedDirectories.length - 1; index >= 0; index -= 1) {
+      await removeOwnedDirectoryIfEmpty(ownedDirectories[index]);
+    }
+  }
+}
+```
+
+The two required parents are checked and created in order. A parent is recorded only after
+successful creation by this invocation. A competing `EEXIST` is verified as a directory
+but never claimed. Cleanup recursively removes only the unique `mkdtemp()` child, then
+considers owned parents in reverse order with non-recursive `rmdir()`. Only `ENOENT` and
+`ENOTEMPTY` are non-fatal during parent cleanup; all other filesystem errors propagate.
+A directory not created by the current helper invocation is never removed.
+
+- [ ] **Step 19: Run focused GREEN and the complete Task 4 verification**
+
+Run:
+
+```bash
+node --test scripts/config-contract.test.mjs
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test:bootstrap
+pnpm verify
+pnpm verify:templates
+pnpm verify:release
+git diff --check
+git status --short
+```
+
+Expected: focused configuration tests pass 10/10; bootstrap and full verification pass
+22/22; format, lint, typecheck, bootstrap, full verifier, and `git diff --check` exit `0`;
+both unavailable verifiers execute as designed and exit `2`. Actual runner counts govern:
+record and explain any difference rather than reporting expectations as observations.
+
+Confirm that:
+
+- the synthetic outer root and every unique test child are absent after their tests;
+- no repository-root temporary fixture remains;
+- no real brief, report, ledger, review package, or other SDD artifact was removed;
+- no `.superpowers/` artifact became tracked;
+- the tracked worktree contains only `scripts/config-contract.test.mjs` before commit; and
+- the previous report hash
+  `ec55c8b68b6a0af4391697fe2bc37c0407c937cbac0e4b13d17e523aae91a28b`
+  is identified only as the pre-fix report hash.
+
+- [ ] **Step 20: Commit the self-contained fixture fix separately**
+
+After GREEN verification:
+
+```bash
+git add scripts/config-contract.test.mjs
+git commit -m "test: make Task 4 SDD fixture self-contained"
+```
+
+Do not amend `c521e38`, `4b2e46a`, `2823b76`, or the new plan-amendment commit. Do not
+include ignored Task 4 evidence, `.prettierignore`, production configuration, unrelated
+formatting, or unrelated refactoring.
+
+- [ ] **Step 21: Append fix-round evidence and run a scoped independent re-review**
+
+Append fix-round 1 evidence to the ignored Task 4 report, clearly distinguishing:
+
+```text
+Original Task 4 implementation
+First formatter-ownership amendment
+Independent clean-checkout finding
+Self-contained fixture plan amendment
+Missing-parent RED
+Ownership-aware helper GREEN
+Final verification
+```
+
+Include the existing Task 4 implementation commit `c521e38`, the new plan-amendment and
+implementation-fix hashes, exact commands and exit statuses, actual counts, RED `ENOENT`
+output, GREEN output, cleanup assertions, remaining limitations, and the new report
+SHA-256. Append matching progress evidence to the ignored ledger.
+
+Generate the scoped fix diff from the head seen by the failed review (`2823b76`) through
+the fix head. The independent re-review must verify:
+
+1. The real Prettier test no longer assumes `.superpowers/sdd` exists.
+2. The focused regression begins with both parents absent and preserves the genuine
+   pre-fix `ENOENT`.
+3. The helper creates only `<root>/.superpowers`, `<root>/.superpowers/sdd`, and its own
+   unique child.
+4. Directory ownership is explicit and recorded only after successful creation.
+5. The temporary child is removed first; owned parents are considered in reverse order.
+6. Existing parents are never removed, and sentinel bytes remain identical.
+7. `.superpowers` and `sdd` are never recursively removed.
+8. Cleanup runs on success and callback failure.
+9. `ENOENT` and `ENOTEMPTY` alone are tolerated during parent cleanup; unexpected errors
+   propagate.
+10. The actual Prettier ignore behavior and source formatter ownership remain tested.
+11. Focused and bootstrap counts are observed and reported accurately.
+12. `pnpm verify` exits `0`; both unavailable verifiers remain accurately reported at
+    exit `2`.
+13. No active SDD evidence was used as disposable data or changed except the intended
+    report and ledger append.
+14. No unrelated tracked change was introduced.
+
+Treat reliance on preexisting parents, recursive parent deletion, deletion of unowned
+directories, active evidence used as a fixture, missing permanent regression, success-only
+cleanup, swallowed unexpected filesystem errors, or expected counts reported as observed
+as Important. Task 4 remains incomplete until both specification compliance and task
+quality are approved with no open Critical or Important finding.
+
 ### Task 5: Add root and scoped `AGENTS.md` governance
 
 **Files:**
