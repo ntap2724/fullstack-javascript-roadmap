@@ -828,7 +828,8 @@ git commit -m "build: pin release zero toolchain"
 - Create: `scripts/config-contract.test.mjs`
 - Modify: `package.json`
 - Modify (Prettier-only): `scripts/pin-toolchain.mjs`
-- Modify (Prettier-only): `scripts/toolchain.test.mjs`
+- Modify (Prettier plus the exact YAML-indentation regex normalization authorized below):
+  `scripts/toolchain.test.mjs`
 - Modify only if the direct `globals` dependency is missing: `pnpm-workspace.yaml`
 - Modify only if the direct `globals` dependency is missing: `pnpm-lock.yaml`
 
@@ -859,6 +860,24 @@ pnpm lint
 Record each command, exit status, stdout, and stderr in the Task 3 report. These failures are
 the known configuration defects; do not turn them into warnings.
 
+After the first Task 3 plan amendment was applied but before this second amendment, preserve
+this additional evidence:
+
+```text
+node --test scripts/config-contract.test.mjs
+└── exit 0, 8/8 passing
+
+pnpm lint
+└── exit 1 with exactly five errors:
+    ├── three core no-regex-spaces reports on YAML-indentation regex literals
+    └── two @typescript-eslint/no-dynamic-delete reports in Task 2's approved
+        case-insensitive npm_execpath cleanup
+```
+
+The existing MJS and CJS `require` distinction passed in that 8/8 run and must remain
+passing. The second amendment removes the structural source of the two TypeScript-rule
+errors without suppressing either rule.
+
 - [ ] **Step 1: Write the failing configuration contract test**
 
 ```js
@@ -871,6 +890,11 @@ import assert from 'node:assert/strict';
 
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const eslint = new ESLint({ cwd: process.cwd() });
+
+function severityOf(ruleSetting) {
+  if (Array.isArray(ruleSetting)) return ruleSetting[0];
+  return ruleSetting ?? 0;
+}
 
 test('TypeScript base config is strict and emits no build artifacts', async () => {
   const config = await readJson('tsconfig.base.json');
@@ -954,6 +978,22 @@ test('MJS and CJS lint without project-information parser failures', async () =>
   assert.equal(cjsConfig.languageOptions.parserOptions.projectService, false);
 });
 
+test('strict TypeScript rules stop at the untyped JavaScript boundary', async () => {
+  const [typescriptConfig, mjsConfig, cjsConfig] = await Promise.all([
+    eslint.calculateConfigForFile('vitest.config.ts'),
+    eslint.calculateConfigForFile('scripts/pin-toolchain.mjs'),
+    eslint.calculateConfigForFile('scripts/config-contract-fixture.cjs'),
+  ]);
+
+  assert.equal(
+    severityOf(typescriptConfig.rules['@typescript-eslint/no-dynamic-delete']),
+    2,
+  );
+  assert.equal(severityOf(mjsConfig.rules['@typescript-eslint/no-dynamic-delete']), 0);
+  assert.equal(severityOf(cjsConfig.rules['@typescript-eslint/no-dynamic-delete']), 0);
+  assert.equal(severityOf(mjsConfig.rules['no-regex-spaces']), 2);
+});
+
 test('require is undefined in MJS and defined in CJS', async () => {
   const source = "require('node:fs');\n";
   const [mjsResult] = await eslint.lintText(source, {
@@ -981,10 +1021,12 @@ test('require is undefined in MJS and defined in CJS', async () => {
 node --test scripts/config-contract.test.mjs
 ```
 
-Expected in the resumed Task 3 execution: non-zero exit caused by the missing
-`.prettierignore`, missing `test:bootstrap` script, and untyped JavaScript receiving the
-type-aware preset without project information. The tests must load successfully and fail
-because configuration is missing or incorrect, not because the test has a syntax error.
+Expected in the resumed Task 3 execution: non-zero exit with nine tests discovered. The new
+rule-boundary test must fail specifically because
+`@typescript-eslint/no-dynamic-delete` is still effective for an MJS or CJS path while
+`strictTypeChecked` remains global. The other eight tests must preserve their prior passing
+state. Record the exact command, exit status, relevant assertion failure, and observed count.
+The failure must not come from a syntax error or invalid fixture.
 
 - [ ] **Step 3: Establish the formatter ownership boundary and strict compiler configuration**
 
@@ -1053,9 +1095,9 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/coverage/**', '**/.generated/**', '**/.tmp/**'] },
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
   {
-    files: ['**/*.ts', '**/*.tsx'],
+    files: ['**/*.{ts,tsx}'],
+    extends: [tseslint.configs.strictTypeChecked],
     languageOptions: {
       globals: {
         ...globals.nodeBuiltin,
@@ -1094,9 +1136,16 @@ export default tseslint.config(
 );
 ```
 
-The untyped overrides occur after the typed base so their parser options and rules win for
-their matching files. Do not use a combined `**/*.{js,mjs,cjs}` override, disable `no-undef`,
-add JavaScript to the TypeScript project, or grant CommonJS globals to ESM files.
+The TypeScript block owns `strictTypeChecked`; do not spread or extend that configuration
+globally. TypeScript and TSX retain strict type-checked rules with project information.
+JavaScript, MJS, and CJS retain core ESLint correctness rules without type-aware linting.
+The approved MJS and CJS `disableTypeChecked` overrides remain explicit, as do
+`globals.nodeBuiltin` for MJS and `globals.node` for CJS.
+
+Do not add a rule-specific waiver for `@typescript-eslint/no-dynamic-delete`, disable
+`no-regex-spaces`, use a combined `**/*.{js,mjs,cjs}` override, disable `no-undef`, add
+JavaScript to the TypeScript project, enable `allowJs` solely for linting, or grant CommonJS
+globals to ESM files.
 
 The current repository contains no first-party `.js` files, so Task 3 adds no repository-wide
 `.js` override. If a later package adds `.js`, its package-scoped configuration must use
@@ -1119,7 +1168,77 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: Confirm the exact direct globals dependency, add root scripts, and format owned source**
+- [ ] **Step 5: Prove the structural lint boundary and normalize only the affected regexes**
+
+After applying the Step 4 configuration, run:
+
+```bash
+node --test scripts/config-contract.test.mjs
+pnpm lint
+```
+
+Expected intermediate evidence:
+
+```text
+node --test scripts/config-contract.test.mjs
+└── exit 0, 9/9 passing
+
+pnpm lint
+└── exit 1 with exactly three no-regex-spaces errors:
+    ├── two in scripts/config-contract.test.mjs
+    └── one in scripts/toolchain.test.mjs
+```
+
+The TypeScript rule-scope regression and the MJS/CommonJS global-distinction regression must
+both pass. If lint reports any different remaining set, stop and diagnose it rather than
+broadening this amendment.
+
+Before changing the Task 2 test regex, run:
+
+```bash
+node --test scripts/toolchain.test.mjs
+```
+
+Expected: 7/7 passing. Then preserve core `no-regex-spaces` and change only the spelling of
+the three affected YAML-indentation regex literals:
+
+```js
+// scripts/config-contract.test.mjs
+assert.match(workspace, /^ {2}globals: 17\.7\.0$/m);
+assert.match(
+  lockfile,
+  /importers:\r?\n\r?\n {2}\.:[\s\S]*?\n {6}globals:\r?\n {8}specifier: 'catalog:'\r?\n {8}version: 17\.7\.0(?:\r?\n|$)/,
+);
+
+// scripts/toolchain.test.mjs
+assert.match(
+  lockfile,
+  /importers:\r?\n\r?\n {2}\.:[\s\S]*?\n {6}'@types\/node':\r?\n {8}specifier: 24\.13\.3\r?\n {8}version: 24\.13\.3(?:\r?\n|$)/,
+);
+```
+
+These are exact semantic-preserving transformations:
+
+```text
+two literal ASCII spaces   → one literal ASCII space followed by {2}
+six literal ASCII spaces   → one literal ASCII space followed by {6}
+eight literal ASCII spaces → one literal ASCII space followed by {8}
+```
+
+Do not change anchors, groups, alternatives, escapes, surrounding text, flags, or expected
+match widths. Do not use `\s`, `\s+`, `\s{N}`, tabs, or a broader character class. This
+regex normalization is the only authorized non-Prettier Task 2 source change in Task 3.
+Do not refactor Task 2 implementation or assertions.
+
+Rerun:
+
+```bash
+node --test scripts/toolchain.test.mjs
+```
+
+Expected: the same 7/7 behavioral assertions pass after the representation-only change.
+
+- [ ] **Step 6: Confirm the exact direct globals dependency, add root scripts, and format owned source**
 
 Task 2 already declares `globals` directly in the root `devDependencies` through the strict
 default catalog, whose exact value and root-lock resolution are both 17.7.0. Preserve that
@@ -1161,11 +1280,13 @@ pnpm format
 ```
 
 Expected: canonical files under `docs/superpowers/` and the generated root lockfile remain
-unchanged by Prettier. The two Task 2 scripts receive formatting-only changes and remain
-formatter-covered. Inspect their diff and do not mix in behavioral refactoring or remove an
+unchanged by Prettier, while both Task 2 scripts remain formatter-covered.
+`scripts/pin-toolchain.mjs` receives formatting-only changes.
+`scripts/toolchain.test.mjs` receives formatting plus only the exact regex spelling change
+from Step 5. Inspect their diff and do not mix in behavioral refactoring or remove an
 assertion.
 
-- [ ] **Step 6: Run focused and full GREEN verification**
+- [ ] **Step 7: Run focused and full GREEN verification**
 
 Run the focused configuration tests first, then the complete verification sequence:
 
@@ -1183,27 +1304,64 @@ git diff --check
 ```
 
 Expected: every command exits `0` with no formatter or linter warnings. The focused Task 3
-file has 8/8 passing tests. The Task 2 toolchain tests pass 7/7 before and after the direct pin
-invocation. The bootstrap count changes from the prior 9/9 baseline to 17/17 because Task 3
-adds eight `scripts/*.test.mjs` tests. Record the old and new counts explicitly, plus:
+file has 9/9 passing tests. The Task 2 toolchain tests pass 7/7 before and after the direct pin
+invocation. The bootstrap count changes from the prior 9/9 baseline to 18/18 because Task 3
+adds nine `scripts/*.test.mjs` tests. Record the actual observed counts rather than reusing a
+stale expectation, and include:
 
 ```text
-Direct pin invocation         exit 0
-Frozen install                exit 0
+Focused Task 3 configuration tests   <observed>/<observed>
+Task 2 toolchain tests before pin     <observed>/<observed>
+Task 2 toolchain tests after pin      <observed>/<observed>
+Bootstrap tests                       <observed>/<observed>
+Direct pin invocation                 exit 0
+Frozen install                        exit 0
+Formatter check                       exit 0
+Lint                                  exit 0
+Typecheck                             exit 0
+Git whitespace check                  exit 0
 ```
 
-The Task 3 reviewer must inspect the Prettier-only diff for
-`scripts/pin-toolchain.mjs` and `scripts/toolchain.test.mjs` and confirm that no intended
-behavior or assertion was removed. Treat either of these as Important:
+Preserve this full evidence trail in the report:
 
+```text
+Before first Task 3 amendment
+├── format:check failed on canonical docs, lockfile, and Task 2 scripts
+└── lint failed from typed parser requirements on MJS
+
+After first Task 3 amendment
+├── focused configuration tests passed 8/8
+└── lint failed with exactly five remaining rule errors
+
+After second Task 3 amendment
+├── strict TypeScript rules apply only to TS/TSX
+├── JavaScript rule scopes are finite and explicit
+├── exact YAML-indentation regexes satisfy no-regex-spaces
+└── all required final commands exit 0
+```
+
+The Task 3 reviewer must inspect the Task 2 script diff and confirm that the pin script has
+only Prettier changes, the toolchain test has only Prettier changes plus the exact
+literal-space spelling change, and no intended behavior or assertion was removed. Treat any
+of these as Important:
+
+- `strictTypeChecked` affects MJS, CJS, or ordinary JavaScript
+- TypeScript no longer receives strict type-checked linting
+- `no-regex-spaces` is disabled or downgraded
+- a broad JavaScript rule waiver is introduced
 - an `.mjs` file receives CommonJS globals
+- a CJS file loses its CommonJS globals
 - a source script becomes excluded from Prettier
+- a Task 2 regex changes matching semantics
+- Task 2 receives any additional non-Prettier behavioral change
+- Task 2 focused verification is not rerun
+- the canonical plan, generated brief, implementation, and report disagree
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add .prettierignore tsconfig.base.json tsconfig.json eslint.config.mjs prettier.config.mjs vitest.config.ts scripts/config-contract.test.mjs scripts/pin-toolchain.mjs scripts/toolchain.test.mjs package.json
-# Only when Step 5 had to add the missing direct dependency:
+# Only when Step 6 had to add the missing direct dependency:
 git add pnpm-workspace.yaml pnpm-lock.yaml
 git commit -m "build: add strict repository checks"
 ```
