@@ -1,6 +1,8 @@
 import { ESLint } from 'eslint';
-import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { getFileInfo } from 'prettier';
+import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -33,21 +35,33 @@ test('root scripts expose check and bootstrap tests', async () => {
   assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
 });
 
-test('Prettier ownership excludes only canonical governance docs and the root lockfile', async () => {
-  const cases = [
-    ['docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md', true],
-    ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
-    ['pnpm-lock.yaml', true],
-    ['scripts/pin-toolchain.mjs', false],
-    ['scripts/toolchain.test.mjs', false],
-    ['eslint.config.mjs', false],
-  ];
+test('Prettier ownership excludes only root governance and generated-state boundaries', async () => {
+  const temporaryDirectory = await mkdtemp(
+    path.join('.superpowers', 'sdd', 'prettier-regression-'),
+  );
+  const generatedArtifact = path.join(temporaryDirectory, `generated-${randomUUID()}.md`);
 
-  for (const [filePath, expectedIgnored] of cases) {
-    const info = await getFileInfo(filePath, {
-      ignorePath: '.prettierignore',
-    });
-    assert.equal(info.ignored, expectedIgnored, filePath);
+  try {
+    await writeFile(generatedArtifact, '# generated Prettier regression artifact\n');
+
+    const cases = [
+      ['docs/superpowers/specs/2026-07-26-fullstack-javascript-roadmap-design.md', true],
+      ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
+      ['pnpm-lock.yaml', true],
+      [generatedArtifact, true],
+      ['scripts/pin-toolchain.mjs', false],
+      ['scripts/toolchain.test.mjs', false],
+      ['eslint.config.mjs', false],
+    ];
+
+    for (const [filePath, expectedIgnored] of cases) {
+      const info = await getFileInfo(filePath, {
+        ignorePath: path.resolve('.prettierignore'),
+      });
+      assert.equal(info.ignored, expectedIgnored, filePath);
+    }
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
   }
 });
 
