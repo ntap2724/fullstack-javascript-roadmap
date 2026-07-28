@@ -64,13 +64,20 @@ packages/curriculum-graph/
 ├── vitest.config.ts
 ├── src/types.ts
 ├── src/registry.ts
+├── src/references.ts
 ├── src/edges.ts
 ├── src/cycles.ts
 ├── src/publication.ts
 ├── src/completeness.ts
 ├── src/validate.ts
 ├── src/index.ts
-└── test/*.test.ts
+└── test/
+    ├── registry.test.ts
+    ├── references.test.ts
+    ├── cycles.test.ts
+    ├── publication.test.ts
+    ├── completeness.test.ts
+    └── support/
 
 tooling/validate-content/
 ├── package.json
@@ -79,15 +86,22 @@ tooling/validate-content/
 ├── src/main.ts
 └── test/cli.test.ts
 
+scripts/
+└── generate-json-schema.ts
+
 fixtures/curriculum/
 ├── valid/minimal/
 └── invalid/
     ├── duplicate-id/
     ├── missing-reference/
+    ├── missing-module-competency/
+    ├── missing-module-milestone/
     ├── self-cycle/
     ├── two-node-cycle/
     ├── multi-node-cycle/
     ├── published-to-draft/
+    ├── published-to-draft-reverse/
+    ├── published-to-review-reverse/
     ├── orphan-competency/
     ├── unreachable-milestone/
     ├── missing-assessment/
@@ -588,20 +602,32 @@ git add packages/curriculum-schema package.json pnpm-workspace.yaml pnpm-lock.ya
 git commit -m "feat: define curriculum entity schemas"
 ```
 
+### Owner-approved preflight amendment — 2026-07-28
+
+The following rulings govern Tasks 3, 5, 7, and 8. They preserve the public package and diagnostic contracts while making repository ownership and graph semantics explicit:
+
+- `contains` is a normalized structural-traversal edge, not a declaration-direction or generic dependency edge. Declared references remain separate and carry their declaring document, target, relation, source file, and exact frontmatter pointer.
+- Structural containment includes track → module, module → competency, module → lesson, and module → milestone. Reverse metadata such as `lesson.module` and `lesson.competencies` is still validated from the declaring document.
+- Only a `published` track is an active completeness root. `draft`, `review`, `deprecated`, and `withdrawn` tracks do not establish completeness roots.
+- Task 3 owns `scripts/generate-json-schema.ts` in the root TypeScript project. Task 8 updates the existing root script contract while preserving `test:bootstrap` and `test:wp-00-01-gate`.
+
 ### Task 3: Generate and drift-check JSON Schema
 
 **Files:**
 - Create: `packages/curriculum-schema/src/json-schema.ts`
 - Create: `packages/curriculum-schema/generated/curriculum.schema.json`
 - Create: `packages/curriculum-schema/test/json-schema.test.ts`
+- Create: `scripts/generate-json-schema.ts`
 - Modify: `packages/curriculum-schema/package.json`
 - Modify: `package.json`
+- Modify: `tsconfig.json`
+- Modify: `scripts/config-contract.test.mjs`
 
 **Interfaces:**
-- Consumes: `CurriculumEntitySchema`
-- Produces: `generateCurriculumJsonSchema(): object` and `pnpm schema:generate`
+- Consumes: `CurriculumEntitySchema` and the existing strict root TypeScript project
+- Produces: `generateCurriculumJsonSchema(): object`, `pnpm schema:generate`, and a generator owned by `tsconfig.json`
 
-- [ ] **Step 1: Write a failing drift test**
+- [ ] **Step 1: Write failing drift and TypeScript-ownership tests**
 
 ```ts
 // packages/curriculum-schema/test/json-schema.test.ts
@@ -619,13 +645,30 @@ describe('generated JSON Schema', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm the generator is missing**
+Surgically extend the existing root compiler-contract test; preserve its `extends` assertion and existing `vitest.config.ts` ownership:
+
+```js
+// scripts/config-contract.test.mjs
+test('root compiler entry point extends the base contract', async () => {
+  const config = await readJson('tsconfig.json');
+  assert.equal(config.extends, './tsconfig.base.json');
+  assert.deepEqual(config.include, ['vitest.config.ts', 'scripts/generate-json-schema.ts']);
+});
+```
+
+- [ ] **Step 2: Run both focused RED commands and capture them separately**
+
+```bash
+node --test scripts/config-contract.test.mjs
+```
+
+Expected: the root compiler-contract assertion fails because `scripts/generate-json-schema.ts` is not yet owned by `tsconfig.json`. Record the exact command, working directory, exit status, observed count, stdout, stderr, channel-integrity label, and why this proves the ownership gap.
 
 ```bash
 pnpm --filter @roadmap/curriculum-schema test
 ```
 
-Expected: missing module or missing generated file.
+Expected: missing module or missing generated file. Preserve this as a separate historical RED capture with the same evidence fields.
 
 - [ ] **Step 3: Implement Zod 4 JSON Schema conversion**
 
@@ -642,20 +685,34 @@ export function generateCurriculumJsonSchema(): object {
 }
 ```
 
-- [ ] **Step 4: Add a deterministic generation script**
+- [ ] **Step 4: Add the deterministic generator and extend real TypeScript ownership**
 
-Add `scripts/generate-json-schema.ts` at the repository root:
+Keep `scripts/generate-json-schema.ts`. Follow the repository's strict NodeNext ESM convention by using a `.js` import specifier; do not add `allowImportingTsExtensions`, a broad compiler waiver, an ESLint ignore, or project-service `allowDefaultProject`:
 
-```js
+```ts
+// scripts/generate-json-schema.ts
 import { writeFile } from 'node:fs/promises';
-import { generateCurriculumJsonSchema } from '../packages/curriculum-schema/src/json-schema.ts';
+import { generateCurriculumJsonSchema } from '../packages/curriculum-schema/src/json-schema.js';
 
-const output = 'packages/curriculum-schema/generated/curriculum.schema.json';
+const output = new URL(
+  '../packages/curriculum-schema/generated/curriculum.schema.json',
+  import.meta.url,
+);
 const schema = generateCurriculumJsonSchema();
 await writeFile(output, `${JSON.stringify(schema, null, 2)}\n`);
 ```
 
-Execute through `tsx` or Node's supported type-stripping mode selected in WP-00. Pin the chosen runner exactly. Add:
+Surgically extend the existing root project. Preserve every existing entry and compiler relationship:
+
+```json
+// tsconfig.json
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["vitest.config.ts", "scripts/generate-json-schema.ts"]
+}
+```
+
+Execute the generator through the already pinned `tsx` dependency. Merge these mappings into the current root `scripts` object without removing any verified command:
 
 ```json
 {
@@ -666,13 +723,26 @@ Execute through `tsx` or Node's supported type-stripping mode selected in WP-00.
 }
 ```
 
-- [ ] **Step 5: Generate, test drift, and commit**
+- [ ] **Step 5: Run fresh GREEN verification and commit the Task 3 boundary**
+
+Run each command separately and record its real exit status and output:
 
 ```bash
+node --test scripts/config-contract.test.mjs
+pnpm format:check
+pnpm lint
+pnpm typecheck
 pnpm schema:generate
 pnpm --filter @roadmap/curriculum-schema test
 pnpm schema:check
-git add scripts/generate-json-schema.ts packages/curriculum-schema/src/json-schema.ts packages/curriculum-schema/generated packages/curriculum-schema/test/json-schema.test.ts packages/curriculum-schema/package.json package.json pnpm-lock.yaml
+pnpm check
+git diff --check
+```
+
+Required: every command exits `0`; the focused config-contract test proves both the original root ownership and the generator ownership. Inspect the generated JSON Schema instead of trusting only the generator summary.
+
+```bash
+git add scripts/generate-json-schema.ts packages/curriculum-schema/src/json-schema.ts packages/curriculum-schema/generated packages/curriculum-schema/test/json-schema.test.ts packages/curriculum-schema/package.json package.json pnpm-lock.yaml tsconfig.json scripts/config-contract.test.mjs
 git commit -m "build: generate curriculum json schema"
 ```
 
@@ -834,32 +904,40 @@ git commit -m "feat: load validated curriculum markdown"
 - Create: `packages/curriculum-graph/vitest.config.ts`
 - Create: `packages/curriculum-graph/src/types.ts`
 - Create: `packages/curriculum-graph/src/registry.ts`
+- Create: `packages/curriculum-graph/src/references.ts`
 - Create: `packages/curriculum-graph/src/edges.ts`
 - Create: `packages/curriculum-graph/src/index.ts`
 - Create: `packages/curriculum-graph/test/registry.test.ts`
-- Create: duplicate and missing-reference fixtures
+- Create: `packages/curriculum-graph/test/references.test.ts`
+- Create: `packages/curriculum-graph/test/support/graph-fixture.ts`
+- Modify: `fixtures/curriculum/valid/minimal/**/*.md`
+- Create: `fixtures/curriculum/invalid/duplicate-id/**/*.md`
+- Create: `fixtures/curriculum/invalid/missing-reference/**/*.md`
+- Create: `fixtures/curriculum/invalid/missing-module-competency/**/*.md`
+- Create: `fixtures/curriculum/invalid/missing-module-milestone/**/*.md`
 
 **Interfaces:**
 - Consumes: `CurriculumCorpus`
-- Produces: `buildCurriculumGraph(corpus): ValidationOutcome<CurriculumGraph>`
+- Produces: `buildCurriculumGraph(corpus): ValidationOutcome<CurriculumGraph>` with deterministic `declaredReferences` and deduplicated normalized structural edges
 
-- [ ] **Step 1: Write duplicate-ID and missing-reference tests**
+- [ ] **Step 1: Write RED tests for registry, declarations, containment, and exact diagnostics**
+
+Keep the duplicate-ID coverage and add focused declared-reference tests. The valid minimal fixture must contain these exact structural IDs:
+
+```text
+track-js-core
+└── module-js-functions
+    ├── js.function.values
+    ├── lesson-js-function-values
+    └── milestone-js-foundations
+```
+
+Keep the existing duplicate-ID and generic missing-reference tests in `registry.test.ts`, refactored to use the shared helper:
 
 ```ts
 // packages/curriculum-graph/test/registry.test.ts
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadCurriculum } from '@roadmap/curriculum-loader';
-import { buildCurriculumGraph } from '../src/index.js';
-
-const fixtures = path.resolve(import.meta.dirname, '../../../fixtures/curriculum');
-
-async function graphFixture(name: string) {
-  const corpus = await loadCurriculum(path.join(fixtures, name));
-  expect(corpus.ok).toBe(true);
-  if (!corpus.ok) throw new Error('Fixture must pass schema validation');
-  return buildCurriculumGraph(corpus.value);
-}
+import { graphFixture } from './support/graph-fixture.js';
 
 describe('stable-ID registry', () => {
   it('rejects duplicate IDs with both file locations', async () => {
@@ -880,13 +958,88 @@ describe('stable-ID registry', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests and confirm graph exports are missing**
+New declared-reference tests:
+
+```ts
+// packages/curriculum-graph/test/references.test.ts
+import { describe, expect, it } from 'vitest';
+import { graphFixture } from './support/graph-fixture.js';
+
+describe('declared references and normalized containment', () => {
+  it('normalizes track, module, competency, lesson, and milestone containment', async () => {
+    const outcome = await graphFixture('valid/minimal');
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.value.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'track-js-core', to: 'module-js-functions', type: 'contains' }),
+        expect.objectContaining({ from: 'module-js-functions', to: 'js.function.values', type: 'contains' }),
+        expect.objectContaining({ from: 'module-js-functions', to: 'lesson-js-function-values', type: 'contains' }),
+        expect.objectContaining({ from: 'module-js-functions', to: 'milestone-js-foundations', type: 'contains' }),
+      ]),
+    );
+  });
+
+  it.each([
+    ['invalid/missing-module-competency', 'competencies.0'],
+    ['invalid/missing-module-milestone', 'milestone'],
+  ])('rejects %s at the declaring pointer', async (fixture, pointer) => {
+    const outcome = await graphFixture(fixture);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'CURRICULUM_REFERENCE_001',
+          location: expect.objectContaining({ pointer }),
+        }),
+      ]),
+    );
+  });
+
+  it('deduplicates reciprocal structural declarations without losing declaration locations', async () => {
+    const outcome = await graphFixture('valid/minimal');
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    const moduleLessonEdges = outcome.value.edges.filter(
+      ({ from, to, type }) =>
+        from === 'module-js-functions' &&
+        to === 'lesson-js-function-values' &&
+        type === 'contains',
+    );
+    expect(moduleLessonEdges).toHaveLength(1);
+    expect(outcome.value.declaredReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          declaringId: 'module-js-functions',
+          targetId: 'lesson-js-function-values',
+          relation: 'module.lessons',
+        }),
+        expect.objectContaining({
+          declaringId: 'lesson-js-function-values',
+          targetId: 'module-js-functions',
+          relation: 'lesson.module',
+        }),
+      ]),
+    );
+  });
+});
+```
+
+Create `packages/curriculum-graph/test/support/graph-fixture.ts`. It may load only the named fixture and must not mutate authoritative repository files.
+
+- [ ] **Step 2: Run the focused package RED and capture original evidence**
 
 ```bash
 pnpm --filter @roadmap/curriculum-graph test
 ```
 
-- [ ] **Step 3: Define graph nodes and typed edges**
+Expected: module-not-found or missing-export failures for the graph package. Record the exact command, working directory, exit status, observed test count, stdout, stderr, channel-integrity label, and why the failure proves the missing behavior.
+
+- [ ] **Step 3: Define graph nodes, declaration facts, and the unchanged public edge family**
+
+Do not add a second dependency-edge type. `contains` represents normalized structural traversal only.
 
 ```ts
 // packages/curriculum-graph/src/types.ts
@@ -899,6 +1052,33 @@ export type EdgeType =
   | 'remediates'
   | 'milestone-project';
 
+export type DeclaredReferenceRelation =
+  | 'prerequisites'
+  | 'track.requiredCompetencies'
+  | 'track.modules'
+  | 'module.competencies'
+  | 'module.lessons'
+  | 'module.milestone'
+  | 'lesson.module'
+  | 'lesson.competencies'
+  | 'lesson.exercises'
+  | 'lesson.assessments'
+  | 'competency.assessments'
+  | 'competency.remediation'
+  | 'assessment.competencies'
+  | 'assessment.artifact'
+  | 'milestone.competencies'
+  | 'milestone.project'
+  | 'milestone.rubric';
+
+export interface DeclaredReference {
+  declaringId: string;
+  targetId: string;
+  relation: DeclaredReferenceRelation;
+  sourceFile: string;
+  pointer: string;
+}
+
 export interface CurriculumEdge {
   from: string;
   to: string;
@@ -908,40 +1088,73 @@ export interface CurriculumEdge {
 
 export interface CurriculumGraph {
   nodes: ReadonlyMap<string, CurriculumDocument>;
+  declaredReferences: readonly DeclaredReference[];
   edges: readonly CurriculumEdge[];
 }
 ```
 
-- [ ] **Step 4: Implement registry and edge extraction**
+`declaredReferences` is deterministic: sort by `sourceFile`, then `pointer`, then `declaringId`, `relation`, and `targetId`. A pointer names the actual frontmatter field using dot-separated paths such as `competencies.0`, `milestone`, or `module`.
+
+- [ ] **Step 4: Enumerate declared references before creating normalized edges**
 
 `createRegistry` inserts documents in deterministic file order. On a duplicate, it emits one `CURRICULUM_ID_001` diagnostic naming both file paths and returns no graph.
 
-`extractEdges` maps:
+`enumerateDeclaredReferences` must inspect every reference-bearing field in deterministic document and array order. Declaration ownership always remains declaring document → referenced target, even when structural normalization later reverses the edge.
 
-```text
-entity.prerequisites          → prerequisite
-track.modules                 → contains
-module.lessons                → contains
-competency.assessments        → assesses
-competency.remediation        → remediates
-milestone.project             → milestone-project
-lesson.module                 → contains, with direction module → lesson
-lesson.competencies           → contains, with direction competency → lesson
-```
+Use this explicit WP-02–03 reference-field matrix:
 
-For each unresolved target, emit `CURRICULUM_REFERENCE_001` at the exact source file and frontmatter pointer.
+| Declaring field | Target contract in WP-02–03 | Local resolution | Normalized graph result |
+|---|---|---|---|
+| `entity.prerequisites[]` | Competency or current-union artifact | Required | declaring entity → target, `prerequisite` |
+| `track.requiredCompetencies[]` | Competency | Required | Declaration only; module containment proves completeness |
+| `track.modules[]` | Module | Required | track → module, `contains` |
+| `module.competencies[]` | Competency | Required | module → competency, `contains` |
+| `module.lessons[]` | Lesson | Required | module → lesson, `contains` |
+| `module.milestone` | Milestone | Required when present | module → milestone, `contains` |
+| `lesson.module` | Module | Required | referenced module → declaring lesson, `contains` |
+| `lesson.competencies[]` | Competency | Required | referenced competency → declaring lesson, `contains` |
+| `lesson.exercises[]` | Exercise/lab family owned by later packages | Not local in WP-02–03 | Declaration retained; no local edge or missing-target diagnostic |
+| `lesson.assessments[]` | Assessment | Required | referenced assessment relation retained; no additional structural edge |
+| `competency.assessments[]` | Assessment | Required | competency → assessment, `assesses` |
+| `competency.remediation[]` | Lesson in the current kernel | Required | competency → lesson, `remediates` |
+| `assessment.competencies[]` | Competency | Required | referenced competency → declaring assessment, `assesses` |
+| `assessment.artifact` | Exercise/lab/project family owned by later packages | Not local in WP-02–03 | Declaration retained; no local edge or missing-target diagnostic |
+| `milestone.competencies[]` | Competency | Required | Declaration only |
+| `milestone.project` | Project family owned by a later package | Not local in WP-02–03 | Declaration retained; no local edge or missing-target diagnostic |
+| `milestone.rubric` | Rubric family owned by a later package | Not local in WP-02–03 | Declaration retained; no local edge or missing-target diagnostic |
 
-- [ ] **Step 5: Run tests and commit**
+`milestone.evidence[]` contains evidence requirements, not stable entity IDs, and is not a graph reference in WP-02–03. A later package must amend this matrix before any opaque family becomes locally resolvable. Do not silently infer a local target from an artifact prefix.
+
+For every required local target absent from the registry, emit `CURRICULUM_REFERENCE_001` at the declaring document's `sourceFile` and exact dot-separated frontmatter `pointer`. Use declaration facts, not `CurriculumEdge.from`, for that diagnostic.
+
+After reference validation succeeds, normalize structural edges. Deduplicate by `(type, from, to)` so reciprocal `module.lessons` and `lesson.module` declarations produce one module → lesson edge. Choose the structural edge's `sourceFile` from the first declaration in deterministic declaration order, but retain every declaration in `declaredReferences` for later diagnostics.
+
+- [ ] **Step 5: Run focused GREEN verification and commit**
+
+Run each command separately:
 
 ```bash
 pnpm --filter @roadmap/curriculum-graph test
 pnpm --filter @roadmap/curriculum-graph check
 pnpm check
-git add packages/curriculum-graph fixtures/curriculum/invalid/duplicate-id fixtures/curriculum/invalid/missing-reference package.json pnpm-workspace.yaml pnpm-lock.yaml
+git diff --check
+```
+
+Required acceptance evidence:
+
+- Track → module → competency and track → module → milestone traversal exists in the valid fixture.
+- Missing `module.competencies` and `module.milestone` targets fail with `CURRICULUM_REFERENCE_001` at the declaring file and pointer.
+- Reciprocal declarations produce one normalized structural edge while retaining both declaration locations.
+- No opaque later-package target is silently treated as a current registry node.
+
+```bash
+git add packages/curriculum-graph fixtures/curriculum/valid/minimal fixtures/curriculum/invalid/duplicate-id fixtures/curriculum/invalid/missing-reference fixtures/curriculum/invalid/missing-module-competency fixtures/curriculum/invalid/missing-module-milestone package.json pnpm-workspace.yaml pnpm-lock.yaml
 git commit -m "feat: resolve curriculum graph references"
 ```
 
 ### Task 6: Detect complete prerequisite cycles
+
+**Cycle-completeness contract:** every cyclic prerequisite graph must produce at least one `CURRICULUM_GRAPH_003` error (fail closed), and each reported cycle is a deterministic, canonicalized complete witness path (closed, rotation-normalized, deduplicated). Enumerating every simple cycle in a strongly connected component is not required; the required fixture shapes (self, two-node, multi-node) must each report their exact canonical path.
 
 **Files:**
 - Create: `packages/curriculum-graph/src/cycles.ts`
@@ -965,6 +1178,7 @@ function graph(edges: Array<[string, string]>): CurriculumGraph {
   const ids = new Set(edges.flat());
   return {
     nodes: new Map([...ids].map((id) => [id, { filePath: `${id}.md`, body: '', data: { id } } as never])),
+    declaredReferences: [],
     edges: edges.map(([from, to]) => ({ from, to, type: 'prerequisite', sourceFile: `${from}.md` })),
   };
 }
@@ -1078,11 +1292,19 @@ git commit -m "feat: detect curriculum prerequisite cycles"
 - Create: `packages/curriculum-graph/src/validate.ts`
 - Create: `packages/curriculum-graph/test/publication.test.ts`
 - Create: `packages/curriculum-graph/test/completeness.test.ts`
-- Create: publication and completeness fixtures
+- Create: `packages/curriculum-graph/test/support/validate-fixture.ts`
+- Create: `packages/curriculum-graph/test/support/graph-builder.ts`
+- Create: `fixtures/curriculum/invalid/published-to-draft/**/*.md`
+- Create: `fixtures/curriculum/invalid/published-to-draft-reverse/**/*.md`
+- Create: `fixtures/curriculum/invalid/published-to-review-reverse/**/*.md`
+- Create: `fixtures/curriculum/invalid/orphan-competency/**/*.md`
+- Create: `fixtures/curriculum/invalid/missing-assessment/**/*.md`
+- Create: `fixtures/curriculum/invalid/missing-remediation/**/*.md`
+- Create: `fixtures/curriculum/invalid/unreachable-milestone/**/*.md`
 - Modify: `packages/curriculum-graph/src/index.ts`
 
 **Interfaces:**
-- Consumes: a reference-resolved acyclic `CurriculumGraph`
+- Consumes: a reference-resolved `CurriculumGraph` with `declaredReferences` and normalized structural edges (cycles are validated here, not pre-excluded)
 - Produces: `validateCurriculumGraph(graph): ValidationOutcome<CurriculumGraph>`
 
 - [ ] **Step 1: Write failing publication and completeness tests**
@@ -1100,6 +1322,32 @@ describe('publication edges', () => {
       expect.arrayContaining([expect.objectContaining({ code: 'CURRICULUM_PUBLICATION_001' })]),
     );
   });
+
+  it.each(['invalid/published-to-draft-reverse', 'invalid/published-to-review-reverse'])(
+    'rejects %s even when the normalized containment edge points in the opposite direction',
+    async (fixture) => {
+      const outcome = await validateFixture(fixture);
+      expect(outcome.ok).toBe(false);
+      expect(outcome.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'CURRICULUM_PUBLICATION_001',
+            location: expect.objectContaining({
+              file: expect.stringMatching(/lesson.*\.md$/),
+              pointer: 'module',
+            }),
+          }),
+        ]),
+      );
+    },
+  );
+
+  it('does not flag a draft parent module containing a published lesson', async () => {
+    const outcome = await validateFixture('valid/minimal');
+    expect(outcome.diagnostics.map(({ code }) => code)).not.toContain(
+      'CURRICULUM_PUBLICATION_001',
+    );
+  });
 });
 ```
 
@@ -1107,6 +1355,8 @@ describe('publication edges', () => {
 // packages/curriculum-graph/test/completeness.test.ts
 import { describe, expect, it } from 'vitest';
 import { validateFixture } from './support/validate-fixture.js';
+import { buildIsolatedGraph } from './support/graph-builder.js';
+import { completenessDiagnostics } from '../src/completeness.js';
 
 describe('required competency completeness', () => {
   it.each([
@@ -1120,7 +1370,34 @@ describe('required competency completeness', () => {
     expect(outcome.diagnostics.map((diagnostic) => diagnostic.code)).toContain(code);
   });
 });
+
+describe('active track definition', () => {
+  it.each([
+    ['published', true],
+    ['draft', false],
+    ['review', false],
+    ['deprecated', false],
+    ['withdrawn', false],
+  ] as const)('treats a %s track as active root: %s', (status, isActive) => {
+    // buildIsolatedGraph constructs a published module containing a published
+    // competency and milestone, plus one orphan competency and one orphan
+    // milestone, all under a single track whose status is the parameter.
+    const graph = buildIsolatedGraph({ trackStatus: status });
+    const codes = completenessDiagnostics(graph).map(({ code }) => code);
+    if (isActive) {
+      expect(codes).toContain('CURRICULUM_COMPLETENESS_001');
+      expect(codes).toContain('CURRICULUM_COMPLETENESS_004');
+    } else {
+      expect(codes).not.toContain('CURRICULUM_COMPLETENESS_001');
+      expect(codes).not.toContain('CURRICULUM_COMPLETENESS_004');
+    }
+  });
+});
 ```
+
+The last case proves an otherwise reachable competency or milestone does not become complete — or incomplete — solely through a non-published track: with no active root, no root-relative completeness verdict applies.
+
+Create `packages/curriculum-graph/test/support/validate-fixture.ts` (load → build → validate, no file mutation) and `packages/curriculum-graph/test/support/graph-builder.ts` (deterministic in-memory `CurriculumGraph` construction for status-matrix tests).
 
 - [ ] **Step 2: Run the tests and confirm the validators are missing**
 
@@ -1128,7 +1405,11 @@ describe('required competency completeness', () => {
 pnpm --filter @roadmap/curriculum-graph test
 ```
 
-- [ ] **Step 3: Implement publication-state edge validation**
+Expected: missing-module failures for `publication.ts`, `completeness.ts`, or the support helpers. Record the original RED capture (command, working directory, exit status, observed count, stdout, stderr, channel-integrity label, and why the failure proves the missing behavior).
+
+- [ ] **Step 3: Implement declaration-driven publication validation**
+
+Publication validation iterates `graph.declaredReferences`, never `CurriculumEdge.from`. Declaration ownership stays declaring document → referenced target regardless of normalized structural direction.
 
 ```ts
 // packages/curriculum-graph/src/publication.ts
@@ -1139,19 +1420,23 @@ const invalidTargets = new Set(['draft', 'review']);
 
 export function publicationDiagnostics(graph: CurriculumGraph): readonly Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  for (const edge of graph.edges) {
-    const source = graph.nodes.get(edge.from);
-    const target = graph.nodes.get(edge.to);
+  for (const reference of graph.declaredReferences) {
+    const source = graph.nodes.get(reference.declaringId);
+    const target = graph.nodes.get(reference.targetId);
     if (!source || !target) continue;
     if (source.data.status === 'published' && invalidTargets.has(target.data.status)) {
       diagnostics.push({
         code: 'CURRICULUM_PUBLICATION_001',
         severity: 'error',
-        location: { file: source.filePath, pointer: edge.type },
-        observed: { source: edge.from, target: edge.to, targetStatus: target.data.status },
+        location: { file: reference.sourceFile, pointer: reference.pointer },
+        observed: {
+          source: reference.declaringId,
+          target: reference.targetId,
+          targetStatus: target.data.status,
+        },
         expected: 'Published content references only published, deprecated, or withdrawn content',
         reason: 'Production curriculum cannot depend on content excluded from production',
-        remediation: 'Publish the dependency or remove the edge from the published item',
+        remediation: 'Publish the dependency or remove the reference from the published item',
         documentation: 'docs/authoring/publication-states.md',
       });
     }
@@ -1162,23 +1447,25 @@ export function publicationDiagnostics(graph: CurriculumGraph): readonly Diagnos
 
 - [ ] **Step 4: Implement reachability and required-evidence checks**
 
+An active track is exactly a track whose `status` is `published`. `draft`, `review`, `deprecated`, and `withdrawn` tracks never establish a completeness root, even when their content remains visible for URL, migration, or explanation purposes.
+
 `completenessDiagnostics` must enforce:
 
 ```text
 CURRICULUM_COMPLETENESS_001
-└── A required competency is not contained by any module in an active track
+└── A required competency is not contained by any module reachable from an active track
 
 CURRICULUM_COMPLETENESS_002
-└── A required competency has no resolved assessment edge
+└── A required competency declares no assessment whose target resolves in the registry
 
 CURRICULUM_COMPLETENESS_003
-└── A required competency has no resolved remediation edge
+└── A required competency declares no remediation whose target resolves in the registry
 
 CURRICULUM_COMPLETENESS_004
 └── A milestone cannot be reached from any active track through contains edges
 ```
 
-Use graph traversal from each `track.modules` edge rather than inferring reachability from file location.
+A required competency is a `competency`-kind node in the registry (the schema requires non-empty `assessments` and `remediation` declarations, so every competency is required). Resolve assessment and remediation reachability through `declaredReferences` for `competency.assessments` and `competency.remediation`, requiring at least one declared target present in the registry. Use graph traversal from each `track.modules` containment edge rather than inferring reachability from file location. Diagnostics report the failing entity ID, its source file, and the pointer of the relevant field when one exists.
 
 - [ ] **Step 5: Compose all graph validators with internal-error containment**
 
@@ -1219,9 +1506,12 @@ export function validateCurriculumGraph(
 pnpm --filter @roadmap/curriculum-graph test
 pnpm --filter @roadmap/curriculum-graph check
 pnpm check
-git add packages/curriculum-graph fixtures/curriculum/invalid/published-to-draft fixtures/curriculum/invalid/orphan-competency fixtures/curriculum/invalid/missing-assessment fixtures/curriculum/invalid/missing-remediation fixtures/curriculum/invalid/unreachable-milestone
+git diff --check
+git add packages/curriculum-graph fixtures/curriculum/invalid/published-to-draft fixtures/curriculum/invalid/published-to-draft-reverse fixtures/curriculum/invalid/published-to-review-reverse fixtures/curriculum/invalid/orphan-competency fixtures/curriculum/invalid/missing-assessment fixtures/curriculum/invalid/missing-remediation fixtures/curriculum/invalid/unreachable-milestone
 git commit -m "feat: validate curriculum publication and completeness"
 ```
+
+Required acceptance evidence before commit: the published-only active-root matrix passes, the reverse-direction publication fixtures fail with `CURRICULUM_PUBLICATION_001` at the declaring lesson file and `module` pointer, and the four completeness fixtures each fail with their declared code.
 
 ### Task 8: Add the fail-closed content-validation CLI and Spike 2 gate
 
@@ -1233,9 +1523,10 @@ git commit -m "feat: validate curriculum publication and completeness"
 - Create: `tooling/validate-content/test/cli.test.ts`
 - Create: `scripts/verify-wp-02-03.mjs`
 - Modify: `package.json`
+- Modify: `scripts/config-contract.test.mjs`
 
 **Interfaces:**
-- Consumes: loader and graph packages
+- Consumes: loader and graph packages, plus the existing root-script contract
 - Produces: `pnpm content:validate [root]`, `pnpm verify:wp-02-03`, JSON diagnostics on stdout, and non-zero exit on every error or internal exception
 
 - [ ] **Step 1: Write CLI tests for valid, invalid, and internal-failure paths**
@@ -1282,9 +1573,12 @@ pnpm --filter @roadmap/validate-content test
 
 - [ ] **Step 3: Implement the CLI composition and output contract**
 
+The module must be import-safe: importing `main.ts` registers no side effects and never runs validation. Direct execution happens only behind an entry-point guard, so the exception-containment unit test can import `validateContent` without spawning a second CLI run.
+
 ```ts
 // tooling/validate-content/src/main.ts
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCurriculum } from '@roadmap/curriculum-loader';
 import { buildCurriculumGraph, validateCurriculumGraph } from '@roadmap/curriculum-graph';
 import { failure, internalErrorDiagnostic, type ValidationOutcome } from '@roadmap/validation-core';
@@ -1337,20 +1631,38 @@ export function parseArguments(args: readonly string[]): { root: string; format:
   return { root: path.resolve(root), format };
 }
 
-const { root, format } = parseArguments(process.argv.slice(2));
-const outcome = await validateContent(root);
-
-if (format === 'json') console.log(JSON.stringify(outcome.diagnostics, null, 2));
-else {
-  for (const diagnostic of outcome.diagnostics) {
-    console.error(`${diagnostic.code} ${diagnostic.location.file}: ${diagnostic.reason}`);
-    console.error(`  Expected: ${diagnostic.expected}`);
-    console.error(`  Remediation: ${diagnostic.remediation}`);
+async function main(): Promise<void> {
+  let parsed: { root: string; format: 'text' | 'json' };
+  try {
+    parsed = parseArguments(process.argv.slice(2));
+  } catch (error) {
+    const outcome = failure([internalErrorDiagnostic(error, '<arguments>')]);
+    console.log(JSON.stringify(outcome.diagnostics, null, 2));
+    process.exitCode = 1;
+    return;
   }
+
+  const outcome = await validateContent(parsed.root);
+
+  if (parsed.format === 'json') console.log(JSON.stringify(outcome.diagnostics, null, 2));
+  else {
+    for (const diagnostic of outcome.diagnostics) {
+      console.error(`${diagnostic.code} ${diagnostic.location.file}: ${diagnostic.reason}`);
+      console.error(`  Expected: ${diagnostic.expected}`);
+      console.error(`  Remediation: ${diagnostic.remediation}`);
+    }
+  }
+
+  if (!outcome.ok) process.exitCode = 1;
 }
 
-if (!outcome.ok) process.exitCode = 1;
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : undefined;
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  await main();
+}
 ```
+
+Argument-parse failures also fail closed as `VALIDATOR_INTERNAL_001` with exit `1` — a malformed invocation is never a silent success.
 
 Add a direct unit test for exception containment by injecting a `load` dependency that throws:
 
@@ -1368,14 +1680,32 @@ it('turns an unexpected dependency exception into VALIDATOR_INTERNAL_001', async
 
 This proves exception containment through an explicit dependency seam without adding a test-only production behavior.
 
-- [ ] **Step 4: Replace root test and verification scripts with domain-aware commands**
+- [ ] **Step 4: Update the root-script contract and add domain-aware commands**
 
-Add:
+The existing `scripts/config-contract.test.mjs` assertion locks `scripts.test` to the bootstrap-only command. Update that assertion surgically — preserve its `check` assertion and every unrelated test — so the contract requires the new mapping:
+
+```js
+// scripts/config-contract.test.mjs (updated assertion only)
+test('root scripts expose check and domain-aware tests', async () => {
+  const packageJson = await readJson('package.json');
+  assert.equal(typeof packageJson.scripts.check, 'string');
+  assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
+  assert.equal(packageJson.scripts['test:wp-00-01-gate'], 'node --test scripts/wp-00-01-gate.integration.mjs');
+  assert.equal(packageJson.scripts['test:unit'], 'vitest run');
+  assert.equal(
+    packageJson.scripts.test,
+    'node scripts/run-pipeline.mjs test:bootstrap test:unit',
+  );
+});
+```
+
+Merge these mappings into the current root `scripts` object. `test:bootstrap` and `test:wp-00-01-gate` keep their existing verified commands exactly; do not remove, rename, fold, or recursively invoke them:
 
 ```json
 {
   "scripts": {
     "test:bootstrap": "node --test scripts/*.test.mjs",
+    "test:wp-00-01-gate": "node --test scripts/wp-00-01-gate.integration.mjs",
     "test:unit": "vitest run",
     "test": "node scripts/run-pipeline.mjs test:bootstrap test:unit",
     "content:validate": "pnpm --filter @roadmap/validate-content start --",
@@ -1385,6 +1715,8 @@ Add:
   }
 }
 ```
+
+The command graph must be acyclic: `test` invokes `test:bootstrap` and `test:unit` only; no script invokes `test` except `verify` and `verify:wp-02-03` through the pipeline; `test:wp-00-01-gate` is never selected by the `scripts/*.test.mjs` glob (it lives at `scripts/wp-00-01-gate.integration.mjs`, which does not match `*.test.mjs`).
 
 `tooling/validate-content/package.json` exposes:
 
@@ -1397,6 +1729,18 @@ Add:
   }
 }
 ```
+
+Before committing Task 8, prove with separately captured evidence:
+
+- The focused root-script contract test passes: `node --test scripts/config-contract.test.mjs`
+- `pnpm test:bootstrap` executes the bootstrap tests once
+- `pnpm test:unit` executes the intended Vitest projects once
+- `pnpm test` executes both stages once, in order
+- `pnpm test:wp-00-01-gate` passes independently and is not selected by the bootstrap glob
+- `pnpm verify:wp-00-01` remains independently executable and passes
+- The command graph is non-recursive (no script eventually invokes itself)
+- All pre-existing public commands remain present: `dev`, `format`, `format:check`, `lint`, `typecheck`, `check`, `policy:check`, `verify:wp-00-01`, `verify:templates`, `verify:release`
+- `pnpm verify:templates` and `pnpm verify:release` still return the intentional unavailable exit `2` (this WP-02–03 amendment does not approve changing them)
 
 - [ ] **Step 5: Implement and run the Spike 2 gate**
 
@@ -1434,7 +1778,7 @@ Expected: each invalid command exits non-zero and prints its declared stable dia
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tooling/validate-content scripts/verify-wp-02-03.mjs package.json pnpm-lock.yaml
+git add tooling/validate-content scripts/verify-wp-02-03.mjs package.json pnpm-lock.yaml scripts/config-contract.test.mjs
 git commit -m "feat: add fail closed curriculum validation cli"
 ```
 
