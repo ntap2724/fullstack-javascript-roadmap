@@ -622,6 +622,7 @@ The following rulings govern Tasks 3, 5, 7, and 8. They preserve the public pack
 - Modify: `package.json`
 - Modify: `tsconfig.json`
 - Modify: `scripts/config-contract.test.mjs`
+- Modify: `.prettierignore`
 
 **Interfaces:**
 - Consumes: `CurriculumEntitySchema` and the existing strict root TypeScript project
@@ -723,6 +724,8 @@ Execute the generator through the already pinned `tsx` dependency. Merge these m
 }
 ```
 
+The committed schema is generated state whose byte layout is owned by `JSON.stringify(schema, null, 2)`, not by Prettier. Add `/packages/curriculum-schema/generated/` to `.prettierignore` and extend the existing Prettier-ownership contract test's case list with `['packages/curriculum-schema/generated/curriculum.schema.json', true]` so the generated-state boundary stays asserted; do not reformat the generator output and do not weaken any other ignore entry or assertion.
+
 - [ ] **Step 5: Run fresh GREEN verification and commit the Task 3 boundary**
 
 Run each command separately and record its real exit status and output:
@@ -742,7 +745,7 @@ git diff --check
 Required: every command exits `0`; the focused config-contract test proves both the original root ownership and the generator ownership. Inspect the generated JSON Schema instead of trusting only the generator summary.
 
 ```bash
-git add scripts/generate-json-schema.ts packages/curriculum-schema/src/json-schema.ts packages/curriculum-schema/generated packages/curriculum-schema/test/json-schema.test.ts packages/curriculum-schema/package.json package.json pnpm-lock.yaml tsconfig.json scripts/config-contract.test.mjs
+git add scripts/generate-json-schema.ts packages/curriculum-schema/src/json-schema.ts packages/curriculum-schema/generated packages/curriculum-schema/test/json-schema.test.ts packages/curriculum-schema/package.json package.json pnpm-lock.yaml tsconfig.json scripts/config-contract.test.mjs .prettierignore
 git commit -m "build: generate curriculum json schema"
 ```
 
