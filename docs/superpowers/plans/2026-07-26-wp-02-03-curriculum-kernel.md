@@ -1159,30 +1159,49 @@ git commit -m "feat: resolve curriculum graph references"
 
 **Cycle-completeness contract:** every cyclic prerequisite graph must produce at least one `CURRICULUM_GRAPH_003` error (fail closed), and each reported cycle is a deterministic, canonicalized complete witness path (closed, rotation-normalized, deduplicated). Enumerating every simple cycle in a strongly connected component is not required; the required fixture shapes (self, two-node, multi-node) must each report their exact canonical path.
 
+**Responsibility split:** `findPrerequisiteCycles` is the single pure cycle-discovery algorithm. `cycleDiagnostics` converts those paths into deterministic diagnostics and remains the collector Task 7 composes with publication/completeness diagnostics. `validatePrerequisiteCycles` is a fail-closed `ValidationOutcome` wrapper around `cycleDiagnostics`; it must not implement a second traversal. Task 7 must continue calling `cycleDiagnostics` directly rather than unwrapping or merging a nested outcome.
+
 **Files:**
 - Create: `packages/curriculum-graph/src/cycles.ts`
 - Create: `packages/curriculum-graph/test/cycles.test.ts`
-- Create: self, two-node, and multi-node cycle fixtures
+- Create: `fixtures/curriculum/invalid/self-cycle/**/*.md`
+- Create: `fixtures/curriculum/invalid/two-node-cycle/**/*.md`
+- Create: `fixtures/curriculum/invalid/multi-node-cycle/**/*.md`
 - Modify: `packages/curriculum-graph/src/index.ts`
 
 **Interfaces:**
-- Consumes: `CurriculumGraph`
-- Produces: `findPrerequisiteCycles(graph): readonly (readonly string[])[]` and `validatePrerequisiteCycles(graph)`
+- Consumes: a reference-resolved `CurriculumGraph`
+- Produces: `findPrerequisiteCycles(graph): readonly (readonly string[])[]`
+- Produces: `cycleDiagnostics(graph): readonly Diagnostic[]`
+- Produces: `validatePrerequisiteCycles(graph): ValidationOutcome<CurriculumGraph>`
 
-- [ ] **Step 1: Write tests for all required cycle shapes**
+- [ ] **Step 1: Write low-level RED tests for discovery, diagnostics, and the fail-closed wrapper**
+
+Pure in-memory algorithm tests intentionally bypass schema loading and may keep synthetic `a`/`b`/`c` IDs. Cover self, two-node, multi-node, acyclic, rotation-normalization/deduplication, deterministic output, diagnostic conversion, wrapper success/failure, and internal-error conversion. Use an ordinary throwing input boundary for the exception case; do not add test-only production behavior.
 
 ```ts
 // packages/curriculum-graph/test/cycles.test.ts
 import { describe, expect, it } from 'vitest';
-import { findPrerequisiteCycles } from '../src/cycles.js';
+import {
+  cycleDiagnostics,
+  findPrerequisiteCycles,
+  validatePrerequisiteCycles,
+} from '../src/cycles.js';
 import type { CurriculumGraph } from '../src/types.js';
 
 function graph(edges: Array<[string, string]>): CurriculumGraph {
   const ids = new Set(edges.flat());
   return {
-    nodes: new Map([...ids].map((id) => [id, { filePath: `${id}.md`, body: '', data: { id } } as never])),
+    nodes: new Map(
+      [...ids].map((id) => [id, { filePath: `${id}.md`, body: '', data: { id } } as never]),
+    ),
     declaredReferences: [],
-    edges: edges.map(([from, to]) => ({ from, to, type: 'prerequisite', sourceFile: `${from}.md` })),
+    edges: edges.map(([from, to]) => ({
+      from,
+      to,
+      type: 'prerequisite',
+      sourceFile: `${from}.md`,
+    })),
   };
 }
 
@@ -1191,26 +1210,125 @@ describe('findPrerequisiteCycles', () => {
     expect(findPrerequisiteCycles(graph([['a', 'a']]))).toEqual([['a', 'a']]);
   });
 
+  it('returns a two-node cycle as a closed path', () => {
+    expect(findPrerequisiteCycles(graph([['a', 'b'], ['b', 'a']]))).toEqual([
+      ['a', 'b', 'a'],
+    ]);
+  });
+
   it('returns a complete multi-node path', () => {
     expect(findPrerequisiteCycles(graph([['a', 'b'], ['b', 'c'], ['c', 'a']]))).toEqual([
       ['a', 'b', 'c', 'a'],
     ]);
   });
+
+  it('rotation-normalizes and deduplicates a cycle reached from another node', () => {
+    expect(
+      findPrerequisiteCycles(
+        graph([
+          ['0', 'b'],
+          ['b', 'c'],
+          ['c', 'a'],
+          ['c', 'a'],
+          ['a', 'b'],
+        ]),
+      ),
+    ).toEqual([['a', 'b', 'c', 'a']]);
+  });
+
+  it('returns no cycles for an acyclic graph', () => {
+    expect(findPrerequisiteCycles(graph([['a', 'b'], ['b', 'c']]))).toEqual([]);
+  });
+});
+
+describe('cycle diagnostics and validation outcome', () => {
+  it('converts a cycle into CURRICULUM_GRAPH_003 with the closed path', () => {
+    expect(cycleDiagnostics(graph([['a', 'a']]))).toEqual([
+      expect.objectContaining({ code: 'CURRICULUM_GRAPH_003', observed: ['a', 'a'] }),
+    ]);
+  });
+
+  it('returns success with the original acyclic graph', () => {
+    const input = graph([['a', 'b']]);
+    const outcome = validatePrerequisiteCycles(input);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.value).toBe(input);
+  });
+
+  it('returns failure for a cyclic graph', () => {
+    const outcome = validatePrerequisiteCycles(graph([['a', 'a']]));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.diagnostics).toEqual([
+      expect.objectContaining({ code: 'CURRICULUM_GRAPH_003', observed: ['a', 'a'] }),
+    ]);
+  });
+
+  it('converts unexpected traversal exceptions to VALIDATOR_INTERNAL_001', () => {
+    const throwingGraph = {
+      nodes: new Map(),
+      declaredReferences: [],
+      get edges(): CurriculumGraph['edges'] {
+        throw new Error('unexpected edge access');
+      },
+    } as CurriculumGraph;
+    const outcome = validatePrerequisiteCycles(throwingGraph);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.diagnostics).toEqual([
+      expect.objectContaining({ code: 'VALIDATOR_INTERNAL_001' }),
+    ]);
+  });
 });
 ```
 
-- [ ] **Step 2: Run the tests and confirm the cycle function is missing**
+- [ ] **Step 2: Run the focused low-level RED and capture original evidence**
 
 ```bash
 pnpm --filter @roadmap/curriculum-graph test -- cycles.test.ts
 ```
 
-- [ ] **Step 3: Implement deterministic depth-first cycle detection**
+Expected: `cycles.js` is absent or the three-function contract is not satisfied. Record the exact command, working directory, exit status, observed test count, relevant stdout/stderr, channel-integrity label, and why the failure proves `validatePrerequisiteCycles`/the declared outcome behavior is missing. Do not fabricate a pre-implementation RED.
+
+- [ ] **Step 3: Implement one deterministic traversal, diagnostic conversion, and fail-closed wrapper**
+
+Use plain codepoint comparison, never `localeCompare`, for canonical rotation and output ordering. The separator in a path sort key must appear in source as the text escape `\0`, never as a literal NUL byte. Avoid non-null assertions; the repository lint contract rejects them.
 
 ```ts
 // packages/curriculum-graph/src/cycles.ts
-import type { Diagnostic } from '@roadmap/validation-core';
+import {
+  failure,
+  hasErrors,
+  internalErrorDiagnostic,
+  success,
+  type Diagnostic,
+  type ValidationOutcome,
+} from '@roadmap/validation-core';
 import type { CurriculumGraph } from './types.js';
+
+function compareCodepoints(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function pathKey(path: readonly string[]): string {
+  return path.join('\0');
+}
+
+function canonicalizeCycle(cycle: readonly string[]): readonly string[] {
+  const ring = cycle.slice(0, -1);
+  const first = ring[0];
+  if (first === undefined) return cycle;
+
+  let canonical = [...ring];
+  for (let index = 1; index < ring.length; index += 1) {
+    const candidate = [...ring.slice(index), ...ring.slice(0, index)];
+    if (compareCodepoints(pathKey(candidate), pathKey(canonical)) < 0) {
+      canonical = candidate;
+    }
+  }
+
+  const canonicalStart = canonical[0];
+  return canonicalStart === undefined ? cycle : [...canonical, canonicalStart];
+}
 
 export function findPrerequisiteCycles(graph: CurriculumGraph): readonly (readonly string[])[] {
   const adjacency = new Map<string, string[]>();
@@ -1220,22 +1338,18 @@ export function findPrerequisiteCycles(graph: CurriculumGraph): readonly (readon
     targets.push(edge.to);
     adjacency.set(edge.from, targets);
   }
-  for (const targets of adjacency.values()) targets.sort();
+  for (const targets of adjacency.values()) targets.sort(compareCodepoints);
 
   const visited = new Set<string>();
   const active = new Map<string, number>();
   const stack: string[] = [];
   const cycles = new Map<string, readonly string[]>();
 
-  const visit = (node: string) => {
+  const visit = (node: string): void => {
     const activeIndex = active.get(node);
     if (activeIndex !== undefined) {
-      const cycle = [...stack.slice(activeIndex), node];
-      const ring = cycle.slice(0, -1);
-      const rotations = ring.map((_, index) => [...ring.slice(index), ...ring.slice(0, index)]);
-      rotations.sort((left, right) => left.join('\0').localeCompare(right.join('\0')));
-      const canonical = [...rotations[0]!, rotations[0]![0]!];
-      cycles.set(canonical.join(' -> '), canonical);
+      const canonical = canonicalizeCycle([...stack.slice(activeIndex), node]);
+      cycles.set(pathKey(canonical), canonical);
       return;
     }
     if (visited.has(node)) return;
@@ -1248,41 +1362,112 @@ export function findPrerequisiteCycles(graph: CurriculumGraph): readonly (readon
     visited.add(node);
   };
 
-  for (const node of [...graph.nodes.keys()].sort()) visit(node);
-  return [...cycles.values()];
+  for (const node of [...graph.nodes.keys()].sort(compareCodepoints)) visit(node);
+  return [...cycles.values()].sort((left, right) => compareCodepoints(pathKey(left), pathKey(right)));
 }
 
 export function cycleDiagnostics(graph: CurriculumGraph): readonly Diagnostic[] {
-  return findPrerequisiteCycles(graph).map((cycle) => ({
-    code: 'CURRICULUM_GRAPH_003',
-    severity: 'error',
-    location: { file: graph.nodes.get(cycle[0]!)?.filePath ?? '<curriculum>' },
-    observed: cycle,
-    expected: 'An acyclic prerequisite graph',
-    reason: `Prerequisite cycle detected: ${cycle.join(' -> ')}`,
-    remediation: 'Remove or redirect at least one prerequisite edge in the reported cycle',
-    documentation: 'docs/architecture/curriculum-graph.md#cycles',
-  }));
+  return findPrerequisiteCycles(graph).map((cycle) => {
+    const start = cycle[0];
+    return {
+      code: 'CURRICULUM_GRAPH_003',
+      severity: 'error',
+      location: {
+        file: start === undefined ? '<curriculum>' : (graph.nodes.get(start)?.filePath ?? '<curriculum>'),
+      },
+      observed: cycle,
+      expected: 'An acyclic prerequisite graph',
+      reason: `Prerequisite cycle detected: ${cycle.join(' -> ')}`,
+      remediation: 'Remove or redirect at least one prerequisite edge in the reported cycle',
+      documentation: 'docs/architecture/curriculum-graph.md#cycles',
+    };
+  });
+}
+
+export function validatePrerequisiteCycles(
+  graph: CurriculumGraph,
+): ValidationOutcome<CurriculumGraph> {
+  try {
+    const diagnostics = cycleDiagnostics(graph);
+    return hasErrors(diagnostics) ? failure(diagnostics) : success(graph, diagnostics);
+  } catch (error) {
+    return failure([internalErrorDiagnostic(error, '<curriculum-graph>')]);
+  }
 }
 ```
 
-- [ ] **Step 4: Add fixture-level tests and integrate diagnostics into graph validation**
+`findPrerequisiteCycles` is the only traversal. `cycleDiagnostics` must reuse it. `validatePrerequisiteCycles` must call `cycleDiagnostics`, return the original graph on success, fail on every reported cycle, convert unexpected exceptions through `internalErrorDiagnostic`, and never throw. Do not add test-only production seams.
 
-Load each fixture through `loadCurriculum`, build the graph, and assert:
+Run the low-level tests again before adding fixture documents. All low-level tests must pass while the fixture-level tests below still fail because their directories/documents do not exist.
 
-```text
-self-cycle       → a -> a
-two-node-cycle   → a -> b -> a
-multi-node-cycle → a -> b -> c -> a
+- [ ] **Step 4: Add schema-loaded fixture tests, capture fixture RED, then create draft-track fixtures and export APIs**
+
+Extend `cycles.test.ts` with fixture-level tests using `graphFixture`. Write and run these tests before creating any fixture document:
+
+```ts
+import { graphFixture } from './support/graph-fixture.js';
+
+it.each([
+  ['invalid/self-cycle', ['track-cycle-a', 'track-cycle-a']],
+  ['invalid/two-node-cycle', ['track-cycle-a', 'track-cycle-b', 'track-cycle-a']],
+  [
+    'invalid/multi-node-cycle',
+    ['track-cycle-a', 'track-cycle-b', 'track-cycle-c', 'track-cycle-a'],
+  ],
+] as const)('reports the exact canonical cycle for %s', async (fixture, expected) => {
+  const graphOutcome = await graphFixture(fixture);
+  expect(graphOutcome.ok).toBe(true);
+  if (!graphOutcome.ok) return;
+  expect(cycleDiagnostics(graphOutcome.value)).toEqual([
+    expect.objectContaining({ code: 'CURRICULUM_GRAPH_003', observed: expected }),
+  ]);
+});
 ```
 
-The exact cycle path appears in the diagnostic `observed` field.
+Run the focused test and capture the genuine fixture-level RED caused by the absent fixture path/documents. Record the exact command, working directory, exit status, observed test count, relevant stdout/stderr, channel-integrity label, and why this failure proves the fixture behavior is missing.
 
-- [ ] **Step 5: Run and commit**
+Then create only draft track documents with schema-valid metadata:
+
+```text
+self-cycle       -> track-cycle-a -> track-cycle-a
+two-node-cycle   -> track-cycle-a -> track-cycle-b -> track-cycle-a
+multi-node-cycle -> track-cycle-a -> track-cycle-b -> track-cycle-c -> track-cycle-a
+```
+
+Every fixture track must use `kind: track`, `status: draft`, `requiredCompetencies: []`, `modules: []`, valid slug/title/description/schema/version fields, and only the `prerequisites` needed for that fixture's edges. Do not create competency, module, lesson, assessment, remediation, milestone, or other support documents. The graph must build without `CURRICULUM_REFERENCE_001`; cycle failure is represented only by `CURRICULUM_GRAPH_003` from `cycleDiagnostics`/`validatePrerequisiteCycles`, not by publication or completeness diagnostics.
+
+Modify `packages/curriculum-graph/src/index.ts` only to export the Task 6 APIs:
+
+```ts
+export * from './cycles.js';
+```
+
+Task 7 continues composing `cycleDiagnostics(graph)` directly with publication and completeness diagnostics. Do not make Task 7 consume `validatePrerequisiteCycles` or duplicate cycle traversal.
+
+- [ ] **Step 5: Run fresh GREEN verification and commit**
+
+Run each command separately and record its real exit status/output:
 
 ```bash
+pnpm --filter @roadmap/curriculum-graph test -- cycles.test.ts
 pnpm --filter @roadmap/curriculum-graph test
+pnpm --filter @roadmap/curriculum-graph check
 pnpm check
+git diff --check
+```
+
+Required acceptance evidence:
+
+- Every cyclic reference-resolved graph produces at least one deterministic `CURRICULUM_GRAPH_003` witness; the required self, two-node, and multi-node paths are closed, rotation-normalized, deduplicated, and exact.
+- An acyclic graph returns no cycles and `validatePrerequisiteCycles` returns success containing the original graph.
+- A cyclic graph returns failure with `CURRICULUM_GRAPH_003`, including the deterministic closed path in `observed`; no cycle is accepted silently.
+- An unexpected traversal exception is converted to `VALIDATOR_INTERNAL_001` through `internalErrorDiagnostic`; the wrapper never throws.
+- `cycleDiagnostics` remains independently usable by Task 7 and reuses `findPrerequisiteCycles`; there is no second cycle algorithm or nested outcome composition.
+- Draft-track fixtures parse/build without unrelated reference, publication, or completeness failures.
+- The source file is strict UTF-8 text with no literal NUL bytes; codepoint comparison, not locale collation, determines canonical paths.
+- `src/index.ts` exports the cycle APIs; all focused/package/root checks pass.
+
+```bash
 git add packages/curriculum-graph/src/cycles.ts packages/curriculum-graph/src/index.ts packages/curriculum-graph/test/cycles.test.ts fixtures/curriculum/invalid/self-cycle fixtures/curriculum/invalid/two-node-cycle fixtures/curriculum/invalid/multi-node-cycle
 git commit -m "feat: detect curriculum prerequisite cycles"
 ```
