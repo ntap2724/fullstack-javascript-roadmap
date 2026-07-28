@@ -607,7 +607,7 @@ git commit -m "feat: define curriculum entity schemas"
 The following rulings govern Tasks 3, 5, 7, and 8. They preserve the public package and diagnostic contracts while making repository ownership and graph semantics explicit:
 
 - `contains` is a normalized structural-traversal edge, not a declaration-direction or generic dependency edge. Declared references remain separate and carry their declaring document, target, relation, source file, and exact frontmatter pointer.
-- Structural containment includes track → module, module → competency, module → lesson, and module → milestone. Reverse metadata such as `lesson.module` and `lesson.competencies` is still validated from the declaring document.
+- Structural containment is exactly track → module, module → competency, module → lesson, and module → milestone; no other `contains` shape may be normalized. Reverse metadata such as `lesson.module` and `lesson.competencies` is still validated from the declaring document.
 - Only a `published` track is an active completeness root. `draft`, `review`, `deprecated`, and `withdrawn` tracks do not establish completeness roots.
 - Task 3 owns `scripts/generate-json-schema.ts` in the root TypeScript project. Task 8 updates the existing root script contract while preserving `test:bootstrap` and `test:wp-00-01-gate`.
 
@@ -1112,7 +1112,7 @@ Use this explicit WP-02–03 reference-field matrix:
 | `module.lessons[]` | Lesson | Required | module → lesson, `contains` |
 | `module.milestone` | Milestone | Required when present | module → milestone, `contains` |
 | `lesson.module` | Module | Required | referenced module → declaring lesson, `contains` |
-| `lesson.competencies[]` | Competency | Required | referenced competency → declaring lesson, `contains` |
+| `lesson.competencies[]` | Competency | Required | Declaration only; module containment already links competency and lesson |
 | `lesson.exercises[]` | Exercise/lab family owned by later packages | Not local in WP-02–03 | Declaration retained; no local edge or missing-target diagnostic |
 | `lesson.assessments[]` | Assessment | Required | referenced assessment relation retained; no additional structural edge |
 | `competency.assessments[]` | Assessment | Required | competency → assessment, `assesses` |
@@ -1456,16 +1456,16 @@ CURRICULUM_COMPLETENESS_001
 └── A required competency is not contained by any module reachable from an active track
 
 CURRICULUM_COMPLETENESS_002
-└── A required competency declares no assessment whose target resolves in the registry
+└── A required competency has no resolved `assesses` edge to an assessment in the registry
 
 CURRICULUM_COMPLETENESS_003
-└── A required competency declares no remediation whose target resolves in the registry
+└── A required competency has no resolved `remediates` edge to a remediation lesson in the registry
 
 CURRICULUM_COMPLETENESS_004
 └── A milestone cannot be reached from any active track through contains edges
 ```
 
-A required competency is a `competency`-kind node in the registry (the schema requires non-empty `assessments` and `remediation` declarations, so every competency is required). Resolve assessment and remediation reachability through `declaredReferences` for `competency.assessments` and `competency.remediation`, requiring at least one declared target present in the registry. Use graph traversal from each `track.modules` containment edge rather than inferring reachability from file location. Diagnostics report the failing entity ID, its source file, and the pointer of the relevant field when one exists.
+A required competency is a `competency`-kind node in the registry (the schema requires non-empty `assessments` and `remediation` declarations, so every competency is required). Resolve assessment and remediation reachability through the normalized `assesses` and `remediates` edges, requiring at least one edge from the competency to a target present in the registry; those edges are normalized from `competency.assessments` and `competency.remediation` in the Task 5 matrix. Use graph traversal from each `track.modules` containment edge rather than inferring reachability from file location. Diagnostics report the failing entity ID, its source file, and the pointer of the relevant field when one exists; resolve source file and pointer from the matching `declaredReferences` entry, never from `CurriculumEdge.from`.
 
 - [ ] **Step 5: Compose all graph validators with internal-error containment**
 
