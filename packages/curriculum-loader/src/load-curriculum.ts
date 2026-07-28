@@ -12,12 +12,20 @@ import { loadCurriculumFile } from './load-file.js';
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.mdx']);
 
+function toSortKey(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
 export async function loadCurriculum(root: string): Promise<ValidationOutcome<CurriculumCorpus>> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   const filePaths = entries
     .filter((entry) => entry.isFile() && MARKDOWN_EXTENSIONS.has(path.extname(entry.name)))
     .map((entry) => path.join(entry.parentPath, entry.name))
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => {
+      const keyA = toSortKey(a);
+      const keyB = toSortKey(b);
+      return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+    });
 
   const documents = [];
   let diagnostics = mergeDiagnostics([]);
