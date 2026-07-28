@@ -18,7 +18,9 @@
     "verify:wp-00-01": "node scripts/verify-wp-00-01.mjs",
     "verify": "node scripts/run-pipeline.mjs check test:bootstrap",
     "verify:templates": "node scripts/unavailable-command.mjs verify:templates",
-    "verify:release": "node scripts/unavailable-command.mjs verify:release"
+    "verify:release": "node scripts/unavailable-command.mjs verify:release",
+    "schema:generate": "tsx scripts/generate-json-schema.ts",
+    "schema:check": "pnpm schema:generate && git diff --exit-code -- packages/curriculum-schema/generated/curriculum.schema.json"
   },
   "engines": {
     "node": ">=24 <25"

@@ -88,7 +88,7 @@ test('TypeScript base config is strict and emits no build artifacts', async () =
 test('root compiler entry point extends the base contract', async () => {
   const config = await readJson('tsconfig.json');
   assert.equal(config.extends, './tsconfig.base.json');
-  assert.deepEqual(config.include, ['vitest.config.ts']);
+  assert.deepEqual(config.include, ['vitest.config.ts', 'scripts/generate-json-schema.ts']);
 });
 
 test('root scripts expose check and bootstrap tests', async () => {
@@ -108,6 +108,7 @@ test('Prettier ownership excludes only root governance and generated-state bound
         ['docs/superpowers/plans/2026-07-26-wp-00-01-bootstrap-governance.md', true],
         ['pnpm-lock.yaml', true],
         [generatedArtifact, true],
+        ['packages/curriculum-schema/generated/curriculum.schema.json', true],
         ['scripts/pin-toolchain.mjs', false],
         ['scripts/toolchain.test.mjs', false],
         ['eslint.config.mjs', false],
