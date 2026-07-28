@@ -1,0 +1,23 @@
+{
+  "name": "@roadmap/curriculum-graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@roadmap/curriculum-schema": "workspace:*",
+    "@roadmap/validation-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@roadmap/curriculum-loader": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
