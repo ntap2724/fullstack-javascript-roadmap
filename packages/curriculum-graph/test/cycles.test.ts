@@ -76,19 +76,25 @@ describe('findPrerequisiteCycles', () => {
     ).toEqual([]);
   });
 
-  it('returns exact sorted output for two disjoint cycles', () => {
+  it('returns exact sorted output for two disjoint cycles, even when discovery order differs', () => {
+    // Root visit order is codepoint-sorted (0, a, b, c), so '0' is visited
+    // first and discovers the b-c cycle via 0->b->c->b before 'a' is ever
+    // visited and discovers the self-cycle a->a. Discovery order is
+    // therefore [b,c,b] then [a,a] -- the opposite of the required sorted
+    // output [a,a] then [b,c,b]. This makes the final sort load-bearing:
+    // deleting it would surface [b,c,b] before [a,a] and fail this test.
     expect(
       findPrerequisiteCycles(
         graph([
-          ['x', 'y'],
-          ['y', 'x'],
-          ['a', 'b'],
-          ['b', 'a'],
+          ['0', 'b'],
+          ['b', 'c'],
+          ['c', 'b'],
+          ['a', 'a'],
         ]),
       ),
     ).toEqual([
-      ['a', 'b', 'a'],
-      ['x', 'y', 'x'],
+      ['a', 'a'],
+      ['b', 'c', 'b'],
     ]);
   });
 });
