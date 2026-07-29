@@ -6,18 +6,34 @@ import { describe, expect, it, vi } from 'vitest';
 const repositoryRoot = path.resolve(import.meta.dirname, '../../..');
 const cli = path.join(repositoryRoot, 'tooling/validate-content/src/main.ts');
 
-function run(args: readonly string[]) {
+function spawnPnpm(args: readonly string[]) {
   const pnpmCli = process.env.npm_execpath;
-  if (!pnpmCli) throw new Error('pnpm CLI path is unavailable in the test environment');
-  return spawnSync(process.execPath, [pnpmCli, 'exec', 'tsx', cli, ...args], {
+  const options = {
     cwd: repositoryRoot,
-    encoding: 'utf8',
+    encoding: 'utf8' as const,
     shell: false,
-  });
+  };
+  if (pnpmCli) return spawnSync(process.execPath, [pnpmCli, ...args], options);
+  if (process.platform === 'win32') {
+    return spawnSync(
+      process.env.ComSpec ?? 'cmd.exe',
+      ['/d', '/s', '/c', 'pnpm', ...args],
+      options,
+    );
+  }
+  return spawnSync('pnpm', args, options);
 }
 
-function runJson(root: string) {
-  return run([root, '--format', 'json']);
+function runMachine(args: readonly string[]) {
+  return spawnPnpm(['exec', 'tsx', cli, ...args]);
+}
+
+function runHuman(args: readonly string[]) {
+  return spawnPnpm(['content:validate', ...args]);
+}
+
+function runMachineJson(root: string) {
+  return runMachine([root, '--format', 'json']);
 }
 
 interface JsonDiagnostic {
@@ -46,14 +62,14 @@ describe('validate-content CLI', () => {
   });
 
   it('exits zero with empty JSON diagnostics for the valid minimal graph', () => {
-    const result = runJson('fixtures/curriculum/valid/minimal');
+    const result = runMachineJson('fixtures/curriculum/valid/minimal');
     expect(result.status).toBe(0);
     expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
     expect(result.stderr).toBe('');
   });
 
   it('exits zero for the canonical curriculum root', () => {
-    const result = runJson('curriculum');
+    const result = runMachineJson('curriculum');
     expect(result.status).toBe(0);
     expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
     expect(result.stderr).toBe('');
@@ -64,7 +80,7 @@ describe('validate-content CLI', () => {
     ['fixtures/curriculum/invalid/missing-reference', 'CURRICULUM_REFERENCE_001'],
     ['fixtures/curriculum/invalid/multi-node-cycle', 'CURRICULUM_GRAPH_003'],
   ])('fails closed for %s with JSON code %s on stdout', (fixture, code) => {
-    const result = runJson(fixture);
+    const result = runMachineJson(fixture);
     expect(result.status).toBe(1);
     expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toContain(
       code,
@@ -72,14 +88,19 @@ describe('validate-content CLI', () => {
     expect(result.stderr).toBe('');
   });
 
-  it('prints actionable text diagnostics only on stderr', () => {
-    const result = run(['fixtures/curriculum/invalid/missing-reference', '--format', 'text']);
+  it('keeps the pnpm wrapper as a readable fail-closed human gate', () => {
+    const result = runHuman(['fixtures/curriculum/invalid/missing-reference', '--format', 'text']);
     expect(result.status).toBe(1);
-    expect(result.stdout).toBe('');
     expect(result.stderr).toContain('CURRICULUM_REFERENCE_001');
     expect(result.stderr).toContain('Expected:');
     expect(result.stderr).toContain('Remediation:');
-  });
+  }, 15_000);
+
+  it('does not consume failing pnpm-wrapper output as the machine JSON interface', () => {
+    const result = runHuman(['fixtures/curriculum/invalid/multi-node-cycle', '--format', 'json']);
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('CURRICULUM_GRAPH_003');
+  }, 15_000);
 
   it('is import-safe and registers no validation or output side effects', async () => {
     const originalExitCode = process.exitCode;
@@ -111,7 +132,7 @@ describe('validate-content CLI', () => {
   });
 
   it('fails a malformed invocation as JSON on stdout with no stderr leakage', () => {
-    const result = run(['curriculum', '--format', 'yaml']);
+    const result = runMachine(['curriculum', '--format', 'yaml']);
     expect(result.status).toBe(1);
     expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toEqual([
       'VALIDATOR_INTERNAL_001',
