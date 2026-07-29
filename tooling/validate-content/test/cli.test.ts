@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '../../..');
 const cli = path.join(repositoryRoot, 'tooling/validate-content/src/main.ts');
+const cliProcessTimeout = 30_000;
 
 function spawnPnpm(args: readonly string[]) {
   const pnpmCli = process.env.npm_execpath;
@@ -61,46 +62,70 @@ describe('validate-content CLI', () => {
     );
   });
 
-  it('exits zero with empty JSON diagnostics for the valid minimal graph', () => {
-    const result = runMachineJson('fixtures/curriculum/valid/minimal');
-    expect(result.status).toBe(0);
-    expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
-    expect(result.stderr).toBe('');
-  });
+  it(
+    'exits zero with empty JSON diagnostics for the valid minimal graph',
+    () => {
+      const result = runMachineJson('fixtures/curriculum/valid/minimal');
+      expect(result.status).toBe(0);
+      expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
+      expect(result.stderr).toBe('');
+    },
+    cliProcessTimeout,
+  );
 
-  it('exits zero for the canonical curriculum root', () => {
-    const result = runMachineJson('curriculum');
-    expect(result.status).toBe(0);
-    expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
-    expect(result.stderr).toBe('');
-  });
+  it(
+    'exits zero for the canonical curriculum root',
+    () => {
+      const result = runMachineJson('curriculum');
+      expect(result.status).toBe(0);
+      expect(parseJsonDiagnostics(result.stdout)).toEqual([]);
+      expect(result.stderr).toBe('');
+    },
+    cliProcessTimeout,
+  );
 
   it.each([
     ['fixtures/curriculum/invalid/malformed-markdown', 'CURRICULUM_PARSE_001'],
     ['fixtures/curriculum/invalid/missing-reference', 'CURRICULUM_REFERENCE_001'],
     ['fixtures/curriculum/invalid/multi-node-cycle', 'CURRICULUM_GRAPH_003'],
-  ])('fails closed for %s with JSON code %s on stdout', (fixture, code) => {
-    const result = runMachineJson(fixture);
-    expect(result.status).toBe(1);
-    expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toContain(
-      code,
-    );
-    expect(result.stderr).toBe('');
-  });
+  ])(
+    'fails closed for %s with JSON code %s on stdout',
+    (fixture, code) => {
+      const result = runMachineJson(fixture);
+      expect(result.status).toBe(1);
+      expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toContain(
+        code,
+      );
+      expect(result.stderr).toBe('');
+    },
+    cliProcessTimeout,
+  );
 
-  it('keeps the pnpm wrapper as a readable fail-closed human gate', () => {
-    const result = runHuman(['fixtures/curriculum/invalid/missing-reference', '--format', 'text']);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('CURRICULUM_REFERENCE_001');
-    expect(result.stderr).toContain('Expected:');
-    expect(result.stderr).toContain('Remediation:');
-  }, 15_000);
+  it(
+    'keeps the pnpm wrapper as a readable fail-closed human gate',
+    () => {
+      const result = runHuman([
+        'fixtures/curriculum/invalid/missing-reference',
+        '--format',
+        'text',
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('CURRICULUM_REFERENCE_001');
+      expect(result.stderr).toContain('Expected:');
+      expect(result.stderr).toContain('Remediation:');
+    },
+    cliProcessTimeout,
+  );
 
-  it('does not consume failing pnpm-wrapper output as the machine JSON interface', () => {
-    const result = runHuman(['fixtures/curriculum/invalid/multi-node-cycle', '--format', 'json']);
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}\n${result.stderr}`).toContain('CURRICULUM_GRAPH_003');
-  }, 15_000);
+  it(
+    'does not consume failing pnpm-wrapper output as the machine JSON interface',
+    () => {
+      const result = runHuman(['fixtures/curriculum/invalid/multi-node-cycle', '--format', 'json']);
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}\n${result.stderr}`).toContain('CURRICULUM_GRAPH_003');
+    },
+    cliProcessTimeout,
+  );
 
   it('is import-safe and registers no validation or output side effects', async () => {
     const originalExitCode = process.exitCode;
@@ -131,14 +156,18 @@ describe('validate-content CLI', () => {
     expect(outcome.diagnostics[0]?.location.file).toBe('curriculum');
   });
 
-  it('fails a malformed invocation as JSON on stdout with no stderr leakage', () => {
-    const result = runMachine(['curriculum', '--format', 'yaml']);
-    expect(result.status).toBe(1);
-    expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toEqual([
-      'VALIDATOR_INTERNAL_001',
-    ]);
-    expect(result.stderr).toBe('');
-  });
+  it(
+    'fails a malformed invocation as JSON on stdout with no stderr leakage',
+    () => {
+      const result = runMachine(['curriculum', '--format', 'yaml']);
+      expect(result.status).toBe(1);
+      expect(parseJsonDiagnostics(result.stdout).map((diagnostic) => diagnostic.code)).toEqual([
+        'VALIDATOR_INTERNAL_001',
+      ]);
+      expect(result.stderr).toBe('');
+    },
+    cliProcessTimeout,
+  );
 
   it('accepts the leading argument separator forwarded by the root pnpm script', async () => {
     const { parseArguments } = await import('../src/main.js');
