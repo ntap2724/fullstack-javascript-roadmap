@@ -19,7 +19,12 @@ function toSortKey(filePath: string): string {
 export async function loadCurriculum(root: string): Promise<ValidationOutcome<CurriculumCorpus>> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   const filePaths = entries
-    .filter((entry) => entry.isFile() && MARKDOWN_EXTENSIONS.has(path.extname(entry.name)))
+    .filter(
+      (entry) =>
+        entry.name !== 'AGENTS.md' &&
+        entry.isFile() &&
+        MARKDOWN_EXTENSIONS.has(path.extname(entry.name)),
+    )
     .map((entry) => path.join(entry.parentPath, entry.name))
     .sort((a, b) => {
       const keyA = toSortKey(a);

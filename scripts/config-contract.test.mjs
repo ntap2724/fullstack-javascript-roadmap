@@ -91,11 +91,16 @@ test('root compiler entry point extends the base contract', async () => {
   assert.deepEqual(config.include, ['vitest.config.ts', 'scripts/generate-json-schema.ts']);
 });
 
-test('root scripts expose check and bootstrap tests', async () => {
+test('root scripts expose check and domain-aware tests', async () => {
   const packageJson = await readJson('package.json');
   assert.equal(typeof packageJson.scripts.check, 'string');
-  assert.equal(packageJson.scripts.test, 'node --test scripts/*.test.mjs');
   assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
+  assert.equal(
+    packageJson.scripts['test:wp-00-01-gate'],
+    'node --test scripts/wp-00-01-gate.integration.mjs',
+  );
+  assert.equal(packageJson.scripts['test:unit'], 'vitest run');
+  assert.equal(packageJson.scripts.test, 'node scripts/run-pipeline.mjs test:bootstrap test:unit');
 });
 
 test('Prettier ownership excludes only root governance and generated-state boundaries', async () => {
