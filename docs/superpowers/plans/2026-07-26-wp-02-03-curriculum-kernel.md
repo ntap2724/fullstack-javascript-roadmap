@@ -1934,7 +1934,18 @@ Required acceptance evidence before commit: the published-only active-root matri
 
 **Interfaces:**
 - Consumes: loader and graph packages, plus the existing root-script contract
-- Produces: `pnpm content:validate [root]`, `pnpm verify:wp-02-03`, JSON diagnostics on stdout, and non-zero exit on every error or internal exception
+- Human interface: `pnpm content:validate [root] [--format text]`
+  - Produces readable diagnostics for developer workflow.
+  - Exits non-zero for every validation error or internal exception.
+  - The pnpm wrapper's stdout is not a machine-readable interface and may include pnpm lifecycle
+    failure text.
+- Machine interface:
+  `pnpm exec tsx tooling/validate-content/src/main.ts [root] --format json`
+  - Produces deterministic, parseable JSON on stdout.
+  - Keeps stderr as the diagnostic/error channel; the validator must not leak package-runner
+    lifecycle output into its own stdout.
+  - Uses the validator process exit code to represent the validation result.
+- Gate interfaces: `pnpm content:validate:curriculum` and `pnpm verify:wp-02-03`
 
 **Late execution-time amendment:** Task 8's first real canonical-root gate exposed that the
 mandatory `curriculum/AGENTS.md` governance file was being discovered and parsed as a curriculum
@@ -1943,6 +1954,15 @@ loader contract now excludes files named exactly `AGENTS.md` at any depth; this 
 discovery rule, not CLI-only filtering. The CLI continues validating the canonical `curriculum/`
 root. Missing required artifacts, malformed non-`AGENTS.md` artifacts, and every other graph or
 schema failure remain fail-closed.
+
+**Late command-boundary amendment:** Whole-branch execution established that the validator's direct
+CLI already provides deterministic JSON, while the failing `pnpm content:validate ... --format
+json` wrapper appends pnpm lifecycle text after the JSON document. The earlier plan wording
+incorrectly conflated those two process boundaries. This correction was discovered after the
+original Task 8 implementation and review; it must not be represented as initial preflight
+evidence. Do not change repository-wide pnpm reporter settings, silence pnpm globally, add a shell
+wrapper, or require wrapper stdout to parse as JSON. The human command remains the developer gate;
+automation that consumes JSON must invoke the CLI directly.
 
 - [ ] **Step 1: Write focused loader tests and fixtures for the governance boundary**
 
@@ -1987,7 +2007,7 @@ the corpus, the normal `.md` artifact is present, and the malformed non-governan
 `README.md`, `agents.md`, `NOT-AGENTS.md`, and `AGENTS.mdx` still each return
 `CURRICULUM_PARSE_001` at their own file location.
 
-- [ ] **Step 3: Write CLI tests for valid, invalid, canonical-root, and internal-failure paths**
+- [ ] **Step 3: Write CLI tests for the distinct human and machine command boundaries**
 
 ```ts
 // tooling/validate-content/test/cli.test.ts
@@ -1998,10 +2018,20 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(import.meta.dirname, '../../..');
 const cli = path.join(root, 'tooling/validate-content/src/main.ts');
 
-function run(fixture: string) {
+function runMachine(args: readonly string[]) {
   const pnpmCli = process.env.npm_execpath;
   if (!pnpmCli) throw new Error('pnpm CLI path is unavailable in the test environment');
-  return spawnSync(process.execPath, [pnpmCli, 'exec', 'tsx', cli, fixture, '--format', 'json'], {
+  return spawnSync(process.execPath, [pnpmCli, 'exec', 'tsx', cli, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+  });
+}
+
+function runHuman(args: readonly string[]) {
+  const pnpmCli = process.env.npm_execpath;
+  if (!pnpmCli) throw new Error('pnpm CLI path is unavailable in the test environment');
+  return spawnSync(process.execPath, [pnpmCli, 'content:validate', ...args], {
     cwd: root,
     encoding: 'utf8',
     shell: false,
@@ -2009,26 +2039,62 @@ function run(fixture: string) {
 }
 
 describe('validate-content CLI', () => {
-  it('exits zero for the valid minimal graph', () => {
-    const result = run('fixtures/curriculum/valid/minimal');
+  it('keeps direct machine JSON parseable for a failing fixture', () => {
+    const result = runMachine([
+      'fixtures/curriculum/invalid/multi-node-cycle',
+      '--format',
+      'json',
+    ]);
+    const diagnostics: unknown = JSON.parse(result.stdout);
+    expect(result.status).toBe(1);
+    expect(Array.isArray(diagnostics)).toBe(true);
+    expect(result.stderr).toBe('');
+  });
+
+  it('keeps the pnpm wrapper as a readable fail-closed human gate', () => {
+    const result = runHuman([
+      'fixtures/curriculum/invalid/multi-node-cycle',
+      '--format',
+      'text',
+    ]);
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('CURRICULUM_GRAPH_003');
+    expect(result.stderr).toContain('Expected:');
+    expect(result.stderr).toContain('Remediation:');
+  });
+
+  it('exits zero for the valid minimal graph through the machine interface', () => {
+    const result = runMachine(['fixtures/curriculum/valid/minimal', '--format', 'json']);
     expect(result.status).toBe(0);
   });
 
-  it('exits zero for the canonical curriculum root', () => {
-    const result = run('curriculum');
+  it('exits zero for the canonical curriculum root through the machine interface', () => {
+    const result = runMachine(['curriculum', '--format', 'json']);
     expect(result.status).toBe(0);
   });
-
-  it('exits non-zero and prints stable diagnostic codes', () => {
-    const result = run('fixtures/curriculum/invalid/multi-node-cycle');
-    expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain('CURRICULUM_GRAPH_003');
-  });
-
 });
 ```
 
-- [ ] **Step 4: Run the tests and confirm the CLI is missing**
+Before changing tests or production code, capture the command boundary with separate stdout and
+stderr pipes:
+
+1. Invoke the direct machine command against `fixtures/curriculum/invalid/multi-node-cycle`.
+   Required characterization: exit `1`, stdout parses as a JSON diagnostic array containing
+   `CURRICULUM_GRAPH_003`, and stderr is empty.
+2. Invoke `pnpm content:validate fixtures/curriculum/invalid/multi-node-cycle --format json` and
+   attempt to parse its complete stdout as one JSON document. Required contract RED: the current
+   pnpm wrapper exits `1`, includes the validator JSON followed by pnpm lifecycle failure text, and
+   the parse attempt fails. This is RED against the old conflated interface requirement, not a
+   validator-production defect.
+
+Permanent regression tests must exercise the direct invocation when parsing JSON and the pnpm
+wrapper when asserting the readable human gate. They must not require pnpm wrapper JSON to remain
+unparseable: pnpm-owned lifecycle formatting is outside this repository's validator contract. If
+the current production behavior already satisfies both corrected interfaces, do not invent a
+production change; record the contract characterization and commit the focused regression coverage
+separately.
+
+- [ ] **Step 4: Run the focused tests and confirm the required CLI behavior**
 
 ```bash
 pnpm --filter @roadmap/validate-content test
@@ -2225,11 +2291,18 @@ Run:
 pnpm --filter @roadmap/curriculum-loader test
 pnpm --filter @roadmap/validate-content test
 pnpm content:validate:curriculum
+pnpm content:validate fixtures/curriculum/invalid/multi-node-cycle --format text
+pnpm exec tsx tooling/validate-content/src/main.ts fixtures/curriculum/invalid/multi-node-cycle --format json
 pnpm verify:wp-02-03
 ```
 
-The canonical-root command and Spike 2 gate must exit `0`. Then run every invalid fixture and
-record the expected code:
+The canonical-root command and Spike 2 gate must exit `0`. The human invalid command must emit
+readable `CURRICULUM_GRAPH_003`, `Expected:`, and `Remediation:` text and exit `1`. The direct
+machine command must exit `1`, leave stderr empty, and produce stdout that parses as one JSON
+diagnostic array containing `CURRICULUM_GRAPH_003`. Do not parse the pnpm wrapper's complete stdout
+as the machine interface.
+
+Then run every invalid fixture through the human gate and record the expected code:
 
 ```bash
 pnpm content:validate fixtures/curriculum/invalid/malformed-markdown
@@ -2257,5 +2330,7 @@ WP-02–03 is complete only after Spike 2 passes and an independent reviewer con
 following: exact-name governance exclusion works at root and nested depths, `AGENTS.md` never enters
 loaded artifacts, near-name `.md`/`.mdx` files prove that the rule is exact and case-sensitive,
 normal Markdown still loads, malformed non-governance Markdown and missing references still fail
-closed, the canonical `curriculum/` root is the gate target, and the tests cannot pass when an
-invalid graph is accepted.
+closed, the canonical `curriculum/` root is the gate target, the human `pnpm content:validate`
+command remains readable and fail-closed, the direct CLI JSON interface remains parseable with
+stderr/channel integrity and validation-result exit codes, no acceptance criterion requires pnpm
+wrapper stdout to be pure JSON, and the tests cannot pass when an invalid graph is accepted.
