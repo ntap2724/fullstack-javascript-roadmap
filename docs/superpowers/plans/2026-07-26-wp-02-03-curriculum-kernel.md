@@ -1745,8 +1745,11 @@ Before changing production code, add real loader coverage that proves:
 - `fixtures/curriculum/valid/governance-boundary/` contains invalid-as-curriculum governance files
   at both `AGENTS.md` and `some/path/AGENTS.md`, plus one schema-valid normal curriculum `.md`
   artifact. Loading the root succeeds with exactly the normal artifact.
-- `fixtures/curriculum/invalid/malformed-markdown/AGENTS.md` is ignored, but a malformed
-  non-governance `README.md` in the same root still returns `CURRICULUM_PARSE_001`.
+- `fixtures/curriculum/invalid/malformed-markdown/AGENTS.md` is ignored, but malformed
+  non-governance candidates named `README.md`, `agents.md`, `NOT-AGENTS.md`, and `AGENTS.mdx` in
+  the same root each return `CURRICULUM_PARSE_001` at their own file location. These near-name
+  cases make the exact, case-sensitive basename rule observable: no other `.md` or `.mdx` filename
+  may be excluded.
 
 The governance fixture files intentionally have no curriculum frontmatter. Against the current
 loader, the first two success cases must fail because `AGENTS.md` is discovered and sent to
@@ -1763,7 +1766,8 @@ pnpm --filter @roadmap/curriculum-loader exec vitest run --config vitest.config.
 
 Record the command, working directory, exit status, test count, stdout, stderr, and channel
 integrity. Required RED: the governance success coverage fails because an `AGENTS.md` path produces
-`CURRICULUM_PARSE_001`; the malformed `README.md` coverage already fails closed.
+`CURRICULUM_PARSE_001`; the four malformed near-name candidates already fail closed with all four
+file locations present.
 
 Then make the minimal production change in `load-curriculum.ts`: exclude a directory entry only
 when `entry.name === 'AGENTS.md'`, before adding it to the deterministic candidate list. Because
@@ -1771,8 +1775,9 @@ discovery is recursive, the same exact rule applies at root and nested depths. D
 filter or any broader ignore convention.
 
 Rerun the same focused command. Required GREEN: root and nested governance files are absent from
-the corpus, the normal `.md` artifact is present, and the malformed non-governance Markdown still
-returns `CURRICULUM_PARSE_001`.
+the corpus, the normal `.md` artifact is present, and the malformed non-governance candidates
+`README.md`, `agents.md`, `NOT-AGENTS.md`, and `AGENTS.mdx` still each return
+`CURRICULUM_PARSE_001` at their own file location.
 
 - [ ] **Step 3: Write CLI tests for valid, invalid, canonical-root, and internal-failure paths**
 
@@ -2042,6 +2047,7 @@ git commit -m "feat: add fail closed curriculum validation cli"
 
 WP-02–03 is complete only after Spike 2 passes and an independent reviewer confirms all of the
 following: exact-name governance exclusion works at root and nested depths, `AGENTS.md` never enters
-loaded artifacts, normal Markdown still loads, malformed non-governance Markdown and missing
-references still fail closed, the canonical `curriculum/` root is the gate target, and the tests
-cannot pass when an invalid graph is accepted.
+loaded artifacts, near-name `.md`/`.mdx` files prove that the rule is exact and case-sensitive,
+normal Markdown still loads, malformed non-governance Markdown and missing references still fail
+closed, the canonical `curriculum/` root is the gate target, and the tests cannot pass when an
+invalid graph is accepted.
