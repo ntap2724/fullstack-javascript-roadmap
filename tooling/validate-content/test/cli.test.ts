@@ -20,13 +20,31 @@ function runJson(root: string) {
   return run([root, '--format', 'json']);
 }
 
-function parseJsonDiagnostics(stdout: string): readonly { code?: unknown; location?: unknown }[] {
+interface JsonDiagnostic {
+  code?: unknown;
+  location?: unknown;
+}
+
+function isJsonDiagnostic(value: unknown): value is JsonDiagnostic {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonDiagnostics(stdout: string): readonly JsonDiagnostic[] {
   const parsed: unknown = JSON.parse(stdout);
   if (!Array.isArray(parsed)) throw new Error('Expected a JSON diagnostic array');
-  return parsed as readonly { code?: unknown; location?: unknown }[];
+  if (!parsed.every(isJsonDiagnostic)) {
+    throw new Error('Expected every JSON diagnostic to be an object');
+  }
+  return parsed;
 }
 
 describe('validate-content CLI', () => {
+  it('rejects non-object JSON diagnostic array elements', () => {
+    expect(() => parseJsonDiagnostics('[null]')).toThrow(
+      'Expected every JSON diagnostic to be an object',
+    );
+  });
+
   it('exits zero with empty JSON diagnostics for the valid minimal graph', () => {
     const result = runJson('fixtures/curriculum/valid/minimal');
     expect(result.status).toBe(0);
