@@ -227,9 +227,31 @@ const RESOLVE_LOCALLY: Record<DeclaredReferenceRelation, boolean> = {
 };
 
 /**
+ * Ordinary locally resolved relations with one required target kind.
+ * `prerequisites` accepts any registered current-union artifact. The
+ * competency evidence relations are intentionally absent because Task 7
+ * completeness owns their kind validation.
+ */
+const EXPECTED_TARGET_KINDS: Partial<
+  Record<DeclaredReferenceRelation, CurriculumDocument['data']['kind']>
+> = {
+  'track.requiredCompetencies': 'competency',
+  'track.modules': 'module',
+  'module.competencies': 'competency',
+  'module.lessons': 'lesson',
+  'module.milestone': 'milestone',
+  'lesson.module': 'module',
+  'lesson.competencies': 'competency',
+  'lesson.assessments': 'assessment',
+  'assessment.competencies': 'competency',
+  'milestone.competencies': 'competency',
+};
+
+/**
  * Resolves every required local reference against the registry. Emits
  * CURRICULUM_REFERENCE_001 at the declaring document's sourceFile and exact
- * dot-separated pointer for each unresolved required target.
+ * dot-separated pointer for each unresolved required target, or
+ * CURRICULUM_REFERENCE_002 when an existing target has the wrong kind.
  */
 export function resolveReferences(
   nodes: ReadonlyMap<string, CurriculumDocument>,
@@ -239,16 +261,35 @@ export function resolveReferences(
 
   for (const reference of declaredReferences) {
     if (!RESOLVE_LOCALLY[reference.relation]) continue;
-    if (nodes.has(reference.targetId)) continue;
+    const target = nodes.get(reference.targetId);
+
+    if (target === undefined) {
+      diagnostics.push({
+        code: 'CURRICULUM_REFERENCE_001',
+        severity: 'error',
+        location: { file: reference.sourceFile, pointer: reference.pointer },
+        observed: reference.targetId,
+        expected: `A curriculum document with id "${reference.targetId}" registered in the corpus`,
+        reason: `The ${reference.relation} reference to "${reference.targetId}" does not resolve to a known document`,
+        remediation: 'Correct the referenced id or add the missing document to the corpus',
+        documentation: 'docs/authoring/curriculum-metadata.md',
+      });
+      continue;
+    }
+
+    const expectedKind = EXPECTED_TARGET_KINDS[reference.relation];
+    if (expectedKind === undefined || target.data.kind === expectedKind) continue;
 
     diagnostics.push({
-      code: 'CURRICULUM_REFERENCE_001',
+      code: 'CURRICULUM_REFERENCE_002',
       severity: 'error',
       location: { file: reference.sourceFile, pointer: reference.pointer },
-      observed: reference.targetId,
-      expected: `A curriculum document with id "${reference.targetId}" registered in the corpus`,
-      reason: `The ${reference.relation} reference to "${reference.targetId}" does not resolve to a known document`,
-      remediation: 'Correct the referenced id or add the missing document to the corpus',
+      observed: { targetId: reference.targetId, actualKind: target.data.kind },
+      expected: `A curriculum document with kind "${expectedKind}" for ${reference.relation}`,
+      reason:
+        `The ${reference.relation} reference to "${reference.targetId}" resolves to kind ` +
+        `"${target.data.kind}" instead of "${expectedKind}"`,
+      remediation: `Reference a registered "${expectedKind}" document from ${reference.relation}`,
       documentation: 'docs/authoring/curriculum-metadata.md',
     });
   }
