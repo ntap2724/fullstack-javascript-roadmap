@@ -10,8 +10,9 @@ describe('loadCurriculum', () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.value.documents.length).toBeGreaterThan(0);
-    expect(outcome.value.documents[0]?.body).toContain('fixture');
-    expect(outcome.value.documents[0]?.filePath).toMatch(/\.md$/);
+    const competency = outcome.value.documents.find(({ data }) => data.id === 'js.function.values');
+    expect(competency?.body).toContain('Nội dung fixture tối thiểu.');
+    expect(competency?.filePath).toMatch(/\.md$/);
   });
 
   it('returns CURRICULUM_SCHEMA_001 for invalid frontmatter', async () => {
