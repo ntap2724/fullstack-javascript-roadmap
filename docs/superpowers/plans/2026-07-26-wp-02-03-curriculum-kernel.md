@@ -887,7 +887,14 @@ export async function loadCurriculumFile(
 }
 ```
 
-Implement `loadCurriculum` using `fs.readdir({ recursive: true, withFileTypes: true })`, sort paths lexicographically for deterministic results, load `.md` and `.mdx`, collect all diagnostics, and return a corpus only when no error exists.
+Implement `loadCurriculum` using `fs.readdir({ recursive: true, withFileTypes: true })`.
+Curriculum discovery selects `.md` and `.mdx` files except files whose name is exactly
+`AGENTS.md`. Apply that exact-name exclusion before artifact parsing at every directory depth.
+Do not broaden it to hidden files, Markdown metadata generally, documentation files, or parse
+failures: every other `.md` and `.mdx` candidate remains fail-closed. Normalize path separators,
+sort candidate paths with the package's codepoint comparator for deterministic results, collect all
+diagnostics, and return a corpus only when no error exists. The same root must always produce the
+same artifact set, and excluded governance files must never enter `loadCurriculumFile`.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -1710,6 +1717,10 @@ Required acceptance evidence before commit: the published-only active-root matri
 - Create: `tooling/validate-content/src/main.ts`
 - Create: `tooling/validate-content/test/cli.test.ts`
 - Create: `scripts/verify-wp-02-03.mjs`
+- Create: `fixtures/curriculum/valid/governance-boundary/**/*.md`
+- Create: `fixtures/curriculum/invalid/malformed-markdown/**/*.md`
+- Modify: `packages/curriculum-loader/src/load-curriculum.ts`
+- Modify: `packages/curriculum-loader/test/loader.test.ts`
 - Modify: `package.json`
 - Modify: `scripts/config-contract.test.mjs`
 
@@ -1717,7 +1728,53 @@ Required acceptance evidence before commit: the published-only active-root matri
 - Consumes: loader and graph packages, plus the existing root-script contract
 - Produces: `pnpm content:validate [root]`, `pnpm verify:wp-02-03`, JSON diagnostics on stdout, and non-zero exit on every error or internal exception
 
-- [ ] **Step 1: Write CLI tests for valid, invalid, and internal-failure paths**
+**Late execution-time amendment:** Task 8's first real canonical-root gate exposed that the
+mandatory `curriculum/AGENTS.md` governance file was being discovered and parsed as a curriculum
+artifact, producing `CURRICULUM_PARSE_001`. This was not resolved during initial preflight. The
+loader contract now excludes files named exactly `AGENTS.md` at any depth; this is a loader-wide
+discovery rule, not CLI-only filtering. The CLI continues validating the canonical `curriculum/`
+root. Missing required artifacts, malformed non-`AGENTS.md` artifacts, and every other graph or
+schema failure remain fail-closed.
+
+- [ ] **Step 1: Write focused loader tests and fixtures for the governance boundary**
+
+Before changing production code, add real loader coverage that proves:
+
+- The canonical repository `curriculum/` root loads without attempting to parse its root
+  `AGENTS.md`, and no loaded document has the basename `AGENTS.md`.
+- `fixtures/curriculum/valid/governance-boundary/` contains invalid-as-curriculum governance files
+  at both `AGENTS.md` and `some/path/AGENTS.md`, plus one schema-valid normal curriculum `.md`
+  artifact. Loading the root succeeds with exactly the normal artifact.
+- `fixtures/curriculum/invalid/malformed-markdown/AGENTS.md` is ignored, but a malformed
+  non-governance `README.md` in the same root still returns `CURRICULUM_PARSE_001`.
+
+The governance fixture files intentionally have no curriculum frontmatter. Against the current
+loader, the first two success cases must fail because `AGENTS.md` is discovered and sent to
+artifact parsing. The production change that makes them pass is the exact-name discovery filter;
+do not add parser fallback or weaken schema validation.
+
+- [ ] **Step 2: Capture the loader RED, implement the exact discovery rule, and prove GREEN**
+
+Run the focused test before editing `load-curriculum.ts`:
+
+```bash
+pnpm --filter @roadmap/curriculum-loader exec vitest run --config vitest.config.ts test/loader.test.ts
+```
+
+Record the command, working directory, exit status, test count, stdout, stderr, and channel
+integrity. Required RED: the governance success coverage fails because an `AGENTS.md` path produces
+`CURRICULUM_PARSE_001`; the malformed `README.md` coverage already fails closed.
+
+Then make the minimal production change in `load-curriculum.ts`: exclude a directory entry only
+when `entry.name === 'AGENTS.md'`, before adding it to the deterministic candidate list. Because
+discovery is recursive, the same exact rule applies at root and nested depths. Do not add a CLI
+filter or any broader ignore convention.
+
+Rerun the same focused command. Required GREEN: root and nested governance files are absent from
+the corpus, the normal `.md` artifact is present, and the malformed non-governance Markdown still
+returns `CURRICULUM_PARSE_001`.
+
+- [ ] **Step 3: Write CLI tests for valid, invalid, canonical-root, and internal-failure paths**
 
 ```ts
 // tooling/validate-content/test/cli.test.ts
@@ -1744,6 +1801,11 @@ describe('validate-content CLI', () => {
     expect(result.status).toBe(0);
   });
 
+  it('exits zero for the canonical curriculum root', () => {
+    const result = run('curriculum');
+    expect(result.status).toBe(0);
+  });
+
   it('exits non-zero and prints stable diagnostic codes', () => {
     const result = run('fixtures/curriculum/invalid/multi-node-cycle');
     expect(result.status).not.toBe(0);
@@ -1753,13 +1815,13 @@ describe('validate-content CLI', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests and confirm the CLI is missing**
+- [ ] **Step 4: Run the tests and confirm the CLI is missing**
 
 ```bash
 pnpm --filter @roadmap/validate-content test
 ```
 
-- [ ] **Step 3: Implement the CLI composition and output contract**
+- [ ] **Step 5: Implement the CLI composition and output contract**
 
 The module must be import-safe: importing `main.ts` registers no side effects and never runs validation. Direct execution happens only behind an entry-point guard, so the exception-containment unit test can import `validateContent` without spawning a second CLI run.
 
@@ -1868,7 +1930,7 @@ it('turns an unexpected dependency exception into VALIDATOR_INTERNAL_001', async
 
 This proves exception containment through an explicit dependency seam without adding a test-only production behavior.
 
-- [ ] **Step 4: Update the root-script contract and add domain-aware commands**
+- [ ] **Step 6: Update the root-script contract and add domain-aware commands**
 
 The existing `scripts/config-contract.test.mjs` assertion locks `scripts.test` to the bootstrap-only command. Update that assertion surgically — preserve its `check` assertion and every unrelated test — so the contract requires the new mapping:
 
@@ -1930,7 +1992,7 @@ Before committing Task 8, prove with separately captured evidence:
 - All pre-existing public commands remain present: `dev`, `format`, `format:check`, `lint`, `typecheck`, `check`, `policy:check`, `verify:wp-00-01`, `verify:templates`, `verify:release`
 - `pnpm verify:templates` and `pnpm verify:release` still return the intentional unavailable exit `2` (this WP-02–03 amendment does not approve changing them)
 
-- [ ] **Step 5: Implement and run the Spike 2 gate**
+- [ ] **Step 7: Implement and run the Spike 2 gate**
 
 ```js
 // scripts/verify-wp-02-03.mjs
@@ -1947,12 +2009,17 @@ await runPipeline([
 Run:
 
 ```bash
+pnpm --filter @roadmap/curriculum-loader test
+pnpm --filter @roadmap/validate-content test
+pnpm content:validate:curriculum
 pnpm verify:wp-02-03
 ```
 
-Then run every invalid fixture and record the expected code:
+The canonical-root command and Spike 2 gate must exit `0`. Then run every invalid fixture and
+record the expected code:
 
 ```bash
+pnpm content:validate fixtures/curriculum/invalid/malformed-markdown
 pnpm content:validate fixtures/curriculum/invalid/missing-reference
 pnpm content:validate fixtures/curriculum/invalid/duplicate-id
 pnpm content:validate fixtures/curriculum/invalid/self-cycle
@@ -1962,12 +2029,19 @@ pnpm content:validate fixtures/curriculum/invalid/published-to-draft
 ```
 
 Expected: each invalid command exits non-zero and prints its declared stable diagnostic code.
+`malformed-markdown` prints `CURRICULUM_PARSE_001`, and `missing-reference` prints
+`CURRICULUM_REFERENCE_001`, proving the governance exclusion did not weaken malformed-artifact or
+required-reference validation.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add tooling/validate-content scripts/verify-wp-02-03.mjs package.json pnpm-lock.yaml scripts/config-contract.test.mjs
+git add tooling/validate-content scripts/verify-wp-02-03.mjs packages/curriculum-loader/src/load-curriculum.ts packages/curriculum-loader/test/loader.test.ts fixtures/curriculum/valid/governance-boundary fixtures/curriculum/invalid/malformed-markdown package.json pnpm-lock.yaml scripts/config-contract.test.mjs
 git commit -m "feat: add fail closed curriculum validation cli"
 ```
 
-WP-02–03 is complete only after Spike 2 passes and an independent reviewer confirms the tests cannot pass when an invalid graph is accepted.
+WP-02–03 is complete only after Spike 2 passes and an independent reviewer confirms all of the
+following: exact-name governance exclusion works at root and nested depths, `AGENTS.md` never enters
+loaded artifacts, normal Markdown still loads, malformed non-governance Markdown and missing
+references still fail closed, the canonical `curriculum/` root is the gate target, and the tests
+cannot pass when an invalid graph is accepted.
