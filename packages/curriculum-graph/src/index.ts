@@ -9,6 +9,7 @@ export * from './types.js';
 export * from './registry.js';
 export * from './references.js';
 export * from './edges.js';
+export * from './cycles.js';
 
 /**
  * Builds a CurriculumGraph from a loaded corpus: registers stable ids,
