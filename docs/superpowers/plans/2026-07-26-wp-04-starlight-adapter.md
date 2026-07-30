@@ -12,7 +12,7 @@
 
 - The website never becomes the source of curriculum facts.
 - No Markdown is copied by hand into `apps/docs/src/content/docs`.
-- Direct loading from the repository `curriculum/` directory is the primary implementation. An alternate curriculum root is a test seam only and never a second committed content source.
+- Direct loading from the repository `curriculum/` directory is the primary implementation. An alternate curriculum root is accepted only with the separate explicit `ROADMAP_ENABLE_TEST_CURRICULUM_ROOT=1` authorization, is a test seam only, and is never a second committed content source.
 - Development includes `draft`, `review`, `published`, `deprecated`, and `withdrawn`.
 - Preview includes `review`, `published`, `deprecated`, and `withdrawn`.
 - Production includes `published`, `deprecated`, and `withdrawn`.
@@ -63,7 +63,7 @@ Primary official references:
 
 - **A — Task ownership:** Task 1 remains incomplete until Task 4 registers the custom `docs` collection in `src/content.config.ts`.
 - **B — Corpus counts:** Task 2 creates exactly eight published documents. Task 6 adds exactly one draft lesson and modifies Task 2's retained corpus test to prove nine total, eight production-visible, and one draft.
-- **C — Hot reload:** No test mutates tracked files under authoritative `curriculum/`. The integration test copies the corpus to a test-owned temporary root, runs Astro with an explicit root override, mutates only the copy, verifies a rendered marker update, and cleans up in `finally`. It compares authoritative source hashes and Git state before and after.
+- **C — Hot reload:** No test mutates tracked files under authoritative `curriculum/`. The integration test copies the corpus to a test-owned temporary root, runs Astro with both the explicit root override and separate test-root authorization, mutates only the copy, verifies a rendered marker update, and cleans up in `finally`. It compares authoritative source hashes and Git state before and after.
 - **D — Root merges:** Root snippets in this plan add or replace only named keys. They never replace a root object wholesale.
 - **E — Framework contracts:** The loader calls `parseData()`, `renderMarkdown()`, and `generateDigest()`, stores `rendered`, and registers scoped serialized `add`, `change`, and `unlink` callbacks without duplicate handlers. The content schema uses `astro/zod` and `docsSchema({ extend })`. Playwright uses `webServer.url`, a static build, and local preview. Process lifecycle is Windows-safe.
 - **F — Current schema:** The exact metadata below includes every current required field. Task 2 proves both `buildCurriculumGraph()` and `validateCurriculumGraph()` succeed.
@@ -301,14 +301,15 @@ Preserve every other current root script, including `format`, `format:check`, `l
 pnpm install
 pnpm install --frozen-lockfile
 pnpm --filter @roadmap/docs test -- no-local-copy.test.ts
-pnpm test:bootstrap
+pnpm check
+pnpm verify
 git diff --check
 git add -- apps/docs/package.json apps/docs/tsconfig.json apps/docs/astro.config.mjs apps/docs/vitest.config.ts apps/docs/src/styles/custom.css apps/docs/test/no-local-copy.test.ts package.json pnpm-workspace.yaml pnpm-lock.yaml
 git diff --cached --name-only
 git commit -m "feat: scaffold static starlight adapter"
 ```
 
-Expected staged paths are exactly the files named by this task. The permanent invariant passes. `docs:check` and `docs:build` remain intentionally incomplete until Task 4 registers the `docs` collection; do not downgrade that failure to a warning and do not claim those gates yet.
+Record the real exit of every command and stop on any unexpected failure. The order is the narrowest invariant test, root `pnpm check`, then the applicable broader `pnpm verify`. Expected staged paths are exactly the files named by this task. The permanent invariant passes. `docs:check` and `docs:build` remain intentionally incomplete until Task 4 registers the `docs` collection; do not downgrade that failure to a warning and do not claim those gates yet.
 
 ### Task 2: Create the exact eight-document curriculum corpus
 
@@ -360,6 +361,20 @@ describe('Release 0 curriculum fixture', () => {
     expect(corpus.value.documents).toHaveLength(8);
     expect(corpus.value.documents.map(({ data }) => data.id).sort()).toEqual(expectedIds);
     expect(corpus.value.documents.every(({ data }) => data.status === 'published')).toBe(true);
+    const kindCounts = corpus.value.documents.reduce<Record<string, number>>(
+      (counts, { data }) => ({
+        ...counts,
+        [data.kind]: (counts[data.kind] ?? 0) + 1,
+      }),
+      {},
+    );
+    expect(kindCounts).toEqual({
+      assessment: 2,
+      competency: 2,
+      lesson: 2,
+      module: 1,
+      track: 1,
+    });
 
     const moduleDocument = corpus.value.documents.find(
       ({ data }) => data.id === 'module-js-functions',
@@ -396,8 +411,8 @@ schemaVersion: 1
 kind: track
 id: track-core
 slug: tracks/core
-title: Core curriculum
-description: Release 0 JavaScript function track
+title: Lộ trình JavaScript cốt lõi
+description: Lộ trình Release 0 về function trong JavaScript
 status: published
 prerequisites: []
 requiredCompetencies:
@@ -415,8 +430,8 @@ schemaVersion: 1
 kind: module
 id: module-js-functions
 slug: modules/javascript/functions
-title: JavaScript functions
-description: Function values and closure behavior
+title: Function trong JavaScript
+description: Giá trị function và hành vi closure
 status: published
 prerequisites: []
 competencies:
@@ -439,8 +454,8 @@ schemaVersion: 1
 kind: competency
 id: js.function.values
 slug: competencies/js/function-values
-title: Hàm như một giá trị
-description: Truyền, trả về và lưu trữ hàm như dữ liệu runtime
+title: Function như một giá trị
+description: Truyền, trả về và lưu trữ function như dữ liệu runtime
 status: published
 prerequisites: []
 requiredLevel: explain
@@ -459,7 +474,7 @@ kind: competency
 id: js.function.closure
 slug: competencies/js/function-closure
 title: Closure và private state
-description: Giải thích và triển khai lexical closure cho private state
+description: Giải thích và triển khai lexical closure để tạo private state
 status: published
 prerequisites:
   - js.function.values
@@ -480,8 +495,8 @@ schemaVersion: 1
 kind: lesson
 id: lesson-js-function-values
 slug: lessons/javascript/functions/function-values
-title: Function values
-description: Release 0 lesson fixture for function values
+title: Function như một giá trị
+description: Bài học fixture Release 0 về function như một giá trị
 status: published
 prerequisites: []
 module: module-js-functions
@@ -504,8 +519,8 @@ schemaVersion: 1
 kind: lesson
 id: lesson-js-closure-private-state
 slug: lessons/javascript/functions/closure-private-state
-title: Closure private state
-description: Release 0 lesson fixture for closure-backed private state
+title: Closure và private state
+description: Bài học fixture Release 0 về private state dựa trên closure
 status: published
 prerequisites:
   - lesson-js-function-values
@@ -531,8 +546,8 @@ schemaVersion: 1
 kind: assessment
 id: assessment-js-function-values
 slug: assessments/javascript/functions/function-values
-title: Function values knowledge check
-description: Release 0 assessment fixture for function values
+title: Kiểm tra kiến thức về function như một giá trị
+description: Bài đánh giá fixture Release 0 về function như một giá trị
 status: published
 prerequisites: []
 assessmentType: knowledge-check
@@ -548,8 +563,8 @@ schemaVersion: 1
 kind: assessment
 id: assessment-js-closure
 slug: assessments/javascript/functions/closure
-title: Closure focused exercise
-description: Release 0 assessment fixture for closure behavior
+title: Bài tập trọng tâm về closure
+description: Bài đánh giá fixture Release 0 về hành vi closure
 status: published
 prerequisites:
   - assessment-js-function-values
@@ -564,28 +579,30 @@ After each frontmatter block, use the exact one-paragraph fixture body:
 
 | File | Exact Markdown body |
 |---|---|
-| `track-core.md` | `Release 0 pipeline fixture: track navigation only, not complete curriculum.` |
-| `module-js-functions.md` | `Release 0 pipeline fixture: module ordering only, not complete curriculum.` |
-| `js.function.values.md` | `Release 0 pipeline fixture: function-value competency only, not complete curriculum.` |
-| `js.function.closure.md` | `Release 0 pipeline fixture: closure competency only, not complete curriculum.` |
-| `lesson-js-function-values.md` | `RELEASE_ZERO_FUNCTION_VALUES_BODY — Release 0 pipeline fixture, not a complete lesson.` |
-| `lesson-js-closure-private-state.md` | `RELEASE_ZERO_CLOSURE_BODY — Release 0 pipeline fixture, not a complete lesson.` |
-| `assessment-js-function-values.md` | `Release 0 pipeline fixture: function-value assessment only, not complete curriculum.` |
-| `assessment-js-closure.md` | `Release 0 pipeline fixture: closure assessment only, not complete curriculum.` |
+| `track-core.md` | `Fixture pipeline Release 0: chỉ kiểm chứng điều hướng track, chưa phải curriculum hoàn chỉnh.` |
+| `module-js-functions.md` | `Fixture pipeline Release 0: chỉ kiểm chứng thứ tự module, chưa phải curriculum hoàn chỉnh.` |
+| `js.function.values.md` | `Fixture pipeline Release 0: chỉ kiểm chứng competency về function như một giá trị, chưa phải curriculum hoàn chỉnh.` |
+| `js.function.closure.md` | `Fixture pipeline Release 0: chỉ kiểm chứng competency về closure, chưa phải curriculum hoàn chỉnh.` |
+| `lesson-js-function-values.md` | `RELEASE_ZERO_FUNCTION_VALUES_BODY — Fixture pipeline Release 0, chưa phải bài học hoàn chỉnh.` |
+| `lesson-js-closure-private-state.md` | `RELEASE_ZERO_CLOSURE_BODY — Fixture pipeline Release 0, chưa phải bài học hoàn chỉnh.` |
+| `assessment-js-function-values.md` | `Fixture pipeline Release 0: chỉ kiểm chứng assessment về function như một giá trị, chưa phải curriculum hoàn chỉnh.` |
+| `assessment-js-closure.md` | `Fixture pipeline Release 0: chỉ kiểm chứng assessment về closure, chưa phải curriculum hoàn chỉnh.` |
 
 - [ ] **Step 7: Validate GREEN and commit only the eight-document boundary**
 
 ```powershell
-pnpm content:validate curriculum --format text
 pnpm --filter @roadmap/docs test -- minimal-curriculum.test.ts
-pnpm --filter @roadmap/docs test
+pnpm check
+pnpm content:validate curriculum --format text
+pnpm verify:wp-02-03
+pnpm verify
 git diff --check
 git add -- curriculum/tracks/track-core.md curriculum/competencies/js.function.values.md curriculum/competencies/js.function.closure.md curriculum/modules/module-js-functions.md curriculum/lessons/lesson-js-function-values.md curriculum/lessons/lesson-js-closure-private-state.md curriculum/assessments/assessment-js-function-values.md curriculum/assessments/assessment-js-closure.md apps/docs/test/minimal-curriculum.test.ts
 git diff --cached --name-only
 git commit -m "content: add release zero curriculum spike"
 ```
 
-Expected staged paths are exactly the nine files owned by Task 2.
+Record the real exit of every command and stop on any unexpected failure. The order is the narrowest corpus test, root `pnpm check`, content validation, the WP-02–03 verifier, then the applicable broader `pnpm verify`. Expected staged paths are exactly the nine files owned by Task 2.
 
 ### Task 3: Resolve runtime context and convert curriculum documents into Starlight entries
 
@@ -597,7 +614,7 @@ Expected staged paths are exactly the nine files owned by Task 2.
 - Create: `apps/docs/test/create-doc-entries.test.ts`
 
 **Interfaces:**
-- Consumes: `CurriculumCorpus`, the process environment, the Astro command, and an optional test root.
+- Consumes: `CurriculumCorpus`, the process environment, the Astro command, and an explicitly authorized optional test root.
 - Produces:
   - `parsePublicationChannel(value): PublicationChannel`
   - `resolveCurriculumRuntime(options): { curriculumRoot: string; channel: PublicationChannel }`
@@ -633,12 +650,22 @@ describe('publication channel and curriculum root', () => {
       .toBe('production');
   });
 
-  it('resolves the repository curriculum root and honors an explicit test root', () => {
+  it('resolves the repository root and rejects an unauthorized alternate root', () => {
     expect(resolveDefaultCurriculumRoot().split(path.sep).join('/')).toMatch(/\/curriculum\/$/);
+    expect(() =>
+      resolveCurriculumRuntime({
+        astroCommand: 'dev',
+        explicitRoot: 'D:\\test-owned\\curriculum',
+      }),
+    ).toThrow(/ROADMAP_ENABLE_TEST_CURRICULUM_ROOT=1/);
+  });
+
+  it('accepts an alternate root only with explicit test authorization', () => {
     expect(
       resolveCurriculumRuntime({
         astroCommand: 'dev',
         explicitRoot: 'D:\\test-owned\\curriculum',
+        testRootAuthorization: '1',
       }).curriculumRoot,
     ).toBe(path.resolve('D:\\test-owned\\curriculum'));
   });
@@ -660,18 +687,26 @@ import type { CurriculumEntity } from '@roadmap/curriculum-schema';
 export type PublicationChannel = 'development' | 'preview' | 'production';
 type PublicationStatus = CurriculumEntity['status'];
 
-const channelValues = new Set<PublicationChannel>(['development', 'preview', 'production']);
+const channelValues: readonly PublicationChannel[] = [
+  'development',
+  'preview',
+  'production',
+];
 const visible: Record<PublicationChannel, ReadonlySet<PublicationStatus>> = {
   development: new Set(['draft', 'review', 'published', 'deprecated', 'withdrawn']),
   preview: new Set(['review', 'published', 'deprecated', 'withdrawn']),
   production: new Set(['published', 'deprecated', 'withdrawn']),
 };
 
+function isPublicationChannel(value: string): value is PublicationChannel {
+  return channelValues.some((channel) => channel === value);
+}
+
 export function parsePublicationChannel(value: string): PublicationChannel {
-  if (!channelValues.has(value as PublicationChannel)) {
+  if (!isPublicationChannel(value)) {
     throw new Error(`Invalid ROADMAP_PUBLICATION_CHANNEL: ${value}`);
   }
-  return value as PublicationChannel;
+  return value;
 }
 
 export function isVisible(status: PublicationStatus, channel: PublicationChannel): boolean {
@@ -696,6 +731,7 @@ export interface ResolveCurriculumRuntimeOptions {
   astroCommand?: string;
   explicitChannel?: string;
   explicitRoot?: string;
+  testRootAuthorization?: string;
 }
 
 export function resolveDefaultCurriculumRoot(): string {
@@ -714,6 +750,13 @@ export function resolveCurriculumRuntime(
       ? 'development'
       : 'production';
   const explicitRoot = options.explicitRoot ?? process.env.ROADMAP_CURRICULUM_ROOT;
+  const testRootAuthorization =
+    options.testRootAuthorization ?? process.env.ROADMAP_ENABLE_TEST_CURRICULUM_ROOT;
+  if (explicitRoot !== undefined && testRootAuthorization !== '1') {
+    throw new Error(
+      'ROADMAP_CURRICULUM_ROOT requires ROADMAP_ENABLE_TEST_CURRICULUM_ROOT=1',
+    );
+  }
   return {
     curriculumRoot: explicitRoot
       ? path.resolve(explicitRoot)
@@ -794,15 +837,15 @@ Reject any `sourceWithinRoot` that is absolute, equals `..`, or starts with `../
 
 ```powershell
 pnpm --filter @roadmap/docs test -- curriculum-runtime.test.ts create-doc-entries.test.ts
-pnpm --filter @roadmap/docs test
-pnpm typecheck
+pnpm check
+pnpm verify
 git diff --check
 git add -- apps/docs/src/lib/publication-channel.ts apps/docs/src/lib/curriculum-runtime.ts apps/docs/src/lib/create-doc-entries.ts apps/docs/test/curriculum-runtime.test.ts apps/docs/test/create-doc-entries.test.ts
 git diff --cached --name-only
 git commit -m "feat: adapt curriculum documents for starlight"
 ```
 
-Expected staged paths are exactly the five files owned by Task 3.
+Record the real exit of every command and stop on any unexpected failure. The order is the narrowest adapter tests, root `pnpm check`, then the applicable broader `pnpm verify`. Expected staged paths are exactly the five files owned by Task 3.
 
 ### Task 4: Implement the Astro custom loader and extended Starlight schema
 
@@ -915,9 +958,10 @@ function isInsideRoot(filePath: string): boolean {
 }
 
 function enqueueReload(filePath: string): void {
-  if (!isInsideRoot(filePath) || latestContext === undefined) return;
-  reloadQueue = reloadQueue.then(() => reload(latestContext!)).catch((error: unknown) => {
-    latestContext?.logger.error(
+  const context = latestContext;
+  if (!isInsideRoot(filePath) || context === undefined) return;
+  reloadQueue = reloadQueue.then(() => reload(context)).catch((error: unknown) => {
+    context.logger.error(
       error instanceof Error ? error.message : String(error),
     );
     queueMicrotask(() => {
@@ -989,6 +1033,8 @@ Use PowerShell environment assignment only when an explicit override is required
 
 ```powershell
 pnpm --filter @roadmap/docs test -- content-loader.test.ts
+pnpm --filter @roadmap/docs test -- no-local-copy.test.ts
+pnpm check
 pnpm docs:check
 pnpm docs:build
 $env:ROADMAP_PUBLICATION_CHANNEL='development'
@@ -997,11 +1043,11 @@ try {
 } finally {
   Remove-Item Env:ROADMAP_PUBLICATION_CHANNEL -ErrorAction SilentlyContinue
 }
-pnpm --filter @roadmap/docs test -- no-local-copy.test.ts
+pnpm verify
 git diff --check
 ```
 
-The default static build is production. Both builds exit `0`, a published route renders `RELEASE_ZERO_CLOSURE_BODY`, and `apps/docs/src/content/docs` remains absent.
+Record the real exit of every command and stop on any unexpected failure. The order starts with the narrowest loader test, continues with root `pnpm check`, then the framework/no-copy gates and applicable broader `pnpm verify`. The default static build is production. Both builds exit `0`, a published route renders `RELEASE_ZERO_CLOSURE_BODY`, and `apps/docs/src/content/docs` remains absent.
 
 - [ ] **Step 6: Commit only loader and collection registration**
 
@@ -1039,7 +1085,20 @@ Expected staged paths are exactly the three files owned by Task 4.
 
 ```ts
 const sidebar = buildSidebar(corpus.value, 'production');
-const lessonLinks = sidebar[0]?.items[0]?.items.map((item) => item.link);
+const trackGroup = sidebar[0];
+if (trackGroup === undefined || !('items' in trackGroup)) {
+  throw new Error('Expected one track sidebar group');
+}
+const moduleItem = trackGroup.items[0];
+if (moduleItem === undefined || !('items' in moduleItem)) {
+  throw new Error('Expected the first track item to be a module sidebar group');
+}
+const lessonLinks = moduleItem.items.map((item) => {
+  if (!('link' in item)) {
+    throw new Error('Expected every module item to be a lesson sidebar link');
+  }
+  return item.link;
+});
 expect(lessonLinks).toEqual([
   '/lessons/javascript/functions/function-values/',
   '/lessons/javascript/functions/closure-private-state/',
@@ -1058,7 +1117,7 @@ expect(resolveDependencyLinks(entries, ['lesson-js-function-values'])).toEqual([
   {
     semanticId: 'lesson-js-function-values',
     href: '/lessons/javascript/functions/function-values/',
-    label: 'Function values',
+    label: 'Function như một giá trị',
   },
 ]);
 expect(() => resolveDependencyLinks(entries, ['missing-id'])).toThrow(
@@ -1095,13 +1154,15 @@ export interface SidebarLink {
 
 export interface SidebarGroup {
   label: string;
-  items: readonly (SidebarGroup | SidebarLink)[];
+  items: readonly SidebarItem[];
 }
+
+export type SidebarItem = SidebarGroup | SidebarLink;
 
 export function buildSidebar(
   corpus: CurriculumCorpus,
   channel: PublicationChannel,
-): readonly SidebarGroup[] {
+): readonly SidebarItem[] {
   const byId = new Map(corpus.documents.map((document) => [document.data.id, document]));
   const tracks = corpus.documents.filter(
     (document) =>
@@ -1138,7 +1199,7 @@ export function buildSidebar(
 export async function loadSidebar(runtime: {
   curriculumRoot: string;
   channel: PublicationChannel;
-}): Promise<readonly SidebarGroup[]> {
+}): Promise<readonly SidebarItem[]> {
   const corpus = await loadCurriculum(runtime.curriculumRoot);
   if (!corpus.ok) throw new Error(JSON.stringify(corpus.diagnostics));
   const graph = buildCurriculumGraph(corpus.value);
@@ -1246,18 +1307,19 @@ const links = resolveDependencyLinks(entries, entry.data.prerequisites);
 ---
 // apps/docs/src/components/PageTitle.astro
 import Default from '@astrojs/starlight/components/PageTitle.astro';
+import type { Props } from '@astrojs/starlight/props';
 import CurriculumMetadata from './CurriculumMetadata.astro';
 import DependencyLinks from './DependencyLinks.astro';
 
-const { entry } = Astro.locals.starlightRoute;
+const { entry } = Astro.props;
 ---
 
-<Default><slot /></Default>
+<Default {...Astro.props}><slot /></Default>
 <CurriculumMetadata data={entry.data} />
 <DependencyLinks entry={entry} />
 ```
 
-Reusing the default component preserves its `<h1 id="_top">` contract. Do not replace it with a custom heading.
+The override is typed with Starlight's `Props`, reads the current entry from `Astro.props`, and forwards the complete props object to the default component. Reusing that component preserves its `<h1 id="_top">` contract. Do not replace it with a custom heading.
 
 - [ ] **Step 6: Surgically merge sidebar and component override into Starlight config**
 
@@ -1287,17 +1349,19 @@ Preserve `title`, `customCss`, static output, and all existing integration setti
 
 ```powershell
 pnpm --filter @roadmap/docs test -- sidebar.test.ts dependency-links.test.ts
+pnpm --filter @roadmap/docs test -- no-local-copy.test.ts
+pnpm check
 pnpm --filter @roadmap/docs test
 pnpm docs:check
 pnpm docs:build
-pnpm --filter @roadmap/docs test -- no-local-copy.test.ts
+pnpm verify
 git diff --check
 git add -- apps/docs/src/lib/sidebar.ts apps/docs/src/lib/dependency-links.ts apps/docs/test/sidebar.test.ts apps/docs/test/dependency-links.test.ts apps/docs/src/components/PageTitle.astro apps/docs/src/components/CurriculumMetadata.astro apps/docs/src/components/DependencyLinks.astro apps/docs/astro.config.mjs
 git diff --cached --name-only
 git commit -m "feat: derive docs navigation from curriculum graph"
 ```
 
-Expected staged paths are exactly the eight files owned by Task 5.
+Record the real exit of every command and stop on any unexpected failure. The order starts with the narrowest sidebar/dependency tests, continues with root `pnpm check`, then the package/framework/no-copy gates and applicable broader `pnpm verify`. Expected staged paths are exactly the eight files owned by Task 5.
 
 ### Task 6: Prove production filtering, hot reload, accessibility, and static routes
 
@@ -1320,8 +1384,35 @@ Expected staged paths are exactly the eight files owned by Task 5.
 Update `apps/docs/test/minimal-curriculum.test.ts`; do not create a second corpus test. Its final assertions are:
 
 ```ts
+const expectedFinalIds = [
+  'assessment-js-closure',
+  'assessment-js-function-values',
+  'js.function.closure',
+  'js.function.values',
+  'lesson-js-closure-private-state',
+  'lesson-js-function-values',
+  'lesson-release-zero-draft',
+  'module-js-functions',
+  'track-core',
+];
+
 expect(corpus.value.documents).toHaveLength(9);
+expect(corpus.value.documents.map(({ data }) => data.id).sort()).toEqual(expectedFinalIds);
 expect(corpus.value.documents.filter(({ data }) => data.status === 'draft')).toHaveLength(1);
+const finalKindCounts = corpus.value.documents.reduce<Record<string, number>>(
+  (counts, { data }) => ({
+    ...counts,
+    [data.kind]: (counts[data.kind] ?? 0) + 1,
+  }),
+  {},
+);
+expect(finalKindCounts).toEqual({
+  assessment: 2,
+  competency: 2,
+  lesson: 3,
+  module: 1,
+  track: 1,
+});
 expect(
   createDocEntries(corpus.value, { channel: 'production', curriculumRoot }),
 ).toHaveLength(8);
@@ -1333,7 +1424,7 @@ expect(
 ).toBe(true);
 ```
 
-Retain Task 2's exact ID, module-order, build-graph, and validate-graph assertions.
+Replace Task 2's eight-ID constant with `expectedFinalIds` above. Retain the module-order, build-graph, and validate-graph assertions.
 
 ```powershell
 pnpm --filter @roadmap/docs test -- minimal-curriculum.test.ts
@@ -1349,8 +1440,8 @@ schemaVersion: 1
 kind: lesson
 id: lesson-release-zero-draft
 slug: lessons/release-zero/draft
-title: Release Zero draft
-description: Draft-only route fixture for publication filtering
+title: Bài học nháp Release Zero
+description: Fixture route chỉ dành cho draft để kiểm chứng publication filtering
 status: draft
 prerequisites:
   - lesson-js-function-values
@@ -1366,7 +1457,7 @@ introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
 ```
 
-Its exact Markdown body is `RELEASE_ZERO_DRAFT_BODY — Release 0 draft-only pipeline fixture, not a complete lesson.` Do not add the draft lesson to the published module's `lessons` array; published content must not depend on draft content.
+Its exact Markdown body is `RELEASE_ZERO_DRAFT_BODY — Fixture pipeline Release 0 chỉ dành cho draft, chưa phải bài học hoàn chỉnh.` Do not add the draft lesson to the published module's `lessons` array; published content must not depend on draft content.
 
 - [ ] **Step 3: Configure package-pinned Chromium and static preview**
 
@@ -1423,7 +1514,7 @@ test('draft route is absent from a production build', async ({ page }) => {
 });
 ```
 
-Add a sidebar assertion proving `Function values` appears before `Closure private state`.
+Add a sidebar assertion proving `Function như một giá trị` appears before `Closure và private state`.
 
 - [ ] **Step 5: Write the Windows-safe temporary-root hot-reload integration**
 
@@ -1432,15 +1523,17 @@ Add a sidebar assertion proving `Function values` appears before `Closure privat
 1. snapshot SHA-256 hashes for every authoritative `curriculum/**/*.md` file and snapshot `git status --short` output;
 2. create a unique directory with `mkdtemp(path.join(tmpdir(), 'wp04-hot-reload-'))`;
 3. copy the authoritative corpus into `<temp>/curriculum`;
-4. start Astro dev with `shell: false`, `windowsHide: true`, `ROADMAP_CURRICULUM_ROOT=<temp>/curriculum`, and `ROADMAP_PUBLICATION_CHANNEL=development`;
-5. invoke pnpm through `process.execPath` and `process.env.npm_execpath`, failing closed if `npm_execpath` is absent;
-6. wait for the fixed test URL with bounded polling;
-7. prove `/lessons/release-zero/draft/` returns `200` and renders `RELEASE_ZERO_DRAFT_BODY`;
-8. request the closure route and prove the initial rendered marker;
-9. append a unique marker only to the copied closure file;
-10. poll until the rendered route contains that marker;
-11. in `finally`, stop the complete child tree and delete only the verified temporary directory;
-12. compare authoritative hashes and Git status to the snapshots and prove they are unchanged.
+4. start Astro dev with `shell: false`, `windowsHide: true`, `ROADMAP_CURRICULUM_ROOT=<temp>/curriculum`, `ROADMAP_ENABLE_TEST_CURRICULUM_ROOT=1`, and `ROADMAP_PUBLICATION_CHANNEL=development`;
+5. reserve the exact test endpoint `http://127.0.0.1:4322/`, fail closed if `127.0.0.1:4322` is unavailable, then release the probe socket immediately before spawning Astro;
+6. invoke pnpm through `process.execPath` and `process.env.npm_execpath`, failing closed if `npm_execpath` is absent;
+7. continuously drain child stdout and stderr into separate bounded diagnostic buffers from the moment the child is spawned;
+8. wait for the exact test base URL with bounded polling; any early child exit or startup timeout reports both bounded diagnostic buffers;
+9. prove `/lessons/release-zero/draft/` returns `200` and renders `RELEASE_ZERO_DRAFT_BODY`;
+10. request the closure route and prove the initial rendered marker;
+11. append a unique marker only to the copied closure file;
+12. poll until the rendered route contains that marker;
+13. in `finally`, stop the complete child tree and delete only the verified temporary directory;
+14. compare authoritative hashes and Git status to the snapshots and prove they are unchanged.
 
 Windows cleanup uses `taskkill.exe /PID <pid> /T /F`, waits for the child exit, and fails if the process remains. Non-Windows cleanup may use `SIGTERM` followed by bounded `SIGKILL`; no Windows path relies on Unix signals. Before recursive deletion, resolve the candidate and prove it is below the resolved OS temp directory and contains the `wp04-hot-reload-` prefix.
 
@@ -1449,11 +1542,44 @@ The test never writes to authoritative `curriculum/`, never restores a tracked f
 Use the package-manager path directly and never invoke a shell:
 
 ```ts
+import { createServer } from 'node:net';
+
+const HOT_RELOAD_HOST = '127.0.0.1';
+const HOT_RELOAD_PORT = 4322;
+const HOT_RELOAD_BASE_URL = new URL(`http://${HOT_RELOAD_HOST}:${HOT_RELOAD_PORT}/`);
+const DIAGNOSTIC_BUFFER_LIMIT = 16_384;
+
+async function assertHotReloadPortAvailable(): Promise<void> {
+  const probe = createServer();
+  await new Promise<void>((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(HOT_RELOAD_PORT, HOT_RELOAD_HOST, resolve);
+  });
+  await new Promise<void>((resolve, reject) => {
+    probe.close((error) => (error === undefined ? resolve() : reject(error)));
+  });
+}
+
+function createBoundedDiagnosticBuffer(limit = DIAGNOSTIC_BUFFER_LIMIT) {
+  let value = '';
+  return {
+    append(chunk: Buffer | string): void {
+      value = `${value}${chunk.toString()}`.slice(-limit);
+    },
+    read(): string {
+      return value;
+    },
+  };
+}
+
 const npmExecPath = process.env.npm_execpath;
 if (npmExecPath === undefined) {
   throw new Error('npm_execpath is required for a shell-free pnpm child process');
 }
 
+await assertHotReloadPortAvailable();
+const stdout = createBoundedDiagnosticBuffer();
+const stderr = createBoundedDiagnosticBuffer();
 const child = spawn(
   process.execPath,
   [
@@ -1463,15 +1589,16 @@ const child = spawn(
     'dev',
     '--',
     '--host',
-    '127.0.0.1',
+    HOT_RELOAD_HOST,
     '--port',
-    String(port),
+    String(HOT_RELOAD_PORT),
   ],
   {
     cwd: repositoryRoot,
     env: {
       ...process.env,
       ROADMAP_CURRICULUM_ROOT: temporaryCurriculumRoot,
+      ROADMAP_ENABLE_TEST_CURRICULUM_ROOT: '1',
       ROADMAP_PUBLICATION_CHANNEL: 'development',
     },
     shell: false,
@@ -1479,7 +1606,11 @@ const child = spawn(
     windowsHide: true,
   },
 );
+child.stdout?.on('data', (chunk: Buffer) => stdout.append(chunk));
+child.stderr?.on('data', (chunk: Buffer) => stderr.append(chunk));
 ```
+
+All route polling resolves paths against `HOT_RELOAD_BASE_URL`; no test chooses an ephemeral or caller-supplied port. The startup helper races bounded polling against child exit and timeout and includes `stdout.read()` plus `stderr.read()` in every diagnostic failure. The attached `data` listeners remain active for the child's full lifetime so pipe backpressure cannot deadlock the dev server.
 
 Use an awaited tree-stop helper:
 
@@ -1560,6 +1691,23 @@ const publishedRoute = path.join(
 const draftRoute = path.join(root, 'apps/docs/dist/lessons/release-zero/draft/index.html');
 const localCopy = path.join(root, 'apps/docs/src/content/docs');
 
+async function assertPathAbsent(candidate, label) {
+  try {
+    await access(candidate);
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error(`${label} unexpectedly exists: ${candidate}`);
+}
+
 await runPipeline(
   ['check', 'test', 'content:validate:curriculum', 'schema:check', 'docs:test:e2e'],
   { cwd: root },
@@ -1570,21 +1718,11 @@ const publishedHtml = await readFile(publishedRoute, 'utf8');
 if (!publishedHtml.includes('RELEASE_ZERO_CLOSURE_BODY')) {
   throw new Error('Published route artifact does not contain rendered curriculum body');
 }
-await access(draftRoute).then(
-  () => {
-    throw new Error('Draft route artifact exists in the production build');
-  },
-  () => undefined,
-);
-await access(localCopy).then(
-  () => {
-    throw new Error('Hand-maintained apps/docs/src/content/docs copy exists');
-  },
-  () => undefined,
-);
+await assertPathAbsent(draftRoute, 'Draft route artifact');
+await assertPathAbsent(localCopy, 'Hand-maintained docs copy');
 ```
 
-This gate inspects generated production artifacts after the browser gate and checks the no-local-copy boundary. It does not rerun the unit suite.
+This gate inspects generated production artifacts after the browser gate and checks the no-local-copy boundary. Absence succeeds only for `ENOENT`; permission, I/O, and every other access error are rethrown. It does not rerun the unit suite.
 
 - [ ] **Step 8: Run the complete Task 6 evidence set**
 
@@ -1621,7 +1759,19 @@ The final reviewer, not the implementation worker, performs the production-filte
 1. Verify `D:\Programming\Repos\fullstack-javascript-roadmap-worktrees\wp-04-production-filter-review` does not exist.
 2. Create that external worktree detached at the final WP-04 commit.
 3. Change only the disposable copy of `apps/docs/src/lib/publication-channel.ts` so production temporarily includes `draft`.
-4. Run the single production draft-route Playwright test and record the required non-zero result because the route becomes available.
+4. From PowerShell, run the exact production build and package-scoped Playwright selection below. Record a build exit of `0`, then record the required non-zero Playwright exit only when the named route-behavior assertion observes `200` plus `RELEASE_ZERO_DRAFT_BODY` where the unmutated expectation requires `404` and no marker:
+
+   ```powershell
+   $env:ROADMAP_PUBLICATION_CHANNEL = 'production'
+   try {
+     pnpm docs:build
+   } finally {
+     Remove-Item Env:ROADMAP_PUBLICATION_CHANNEL -ErrorAction SilentlyContinue
+   }
+   pnpm --filter @roadmap/docs exec playwright test e2e/docs.spec.ts --grep '^draft route is absent from a production build$'
+   ```
+
+   A browser launch, preview server, build, setup, timeout, selector, or other infrastructure failure invalidates the mutation evidence and must not be accepted as the required failure.
 5. Revert that exact temporary line in the disposable copy, prove its tracked/index/untracked state is clean, and remove the worktree non-force.
 6. Record the mutation evidence without committing or transferring the mutation.
 
