@@ -1,0 +1,12 @@
+---
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+import type {} from '@astrojs/starlight';
+import CurriculumMetadata from './CurriculumMetadata.astro';
+import DependencyLinks from './DependencyLinks.astro';
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<Default><slot /></Default>
+<CurriculumMetadata data={entry.data} />
+<DependencyLinks entry={entry} />

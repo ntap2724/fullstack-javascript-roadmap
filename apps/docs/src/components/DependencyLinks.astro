@@ -1,0 +1,25 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import { resolveDependencyLinks } from '../lib/dependency-links.js';
+
+interface Props {
+  entry: CollectionEntry<'docs'>;
+}
+
+const { entry } = Astro.props;
+const entries = await getCollection('docs');
+const links = resolveDependencyLinks(entries, entry.data.prerequisites);
+---
+
+{
+  links.length > 0 && (
+    <nav class="curriculum-dependencies" aria-label="Curriculum prerequisites">
+      <h2>Prerequisites</h2>
+      <ul>
+        {links.map((link) => (
+          <li><a href={link.href}>{link.label}</a></li>
+        ))}
+      </ul>
+    </nav>
+  )
+}

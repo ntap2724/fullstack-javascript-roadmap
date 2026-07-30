@@ -1,0 +1,19 @@
+---
+interface Props {
+  data: {
+    semanticId: string;
+    publicationStatus: string;
+    sourcePath: string;
+    lastReviewedIn: string;
+  };
+}
+
+const { data } = Astro.props;
+---
+
+<dl class="curriculum-metadata">
+  <div><dt>Stable ID</dt><dd>{data.semanticId}</dd></div>
+  <div><dt>Publication status</dt><dd>{data.publicationStatus}</dd></div>
+  <div><dt>Source path</dt><dd>{data.sourcePath}</dd></div>
+  <div><dt>Last reviewed version</dt><dd>{data.lastReviewedIn}</dd></div>
+</dl>
