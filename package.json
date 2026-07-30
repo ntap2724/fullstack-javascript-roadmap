@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Repository-first competency-based Fullstack JavaScript curriculum",
   "scripts": {
-    "dev": "node scripts/unavailable-command.mjs dev",
+    "dev": "pnpm --filter @roadmap/docs dev",
+    "docs:build": "pnpm --filter @roadmap/docs build",
+    "docs:check": "pnpm --filter @roadmap/docs check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    ".astro/types.d.ts",
+    "*.config.ts",
+    "src/**/*.ts",
+    "src/**/*.astro",
+    "test/**/*.ts",
+    "e2e/**/*.ts"
+  ]
+}

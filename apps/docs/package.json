@@ -1,0 +1,31 @@
+{
+  "name": "@roadmap/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1 --port 4321",
+    "check": "astro check",
+    "test": "vitest run --config vitest.config.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "catalog:",
+    "@roadmap/curriculum-graph": "workspace:*",
+    "@roadmap/curriculum-loader": "workspace:*",
+    "@roadmap/curriculum-schema": "workspace:*",
+    "@roadmap/validation-core": "workspace:*",
+    "astro": "catalog:"
+  },
+  "devDependencies": {
+    "@astrojs/check": "catalog:",
+    "@emnapi/core": "catalog:",
+    "@emnapi/runtime": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

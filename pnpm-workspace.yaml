@@ -17,8 +17,15 @@ saveWorkspaceProtocol: rolling
 allowBuilds:
   esbuild: true
 catalog:
+  '@astrojs/check': 0.9.10
+  '@astrojs/starlight': 0.41.5
+  '@emnapi/core': 2.0.0-alpha.3
+  '@emnapi/runtime': 2.0.0-alpha.3
   '@eslint/js': 10.0.1
+  '@napi-rs/wasm-runtime': 1.1.6
+  '@playwright/test': 1.62.0
   '@types/node': 24.13.3
+  astro: 7.1.6
   eslint: 10.8.0
   globals: 17.7.0
   prettier: 3.9.6
@@ -28,3 +35,20 @@ catalog:
   vitest: 4.1.10
   yaml: 2.9.0
   zod: 4.4.3
+
+overrides:
+  '@rolldown/binding-wasm32-wasi@1.1.5>@napi-rs/wasm-runtime': 'catalog:'
+
+minimumReleaseAgeExclude:
+  - '@astrojs/compiler-binding-darwin-arm64@0.3.2'
+  - '@astrojs/compiler-binding-darwin-x64@0.3.2'
+  - '@astrojs/compiler-binding-linux-arm64-gnu@0.3.2'
+  - '@astrojs/compiler-binding-linux-arm64-musl@0.3.2'
+  - '@astrojs/compiler-binding-linux-x64-gnu@0.3.2'
+  - '@astrojs/compiler-binding-linux-x64-musl@0.3.2'
+  - '@astrojs/compiler-binding-wasm32-wasi@0.3.2'
+  - '@astrojs/compiler-binding-win32-arm64-msvc@0.3.2'
+  - '@astrojs/compiler-binding-win32-x64-msvc@0.3.2'
+  - '@astrojs/compiler-binding@0.3.2'
+  - '@astrojs/compiler-rs@0.3.2'
+  - astro@7.1.6

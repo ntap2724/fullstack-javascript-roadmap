@@ -1,0 +1,9 @@
+.curriculum-metadata {
+  display: grid;
+  gap: 0.25rem;
+  margin-block: 1rem;
+}
+
+.curriculum-dependencies {
+  margin-block: 1rem 2rem;
+}
