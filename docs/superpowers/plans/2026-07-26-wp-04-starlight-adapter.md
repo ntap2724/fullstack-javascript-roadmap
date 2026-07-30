@@ -1509,8 +1509,9 @@ test('published route renders body, distinct IDs, source metadata, and skip link
 
 test('draft route is absent from a production build', async ({ page }) => {
   const response = await page.goto('/lessons/release-zero/draft/');
-  expect(response?.status()).toBe(404);
-  await expect(page.getByText('RELEASE_ZERO_DRAFT_BODY')).toHaveCount(0);
+  const status = response?.status();
+  const markerCount = await page.getByText('RELEASE_ZERO_DRAFT_BODY').count();
+  expect({ status, markerCount }).toEqual({ status: 404, markerCount: 0 });
 });
 ```
 
@@ -1759,19 +1760,26 @@ The final reviewer, not the implementation worker, performs the production-filte
 1. Verify `D:\Programming\Repos\fullstack-javascript-roadmap-worktrees\wp-04-production-filter-review` does not exist.
 2. Create that external worktree detached at the final WP-04 commit.
 3. Change only the disposable copy of `apps/docs/src/lib/publication-channel.ts` so production temporarily includes `draft`.
-4. From PowerShell, run the exact production build and package-scoped Playwright selection below. Record a build exit of `0`, then record the required non-zero Playwright exit only when the named route-behavior assertion observes `200` plus `RELEASE_ZERO_DRAFT_BODY` where the unmutated expectation requires `404` and no marker:
+4. Bootstrap this newly created detached external worktree; do not reuse dependency evidence from the frozen WP-04 worktree. From PowerShell, run the exact commands below and record real exit `0` for both `pnpm install --frozen-lockfile` and the production build. Then record the required non-zero Playwright exit only when the named composite route-behavior assertion reports received status `200` and a positive marker count where the unmutated expectation is exactly `{ status: 404, markerCount: 0 }`:
 
    ```powershell
+   pnpm install --frozen-lockfile
+   if ($LASTEXITCODE -ne 0) {
+     throw "Disposable-worktree bootstrap failed with exit $LASTEXITCODE"
+   }
    $env:ROADMAP_PUBLICATION_CHANNEL = 'production'
    try {
      pnpm docs:build
+     if ($LASTEXITCODE -ne 0) {
+       throw "Disposable-worktree production build failed with exit $LASTEXITCODE"
+     }
    } finally {
      Remove-Item Env:ROADMAP_PUBLICATION_CHANNEL -ErrorAction SilentlyContinue
    }
    pnpm --filter @roadmap/docs exec playwright test e2e/docs.spec.ts --grep '^draft route is absent from a production build$'
    ```
 
-   A browser launch, preview server, build, setup, timeout, selector, or other infrastructure failure invalidates the mutation evidence and must not be accepted as the required failure.
+   The named test collects both observations before its one hard assertion. Under the mutation, accepted evidence must expose received `{ status: 200, markerCount: N }` with `N > 0` in that behavioral assertion's failure. A dependency/bootstrap, browser launch, preview server, build, setup, timeout, selector, or other infrastructure failure invalidates the mutation evidence and must not be accepted as the required failure.
 5. Revert that exact temporary line in the disposable copy, prove its tracked/index/untracked state is clean, and remove the worktree non-force.
 6. Record the mutation evidence without committing or transferring the mutation.
 
