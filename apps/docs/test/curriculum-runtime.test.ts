@@ -53,13 +53,11 @@ describe('publication channel and curriculum root', () => {
     expect(
       resolveCurriculumRuntime({
         astroCommand: 'dev',
-        explicitChannel: undefined,
       }).channel,
     ).toBe('development');
     expect(
       resolveCurriculumRuntime({
         astroCommand: 'build',
-        explicitChannel: undefined,
       }).channel,
     ).toBe('production');
   });
