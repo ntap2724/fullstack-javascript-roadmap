@@ -19,11 +19,12 @@ export function resolveCurriculumRuntime(options: ResolveCurriculumRuntimeOption
 } {
   const explicitChannel = options.explicitChannel ?? process.env.ROADMAP_PUBLICATION_CHANNEL;
   const astroCommand = options.astroCommand ?? process.argv[2];
-  const channel = explicitChannel
-    ? parsePublicationChannel(explicitChannel)
-    : astroCommand === 'dev'
-      ? 'development'
-      : 'production';
+  const channel =
+    explicitChannel !== undefined
+      ? parsePublicationChannel(explicitChannel)
+      : astroCommand === 'dev'
+        ? 'development'
+        : 'production';
   const explicitRoot = options.explicitRoot ?? process.env.ROADMAP_CURRICULUM_ROOT;
   const testRootAuthorization =
     options.testRootAuthorization ?? process.env.ROADMAP_ENABLE_TEST_CURRICULUM_ROOT;

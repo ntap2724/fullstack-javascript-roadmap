@@ -37,6 +37,15 @@ describe('publication channel and curriculum root', () => {
     expect(() => parsePublicationChannel('prod')).toThrow(/Invalid ROADMAP_PUBLICATION_CHANNEL/);
   });
 
+  it('fails closed for an explicitly empty publication channel', () => {
+    expect(() =>
+      resolveCurriculumRuntime({
+        astroCommand: 'build',
+        explicitChannel: '',
+      }),
+    ).toThrow(/Invalid ROADMAP_PUBLICATION_CHANNEL/);
+  });
+
   it.each(
     (Object.keys(expectedVisibility) as PublicationChannel[]).flatMap((channel) =>
       publicationStatuses.map((status) => ({

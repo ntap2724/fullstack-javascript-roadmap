@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { buildCurriculumGraph, validateCurriculumGraph } from '@roadmap/curriculum-graph';
 import { loadCurriculum } from '@roadmap/curriculum-loader';
 import type { Loader } from 'astro/loaders';
 import { createDocEntries } from '../lib/create-doc-entries.js';
@@ -29,6 +30,28 @@ export function curriculumDocsLoader(options: CurriculumDocsLoaderOptions): Load
     if (!outcome.ok) {
       throw new Error(
         `Curriculum loading failed:\n${outcome.diagnostics
+          .map(
+            (diagnostic) => `${diagnostic.code} ${diagnostic.location.file}: ${diagnostic.reason}`,
+          )
+          .join('\n')}`,
+      );
+    }
+
+    const graph = buildCurriculumGraph(outcome.value);
+    if (!graph.ok) {
+      throw new Error(
+        `Curriculum graph building failed:\n${graph.diagnostics
+          .map(
+            (diagnostic) => `${diagnostic.code} ${diagnostic.location.file}: ${diagnostic.reason}`,
+          )
+          .join('\n')}`,
+      );
+    }
+
+    const validation = validateCurriculumGraph(graph.value);
+    if (!validation.ok) {
+      throw new Error(
+        `Curriculum graph validation failed:\n${validation.diagnostics
           .map(
             (diagnostic) => `${diagnostic.code} ${diagnostic.location.file}: ${diagnostic.reason}`,
           )

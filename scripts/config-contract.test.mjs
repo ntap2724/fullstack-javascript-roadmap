@@ -1,4 +1,5 @@
 import { ESLint } from 'eslint';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -127,6 +128,29 @@ test('Prettier ownership excludes only root governance and generated-state bound
       }
     },
   );
+});
+
+test('Astro generated state is excluded from Git, Prettier, and ESLint ownership', async () => {
+  const generatedArtifact = 'apps/docs/.astro/content.d.ts';
+  const gitResult = spawnSync(
+    'git',
+    ['check-ignore', '--no-index', '--verbose', '--', generatedArtifact],
+    {
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: process.platform === 'win32',
+    },
+  );
+
+  assert.ifError(gitResult.error);
+  assert.equal(gitResult.status, 0, `${gitResult.stdout}\n${gitResult.stderr}`);
+  assert.match(gitResult.stdout, /^\.gitignore:.*apps\/docs\/\.astro\/content\.d\.ts\s*$/m);
+
+  const prettierInfo = await getFileInfo(generatedArtifact, {
+    ignorePath: path.resolve('.gitignore'),
+  });
+  assert.equal(prettierInfo.ignored, true);
+  assert.equal(await eslint.isPathIgnored(generatedArtifact), true);
 });
 
 test('temporary SDD fixtures own only paths they create', async () => {

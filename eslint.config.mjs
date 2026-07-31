@@ -3,7 +3,15 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/.generated/**', '**/.tmp/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.generated/**',
+      '**/.tmp/**',
+      'apps/docs/.astro/**',
+    ],
+  },
   eslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -271,6 +271,46 @@ describe('curriculumDocsLoader', () => {
     expect(() => {
       surfaced[0]?.();
     }).toThrow(reloadError);
+  });
+
+  it('surfaces a graph-invalid watcher reload before replacing the previous store', async () => {
+    const temporaryParent = await mkdtemp(path.join(tmpdir(), 'roadmap-watcher-curriculum-'));
+    const temporaryRoot = path.join(temporaryParent, 'curriculum');
+    try {
+      await cp(curriculumRoot, temporaryRoot, { recursive: true });
+      const watcher = createWatcherDouble();
+      const loader = curriculumDocsLoader({ channel: 'production', curriculumRoot: temporaryRoot });
+      const context = createContextDouble(watcher);
+      const surfaced: (() => void)[] = [];
+      vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((callback) => {
+        surfaced.push(callback);
+      });
+
+      await loader.load(context.context);
+      expect(context.clear).toHaveBeenCalledOnce();
+      expect(context.set).toHaveBeenCalledTimes(8);
+
+      const changedLesson = path.join(temporaryRoot, 'lessons', 'lesson-js-function-values.md');
+      const originalSource = await readFile(changedLesson, 'utf8');
+      const graphInvalidSource = originalSource.replace('status: published', 'status: draft');
+      expect(graphInvalidSource).not.toBe(originalSource);
+      await writeFile(changedLesson, graphInvalidSource, 'utf8');
+      listener(watcher, 'change')(changedLesson);
+
+      await vi.waitFor(() => {
+        expect(context.error).toHaveBeenCalledWith(
+          expect.stringContaining('CURRICULUM_PUBLICATION_001'),
+        );
+      });
+      expect(context.clear).toHaveBeenCalledOnce();
+      expect(context.set).toHaveBeenCalledTimes(8);
+      expect(surfaced).toHaveLength(1);
+      expect(() => {
+        surfaced[0]?.();
+      }).toThrow(/CURRICULUM_PUBLICATION_001/);
+    } finally {
+      await rm(temporaryParent, { force: true, recursive: true });
+    }
   });
 
   it('throws curriculum diagnostics before clearing the store', async () => {
