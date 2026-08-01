@@ -22,6 +22,102 @@
 - Public solutions remain outside learner starter materialization
 - Package code never imports Astro, Starlight, React, Express, or template-publication code
 
+## OW0002 Task 0 plan-amendment contract
+
+`WP05_ONLY_EXECUTION_BOUNDARY`
+
+This combined document is the implementation plan for two release work packages, but the current execution boundary is deliberately split. The executable WP-05 scope is Tasks 1–5 and the exercise-only acceptance gate immediately after Task 5. Tasks 6–8 are retained below as reference material for WP-06; they are not part of this dispatch, must not be implemented or substantively redesigned here, and must not receive a WP-05 commit, writer token, or acceptance claim.
+
+`WP06_DEFERRED_NOT_AUTHORIZED`
+
+At the WP-05 checkpoint, stop after the Task 5 exercise gate, record the result, and request the later WP-06 owner to authorize Tasks 6–8. The split exit gate is therefore:
+
+1. WP-05 owns and verifies command execution, the exercise contract, safe materialization/reopen, learner protection, the real closure exercise, the public verifier, and the exercise-only acceptance evidence in Tasks 1–5.
+2. WP-06 owns the rubric, evidence, remediation, and deferred Tasks 6–8. The deferred task text may be consulted later, but its file maps, tests, fixtures, and commit commands are non-executable until WP-06 issues its own bounded authority.
+3. No step in this document authorizes changes to the Release 0 master plan, WP-07/08 plans, curriculum, source code, tests, fixtures, package manifests, lockfiles, `.claude`, or release workflows during this plan amendment. The amendment itself changes only this plan and the WP-09 consumer plan named by OW0002.
+
+### Catalog, package, and root-config ownership
+
+- Future Task 1 and Task 2 implementation owns the exact catalog/package dependency changes. Do not use a root dependency-install shortcut, do not mutate the root manifest as a side effect of authoring, and do not introduce an unpinned dependency range.
+- Add `cross-spawn: 7.0.6` and `picomatch: 4.0.5` to the root `pnpm-workspace.yaml` catalog only in their respective future package tasks; declare them as `catalog:` in the package-local manifests, update `pnpm-lock.yaml` from those manifests, and include both catalog and lockfile changes in the corresponding future commit.
+- `@types/cross-spawn` and `@types/picomatch` are package-local decisions: retain them only when the package-local strict TypeScript check proves that declarations are required, and if retained pin their exact catalog entries in the same future package task. Never install them with a root `pnpm add` command.
+- The root `vitest.config.ts` already discovers package and tooling projects through its existing globs. Preserve it and its globs; package-local `vitest.config.ts` files remain required. No task in this plan may list the root config as a modification or add it to a future commit command.
+
+### T0_COMMAND_RUNNER_SAFETY — locked runner contract
+
+The master public names and result fields are frozen. Task 1 must preserve these exact interfaces and must not add a result field, rename a field, or change the return type:
+
+```ts
+export interface CommandSpec {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  timeoutMs: number;
+}
+
+export interface CommandResult {
+  command: CommandSpec;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+export function runCommand(spec: CommandSpec): Promise<CommandResult>;
+```
+
+The implementation and tests must additionally prove all of the following:
+
+- Every process is launched with `shell: false`, an argv array, an explicit contained cwd, and deterministic executable resolution. A `.cmd` command is resolved through an explicit platform rule rather than shell interpolation; a literal argument containing metacharacters is never re-parsed as syntax.
+- `timeoutMs` is validated as a finite positive integer no greater than 900000 milliseconds. The cwd is realpath-checked and contained by the caller-provided workspace before spawn.
+- `error`, `exit`, `close`, timeout, output overflow, and cleanup races share one settlement gate. A result is settled once only, and `close` is the completion event after all bounded cleanup has been confirmed.
+- Unix timeout cleanup uses an operation-owned process group with bounded graceful and forced phases. Windows timeout cleanup uses direct `taskkill.exe` argv for the descendant tree, also with bounded graceful and forced phases. Completion before confirmed descendant cleanup is forbidden.
+- A spawn failure, output-limit failure, or unconfirmed cleanup is an internal typed runner error. The runner does not add that error to `CommandResult`; each caller maps it to a stable fail-closed diagnostic without leaking a raw exception or platform-specific stack.
+- UTF-8 stdout and stderr capture is bounded to 1048576 bytes per stream. Overflow terminates the owned process tree, waits for confirmed cleanup, and rejects with the typed output-limit failure. Normal exit and confirmed timeout cleanup resolve the locked `CommandResult` shape.
+- Focused tests cover normal exit, non-zero exit, literal metacharacters, missing executable, spawn failure, bounded timeout, a child that spawns a child, a SIGTERM-resistant child, descendant cleanup failure, output flood, signal/close races, and platform-appropriate process-tree behavior. Windows evidence must not be described as Linux evidence and Linux-only evidence must not be used to claim Windows behavior.
+
+### T0_PATH_POLICY_CANONICAL — host-independent paths and allow-only globs
+
+Path validation is a lexical contract independent of the host OS. Normalize only after validation of the raw string and use POSIX separators for the canonical representation. Reject empty paths, NUL and all control characters, absolute paths, drive-absolute paths, drive-relative forms such as `C:answer.js`, UNC roots, device roots, `.` and `..` segments, empty segments created by repeated separators, reserved DOS device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, and `LPT1`–`LPT9`, case-insensitive), trailing dots or spaces, colon aliases, and any segment whose realpath or reparse-point resolution escapes the declared root. A path that is lexically safe but resolves through a symlink, junction, mount, or case-folded alias outside the root is unsafe.
+
+Editable patterns are an allow-only grammar rooted beneath a declared learner directory. Literal segments, `*`, `?`, and a narrowly prefix-rooted recursive suffix such as `src/**` are permitted. Negation (`!`), braces, extglobs, unrooted global `**`, mixed allow/negate sets, absolute roots, and patterns that can match a parent or sibling directory are invalid. Every candidate is normalized and containment-checked before matching. Tests cover Windows drive, drive-relative, UNC, device, control, reserved-name, trailing-dot/space, dot-segment, symlink/junction/reparse, case-alias, recursive-suffix, and glob-bypass cases.
+
+### T0_WORKSPACE_LIFECYCLE — non-destructive materialization and reopen
+
+Source, staging, output, manifest, enumeration, and command-cwd boundaries are realpath- and reparse-safe. A missing target may be materialized. An existing valid workspace is reopened without replacing learner files. An existing invalid workspace or a non-empty unknown target is an error; it is never recursively deleted and never silently replaced.
+
+Materialization validates the source and output parents, creates an operation-owned sibling staging directory, copies only the allowlisted starter/open-test regular files without dereferencing links, writes and validates the staging manifest, and atomically promotes the staging directory when the filesystem supports the operation. On every failure path, cleanup may remove only the staging directory owned by that operation. Existing learner content remains byte-for-byte preserved when staging, validation, promotion, or cleanup fails. Tests cover an existing output, partial copy, rollback, failed promotion, source/output aliases, and junction/symlink/reparse attacks.
+
+### T0_AUTHORITATIVE_BASELINE — fresh source truth and learner persistence
+
+A learner workspace manifest is provenance/cache evidence, never the sole truth. On every open or verify, derive an authoritative protected-file manifest freshly from the trusted exercise source, strictly validate schema version, exercise identity, exercise version, normalized unique paths, byte counts, and hashes, and compare it to the workspace manifest. Fail closed on tampering, replayed manifests, deletion, addition, modification, rename, duplicate path, case alias, or symlink/reparse alias. Baseline mode always uses a fresh disposable materialization; learner mode reopens persistent state and never overwrites learner files.
+
+### T0_PUBLIC_VERIFIER_SURFACES — independent starter and stable CLI
+
+The public workspace materializes starter code, open tests, and the owned package/test harness only. Solutions, walkthroughs, and hints never enter learner materialization. Every learner workspace exposes `pnpm verify`; baseline infrastructure verification is a separate internal mode, and the same learner verifier must fail the starter for the intended reason and pass an overlaid reference solution automatically. The closure exercise must include an edge/negative case and enforce its declared forbidden dependencies/APIs or remove those unenforced fields from the metadata example.
+
+The import-safe machine entry point is:
+
+```text
+pnpm exec tsx tooling/verify-exercise/src/main.ts <exercise-root> <workspace> <baseline|learner> --json
+```
+
+Machine mode emits exactly one JSON value on stdout, emits no pnpm lifecycle noise, owns its stderr explicitly, and uses stable exits: `0` for passed verification, `1` for expected validation/verification failure, `2` for usage failure, and `3` for internal failure. The human wrapper remains the public root script `exercise:verify` and may render readable diagnostics; CI and machine parsers use the direct command above, not lifecycle output. Missing, existing-valid, existing-invalid, and non-empty-unknown workspaces each have explicit tests and diagnostics.
+
+### T0_EXERCISE_OWNERSHIP — curriculum closure and documentation map
+
+Task 5 binds the real exercise through the existing curriculum ownership surfaces: the closure lesson's `exercises` reference and the closure assessment's `artifact` reference. The orchestration/tooling adapter validates those references and the exercise contract without reversing dependencies into curriculum domain packages. Task 5 creates and link-checks these future tracked documentation paths: `docs/authoring/exercises.md`, `docs/learner/exercise-workflow.md`, and `docs/maintainers/verifier-failures.md`. `docs/authoring/remediation.md` remains WP-06 deferred and must not be created or claimed by WP-05; WP-07-owned template-publication documentation remains out of scope.
+
+Canonical ownership fields are the lesson exercises reference and the assessment artifact reference.
+
+The Task 5 evidence matrix must cover invalid YAML/schema, unsafe cwd/path/glob, source and workspace reparse/case aliases, existing output, partial copy/rollback, corrupt/tampered/replayed baseline, protected add/delete/modify/rename, solution exclusion, intended starter failure, the closure edge case, automated reference-solution pass, spawn/cleanup/output failures, strict CLI usage/stream/exit behavior, and internal errors. Every diagnostic links to the correct authoring, learner, or maintainer document.
+
+### Amendment verification and future-task handoff
+
+Each future task file map must name every file it creates or modifies, its focused test command, its broader verification command, and a commit command containing only that task's owned paths. The root catalog/lockfile changes are future Task 1/2 implementation work, not this documentation commit. Before the WP-05 checkpoint, run the focused contract probes, strict UTF-8/LF/no-BOM checks, formatting, `git diff --check`, package-local checks/tests, `pnpm check`, and the relevant `pnpm verify`/exercise verifier commands required by the task. Do not claim the deferred WP-06 tasks are implemented or verified from WP-05 evidence.
+
 ---
 
 ## File map
@@ -172,21 +268,23 @@ export type EvidenceAttestations = readonly EvidenceTrustLevel[];
 - Create: `packages/command-runner/src/index.ts`
 - Create: `packages/command-runner/test/run-command.test.ts`
 - Modify: `pnpm-workspace.yaml`
-- Modify: `vitest.config.ts`
+- Modify: `pnpm-lock.yaml`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: shared `CommandSpec` and `CommandResult` names from the master plan
 - Produces: `runCommand(spec: CommandSpec): Promise<CommandResult>`
 
-- [ ] **Step 1: Add exact `cross-spawn` and type packages to the root catalog**
+- [ ] **Step 1: Register exact `cross-spawn` dependencies through the catalog**
 
-Run from the repository root:
+In the future Task 1 implementation, add this exact catalog entry to `pnpm-workspace.yaml`, keep the package dependency package-local, and update `pnpm-lock.yaml` from the resulting manifests:
 
-```bash
-pnpm add -Dw --save-exact cross-spawn @types/cross-spawn
+```yaml
+catalog:
+  cross-spawn: 7.0.6
 ```
 
-Move the exact selected versions into the root `catalog` and use `catalog:` in the package below.
+The package manifest below must use `cross-spawn: catalog:`. Keep `@types/cross-spawn` package-local and catalog-pinned only if the strict package check proves it is required. Do not run a root dependency-install shortcut; the catalog, package manifest, and lockfile are the owned Task 1 changes and must be reviewed together.
 
 - [ ] **Step 2: Create the package manifest and a failing success-path test**
 
@@ -252,89 +350,24 @@ pnpm --filter @roadmap/command-runner test
 
 Expected: FAIL because `../src/index.js` does not exist.
 
-- [ ] **Step 4: Implement the shared types and a two-stage timeout runner**
+- [ ] **Step 4: Implement the locked interfaces and single-settlement process-tree runner**
+
+Implement `packages/command-runner/src/run-command.ts` with the exact `CommandSpec`, `CommandResult`, and `runCommand(spec: CommandSpec): Promise<CommandResult>` declarations in the OW0002 contract above. The implementation must validate the spec and realpath-contained cwd before spawning, resolve `.cmd` commands through the documented deterministic platform rule, and launch only this shape:
 
 ```ts
-// packages/command-runner/src/run-command.ts
-import spawn from 'cross-spawn';
-
-export interface CommandSpec {
-  command: string;
-  args: readonly string[];
-  cwd: string;
-  timeoutMs: number;
-}
-
-export interface CommandResult {
-  command: CommandSpec;
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-  timedOut: boolean;
-  stdout: string;
-  stderr: string;
-  durationMs: number;
-}
-
-const FORCE_KILL_GRACE_MS = 500;
-
-export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
-  const startedAt = performance.now();
-
-  return await new Promise((resolve, reject) => {
-    const child = spawn(spec.command, [...spec.args], {
-      cwd: spec.cwd,
-      env: process.env,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    let closed = false;
-    let forceKill: NodeJS.Timeout | undefined;
-
-    child.stdout?.setEncoding('utf8');
-    child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr?.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
-
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-      forceKill = setTimeout(() => {
-        if (!closed) child.kill('SIGKILL');
-      }, FORCE_KILL_GRACE_MS);
-    }, spec.timeoutMs);
-
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      if (forceKill) clearTimeout(forceKill);
-      reject(error);
-    });
-
-    child.once('close', (exitCode, signal) => {
-      closed = true;
-      clearTimeout(timeout);
-      if (forceKill) clearTimeout(forceKill);
-      resolve({
-        command: spec,
-        exitCode,
-        signal,
-        timedOut,
-        stdout,
-        stderr,
-        durationMs: Math.round(performance.now() - startedAt),
-      });
-    });
-  });
-}
+const child = spawn(spec.command, [...spec.args], {
+  cwd: validatedCwd,
+  env: process.env,
+  shell: false,
+  stdio: ['ignore', 'pipe', 'pipe'],
+  windowsHide: true,
+  detached: process.platform !== 'win32',
+});
 ```
+
+Capture UTF-8 output through a byte-counted `appendBounded` helper with a 1048576-byte limit per stream. Use one `settleOnce` gate with explicit `closed`, `cleanupConfirmed`, `timedOut`, and `failure` state. The `error` event rejects a typed spawn failure; `exit` records status; `close` is observed but cannot resolve until descendant cleanup is confirmed; timeout and output overflow call the platform-specific tree terminator; and every timer/listener is cleared by the one settlement path. A normal close or confirmed timeout resolves the unchanged `CommandResult`; a spawn, output-limit, or cleanup-confirmation failure rejects a typed internal runner error.
+
+The Unix terminator targets the detached process group with bounded graceful and forced phases. The Windows terminator invokes `taskkill.exe` with direct argv `['/PID', String(pid), '/T']`, waits for the bounded grace period, then uses `['/PID', String(pid), '/T', '/F']` if the tree remains alive. A final bounded liveness check must succeed before `cleanupConfirmed` becomes true. No implementation may use shell interpolation, recursive workspace deletion, unbounded output accumulation, or a result shape that hides an internal failure.
 
 - [ ] **Step 5: Add failure, literal-argument, missing-command, timeout, and forced-termination tests**
 
@@ -384,6 +417,8 @@ it('does not leave a child alive when it installs a SIGTERM handler', async () =
 
 The last test is cross-platform: Unix exercises the grace-period escalation, while Windows may terminate on the first signal. Both environments must prove the process is gone before the promise resolves.
 
+Also add real-process tests for a child that spawns a grandchild (the grandchild must be gone before the promise resolves), a child that floods stdout/stderr (the typed output-limit failure must be stable and bounded), a cleanup path whose confirmation fails (the promise must reject rather than resolve a partial result), and an `error`/`exit`/`close` race (the promise must settle exactly once). Keep the Windows tree assertions separate from the Unix process-group assertions; neither platform's evidence may be generalized to the other.
+
 - [ ] **Step 6: Run package checks and commit**
 
 Run:
@@ -393,12 +428,12 @@ pnpm --filter @roadmap/command-runner check
 pnpm --filter @roadmap/command-runner test
 ```
 
-Expected: PASS with six tests.
+Expected: PASS with the success, failure, literal-argument, spawn, timeout, descendant, output-limit, cleanup, race, and platform-appropriate tests.
 
 Commit:
 
 ```bash
-git add pnpm-workspace.yaml pnpm-lock.yaml vitest.config.ts packages/command-runner
+git add pnpm-workspace.yaml pnpm-lock.yaml packages/command-runner
 git commit -m "feat: add shell-free command runner"
 ```
 
@@ -415,19 +450,23 @@ git commit -m "feat: add shell-free command runner"
 - Create: `packages/exercise-contract/test/schema.test.ts`
 - Create: `packages/exercise-contract/test/paths.test.ts`
 - Modify: `pnpm-workspace.yaml`
-- Modify: `vitest.config.ts`
+- Modify: `pnpm-lock.yaml`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: `CommandSpec`, competency/artifact ID conventions, and `Diagnostic`
 - Produces: `ExerciseDefinitionSchema`, `ExerciseDefinition`, `normalizeRelativePath`, `isSafeRelativePath`, and `matchesEditablePath`
 
-- [ ] **Step 1: Add exact `picomatch` packages to the catalog and create the package manifest**
+- [ ] **Step 1: Register exact `picomatch` dependencies through the catalog and create the package manifest**
 
-Run:
+In the future Task 2 implementation, add this exact catalog entry to `pnpm-workspace.yaml`, keep the package dependency package-local, and update `pnpm-lock.yaml` from the resulting manifests:
 
-```bash
-pnpm add -Dw --save-exact picomatch @types/picomatch
+```yaml
+catalog:
+  picomatch: 4.0.5
 ```
+
+The package manifest below must use `picomatch: catalog:`. Keep `@types/picomatch` package-local and catalog-pinned only if the strict package check proves it is required. Do not run a root dependency-install shortcut; the catalog, package manifest, and lockfile are the owned Task 2 changes and must be reviewed together.
 
 ```json
 {
@@ -538,13 +577,20 @@ describe('exercise path rules', () => {
     expect(normalizeRelativePath(input)).toBe('src/counter.js');
   });
 
-  it.each(['../secret', '/absolute', 'C:\\secret', 'src/../../secret', ''])('rejects unsafe relative path %s', (input) => {
+  it.each([
+    '../secret', '/absolute', 'C:\\secret', 'C:secret', '\\\\server\\share\\secret', '\\\\?\\C:\\secret',
+    'src/../../secret', 'src//secret', 'src/./secret', 'src/CON.txt', 'src/file. ', 'src/file.\\t', '\u0000secret', '',
+  ])('rejects unsafe relative path %s', (input) => {
     expect(isSafeRelativePath(input)).toBe(false);
   });
 
   it('matches editable globs after normalization', () => {
     expect(matchesEditablePath('src\\counter.js', ['src/**'])).toBe(true);
     expect(matchesEditablePath('test/counter.test.js', ['src/**'])).toBe(false);
+  });
+
+  it.each(['**', '!src/**', '{src,test}/**', 'src/@(counter|answer).js', 'src/**/../secret'])('rejects non-allow-only pattern %s', (pattern) => {
+    expect(matchesEditablePath('src/counter.js', [pattern])).toBe(false);
   });
 });
 ```
@@ -633,24 +679,43 @@ export type ExerciseCommandDefinition = ExerciseDefinition['commands']['baseline
 
 ```ts
 // packages/exercise-contract/src/paths.ts
-import path from 'node:path';
 import picomatch from 'picomatch';
 
+const CONTROL_OR_NUL = `[\\u0000-\\u001f\\u007f]`;
+const RESERVED_DOS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i;
+
 export function normalizeRelativePath(input: string): string {
-  return input.replaceAll('\\', '/').replace(/^\.\//, '');
+  return input.replaceAll('\\', '/');
 }
 
 export function isSafeRelativePath(input: string): boolean {
-  if (input.length === 0 || path.isAbsolute(input) || /^[A-Za-z]:[\\/]/.test(input)) return false;
+  if (input.length === 0 || new RegExp(CONTROL_OR_NUL).test(input)) return false;
+  if (/^[A-Za-z]:/.test(input) || /^(?:\\\\|\\/\\/)/.test(input) || input.startsWith('/') || input.startsWith('\\')) return false;
   const normalized = normalizeRelativePath(input);
-  if (normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) return false;
-  return normalized !== '.';
+  const segments = normalized.split('/');
+  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) return false;
+  if (segments.some((segment) => /[. ]$/.test(segment) || RESERVED_DOS_NAME.test(segment))) return false;
+  return true;
+}
+
+function isAllowOnlyPattern(pattern: string): boolean {
+  if (!isSafeRelativePath(pattern)) return false;
+  if (pattern.startsWith('!') || /[{}]/.test(pattern) || /(?:^|[\\/])[!@+?*][(]/.test(pattern)) return false;
+  const segments = normalizeRelativePath(pattern).split('/');
+  if (segments.length < 2 && segments[0] === '**') return false;
+  if (segments.slice(0, -1).some((segment) => segment.includes('**'))) return false;
+  return segments[segments.length - 1] !== '**' || segments.length > 1;
 }
 
 export function matchesEditablePath(candidate: string, patterns: readonly string[]): boolean {
   if (!isSafeRelativePath(candidate)) return false;
   const normalized = normalizeRelativePath(candidate);
-  return patterns.some((pattern) => isSafeRelativePath(pattern) && picomatch(pattern, { dot: true })(normalized));
+  return patterns.some((pattern) => isAllowOnlyPattern(pattern) && picomatch(pattern, {
+    dot: true,
+    nonegate: true,
+    nobrace: true,
+    noext: true,
+  })(normalized));
 }
 ```
 
@@ -675,7 +740,7 @@ Expected: PASS with all schema and path cases.
 Commit:
 
 ```bash
-git add pnpm-workspace.yaml pnpm-lock.yaml vitest.config.ts packages/exercise-contract
+git add pnpm-workspace.yaml pnpm-lock.yaml packages/exercise-contract
 git commit -m "feat: define safe exercise contracts"
 ```
 
@@ -693,7 +758,7 @@ git commit -m "feat: define safe exercise contracts"
 - Create: `packages/exercise-runner/test/materialize.test.ts`
 - Create: `packages/exercise-runner/test/open-workspace.test.ts`
 - Create: `fixtures/exercises/valid/minimal/**`
-- Modify: `vitest.config.ts`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: `ExerciseDefinitionSchema`, safe path helpers, `ValidationOutcome<T>`, and YAML parsing selected in WP-02
@@ -798,6 +863,17 @@ describe('openExerciseWorkspace', () => {
     expect(reopened.ok).toBe(false);
     if (!reopened.ok) expect(reopened.diagnostics[0]?.code).toBe('EXERCISE_WORKSPACE_001');
   });
+
+  it('rejects a non-empty unknown workspace without deleting its sentinel file', async () => {
+    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-unknown-output-'));
+    const sentinel = path.join(output, 'do-not-delete.txt');
+    await writeFile(sentinel, 'learner content\n');
+
+    const reopened = await openExerciseWorkspace(fixture, output);
+    expect(reopened.ok).toBe(false);
+    if (!reopened.ok) expect(reopened.diagnostics[0]?.code).toBe('EXERCISE_OUTPUT_002');
+    expect(await readFile(sentinel, 'utf8')).toBe('learner content\n');
+  });
 });
 ```
 
@@ -819,7 +895,8 @@ export function createCounter() {
   "type": "module",
   "scripts": {
     "test:infrastructure": "node --test test/infrastructure.test.js",
-    "test": "node --test"
+    "test": "node --test",
+    "verify": "node --test test/open"
   }
 }
 ```
@@ -957,11 +1034,13 @@ export async function readBaselineManifest(file: string): Promise<ExerciseBaseli
 }
 ```
 
+The reader must also reject duplicate or non-canonical paths, invalid byte counts, malformed lowercase SHA-256 values, missing source identity/version, and any record that is not present in the freshly derived authoritative source manifest. The manifest is cache/provenance evidence and never replaces source-derived protected-file truth.
+
 - [ ] **Step 5: Implement allowlisted materialization and non-destructive workspace reopening**
 
 ```ts
 // packages/exercise-runner/src/materialize.ts
-import { cp, mkdir, readdir, realpath, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeRelativePath } from '@roadmap/exercise-contract';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
@@ -1022,22 +1101,30 @@ export async function materializeExercise(
     }]);
   }
 
+  let stagingRoot: string | undefined;
   try {
+    stagingRoot = await mkdtemp(path.join(
+      path.dirname(resolvedOutput),
+      `.roadmap-stage-${path.basename(resolvedOutput)}-`,
+    ));
+    const outputState = await inspectOutputState(resolvedOutput);
+    if (outputState !== 'missing') {
+      throw new Error(`EXERCISE_OUTPUT_002: refusing to replace ${outputState} output`);
+    }
     await listRegularFiles(starterRoot);
     await listRegularFiles(openTestsRoot);
-    await rm(resolvedOutput, { recursive: true, force: true });
-    await mkdir(resolvedOutput, { recursive: true });
-    await cp(starterRoot, resolvedOutput, { recursive: true, dereference: false });
-    await cp(openTestsRoot, path.join(resolvedOutput, 'test', 'open'), {
+    await mkdir(stagingRoot, { recursive: true });
+    await cp(starterRoot, stagingRoot, { recursive: true, dereference: false });
+    await cp(openTestsRoot, path.join(stagingRoot, 'test', 'open'), {
       recursive: true,
       dereference: false,
     });
 
-    const files = await listRegularFiles(resolvedOutput);
+    const files = await listRegularFiles(stagingRoot);
     const records = await Promise.all(
-      files.map((file) => hashFile(path.join(resolvedOutput, file), file)),
+      files.map((file) => hashFile(path.join(stagingRoot, file), file)),
     );
-    const metadataRoot = path.join(resolvedOutput, '.roadmap');
+    const metadataRoot = path.join(stagingRoot, '.roadmap');
     await mkdir(metadataRoot, { recursive: true });
     const baselineManifestPath = path.join(metadataRoot, 'exercise-baseline.json');
     await writeBaselineManifest(baselineManifestPath, {
@@ -1046,12 +1133,21 @@ export async function materializeExercise(
       exerciseVersion: loaded.value.version,
       files: records,
     });
-    return success({ exerciseId: loaded.value.id, root: resolvedOutput, baselineManifestPath });
+    await validateAuthoritativeManifest(stagingRoot, sourceRoot, loaded.value);
+    await rename(stagingRoot, resolvedOutput);
+    return success({
+      exerciseId: loaded.value.id,
+      root: resolvedOutput,
+      baselineManifestPath: path.join(resolvedOutput, '.roadmap', 'exercise-baseline.json'),
+    });
   } catch (error) {
+    if (stagingRoot) await rm(stagingRoot, { recursive: true, force: true });
     return pathFailure(sourceRoot, error);
   }
 }
 ```
+
+`inspectOutputState` must classify the target as missing, matching-valid, invalid, or non-empty-unknown without deleting it. `validateAuthoritativeManifest` must derive protected-file truth from the trusted source, reject reparse aliases, and compare normalized unique paths, bytes, hashes, exercise identity, and version before `rename` promotes the operation-owned sibling stage. The catch block may remove only the stage created by this invocation; it must preserve every pre-existing learner file.
 
 ```ts
 // packages/exercise-runner/src/open-workspace.ts
@@ -1079,18 +1175,16 @@ export async function openExerciseWorkspace(
 
   try {
     const baseline = await readBaselineManifest(baselineManifestPath);
-    if (
-      baseline.exerciseId !== definition.value.id ||
-      baseline.exerciseVersion !== definition.value.version
-    ) {
+    const authoritative = await deriveAuthoritativeManifest(sourceRoot, definition.value);
+    if (!manifestsMatchExactly(baseline, authoritative)) {
       return failure([{
         code: 'EXERCISE_WORKSPACE_001',
         severity: 'error',
         location: { file: baselineManifestPath },
         observed: `${baseline.exerciseId}@${baseline.exerciseVersion}`,
-        expected: `${definition.value.id}@${definition.value.version}`,
-        reason: 'The existing learner workspace belongs to a different exercise contract',
-        remediation: 'Choose another workspace or explicitly remove the existing directory',
+        expected: `${authoritative.exerciseId}@${authoritative.exerciseVersion} with identical protected paths and hashes`,
+        reason: 'The existing learner workspace manifest is not authoritative for the trusted exercise source',
+        remediation: 'Move learner files aside and reopen a fresh workspace after repairing the manifest',
         documentation: 'docs/learner/exercise-workflow.md',
       }]);
     }
@@ -1165,7 +1259,7 @@ pnpm --filter @roadmap/exercise-runner test
 Commit:
 
 ```bash
-git add vitest.config.ts packages/exercise-runner fixtures/exercises
+git add packages/exercise-runner fixtures/exercises
 git commit -m "feat: materialize persistent exercise workspaces"
 ```
 
@@ -1346,6 +1440,8 @@ describe('verifyExercise', () => {
 });
 ```
 
+Add focused cases for tampered and replayed manifests, protected deletion, addition, rename, case alias, and reparse alias. Each case must fail before `runCommand` is called and must retain the stable diagnostic location and remediation.
+
 - [ ] **Step 4: Implement protected-path verification, contained working directories, and command composition**
 
 ```ts
@@ -1455,6 +1551,8 @@ export async function verifyExercise(
 }
 ```
 
+When `runCommand` rejects a typed spawn, output-limit, or cleanup error, `verifyExercise` must convert it to a stable `EXERCISE_COMMAND_003`/`EXERCISE_COMMAND_004`/`EXERCISE_COMMAND_005` diagnostic with the step pointer and remediation, never the raw error text. Only an unexpected verifier crash becomes `EXERCISE_INTERNAL_001`; all of these mappings remain fail closed and are covered by the Task 4 tests.
+
 - [ ] **Step 5: Export, verify, and commit**
 
 Add these exports to `packages/exercise-runner/src/index.ts`:
@@ -1488,8 +1586,13 @@ git commit -m "feat: verify protected exercise workspaces"
 - Create: `tooling/verify-exercise/vitest.config.ts`
 - Create: `tooling/verify-exercise/src/main.ts`
 - Create: `tooling/verify-exercise/test/cli.test.ts`
+- Create: `docs/authoring/exercises.md`
+- Create: `docs/learner/exercise-workflow.md`
+- Create: `docs/maintainers/verifier-failures.md`
+- Modify: `curriculum/lessons/lesson-js-closure-private-state.md`
+- Modify: `curriculum/assessments/assessment-js-closure.md`
 - Modify: `package.json`
-- Modify: `vitest.config.ts`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: exercise loader, persistent workspace opener, verifier, and progressive-hint contract
@@ -1596,6 +1699,8 @@ test('each counter preserves independent private state', () => {
 
 The materializer copies this open test to `test/open/counter.contract.test.js`. It remains protected by the baseline manifest and fails for the intended missing implementation.
 
+Bind this exercise through the existing curriculum ownership surfaces in the same future Task 5 implementation: add the exercise reference to `curriculum/lessons/lesson-js-closure-private-state.md` and the artifact reference to `curriculum/assessments/assessment-js-closure.md`. The orchestration/tooling adapter must validate that both references resolve to `ex-js-closure-counter` without adding curriculum-package dependencies to `exercise-runner`. Keep `forbiddenDependencies` and `forbiddenApis` only when the verifier enforces them with a focused negative test; otherwise remove those fields from the metadata contract rather than publishing unenforced claims.
+
 - [ ] **Step 3: Author three genuinely progressive hints**
 
 `hints/01-concept.md`:
@@ -1687,29 +1792,66 @@ describe('verify-exercise CLI', () => {
 
 ```ts
 // tooling/verify-exercise/src/main.ts
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { loadExercise, openExerciseWorkspace, verifyExercise } from '@roadmap/exercise-runner';
 
-const [sourceArg, workspaceArg, modeArg, formatArg] = process.argv.slice(2);
-if (!sourceArg || !workspaceArg || (modeArg !== 'baseline' && modeArg !== 'learner')) {
-  console.error('Usage: verify-exercise <exercise-root> <workspace> <baseline|learner> [--json]');
-  process.exitCode = 2;
-} else {
-  const source = resolve(sourceArg);
-  const workspaceRoot = resolve(workspaceArg);
-  const definition = await loadExercise(source);
-  const workspace = await openExerciseWorkspace(source, workspaceRoot);
-  if (!definition.ok || !workspace.ok) {
-    const diagnostics = [...definition.diagnostics, ...workspace.diagnostics];
-    console.error(formatArg === '--json' ? JSON.stringify({ status: 'invalid', diagnostics }) : diagnostics);
-    process.exitCode = 1;
-  } else {
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  const [sourceArg, workspaceArg, modeArg, ...formatArgs] = argv;
+  const machine = formatArgs.length === 1 && formatArgs[0] === '--json';
+  const validFormat = formatArgs.length === 0 || machine;
+  if (!sourceArg || !workspaceArg || (modeArg !== 'baseline' && modeArg !== 'learner') || !validFormat) {
+    return emit({ status: 'usage-error', message: 'Usage: verify-exercise <exercise-root> <workspace> <baseline|learner> [--json]' }, machine, 2);
+  }
+
+  try {
+    const source = path.resolve(sourceArg);
+    const workspaceRoot = path.resolve(workspaceArg);
+    const definition = await loadExercise(source);
+    const workspace = await openExerciseWorkspace(source, workspaceRoot);
+    if (!definition.ok || !workspace.ok) {
+      const diagnostics = [
+        ...(definition.ok ? [] : definition.diagnostics),
+        ...(workspace.ok ? [] : workspace.diagnostics),
+      ];
+      return emit({ status: 'invalid', diagnostics }, machine, 1);
+    }
     const report = await verifyExercise(definition.value, workspace.value, modeArg);
-    console.log(formatArg === '--json' ? JSON.stringify(report) : report);
-    process.exitCode = report.status === 'passed' ? 0 : 1;
+    return emit(report, machine, report.status === 'passed' ? 0 : 1);
+  } catch (error) {
+    return emit({
+      status: 'internal-error',
+      diagnostics: [{
+        code: 'EXERCISE_INTERNAL_001',
+        severity: 'error',
+        location: { file: workspaceArg },
+        observed: 'The verifier failed before it could produce a report',
+        expected: 'A stable exercise verification report',
+        reason: 'The exercise verifier encountered an internal failure',
+        remediation: 'Report the failure without exposing the raw exception',
+        documentation: 'docs/maintainers/verifier-failures.md',
+      }],
+    }, machine, 3);
   }
 }
+
+function emit(value: unknown, machine: boolean, exitCode: number): number {
+  if (machine) console.log(JSON.stringify(value));
+  else if (exitCode === 0) console.log(formatHuman(value));
+  else console.error(formatHuman(value));
+  return exitCode;
+}
+
+function formatHuman(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await main();
+}
 ```
+
+The module must be import-safe: importing it must not parse argv, spawn a process, write lifecycle noise, or terminate the caller. Machine mode writes exactly one JSON value to stdout and no raw exception to stderr; human mode is the only mode that formats readable diagnostics. `emit` is the sole output path so usage, expected validation failure, and internal failure retain exits `2`, `1`, and `3` respectively.
 
 - [ ] **Step 7: Wire the root script and prove baseline passes while learner mode fails**
 
@@ -1724,30 +1866,39 @@ if (!sourceArg || !workspaceArg || (modeArg !== 'baseline' && modeArg !== 'learn
 Run from a clean `.tmp/exercise` path:
 
 ```bash
-pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise baseline --json
-pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/exercise baseline --json
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
+pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise baseline
 ```
 
-Expected: baseline exits `0`; learner exits `1` with `EXERCISE_COMMAND_001` because the starter intentionally has no learner implementation.
+Expected: the direct machine baseline exits `0` with one JSON value; the direct machine learner exits `1` with `EXERCISE_COMMAND_001` because the starter intentionally has no learner implementation; the human wrapper prints readable output without being used as a machine parser. Add focused tests for usage exit `2`, internal exit `3`, empty/owned stderr, one-value stdout, missing targets, valid reopens, invalid manifests, non-empty unknown targets, and reference-solution overlay.
 
 - [ ] **Step 8: Install the reference source only in the temporary workspace and prove learner mode passes**
 
 ```bash
 node --input-type=module --eval "import { copyFile } from 'node:fs/promises'; await copyFile('exercises/javascript/ex-js-closure-counter/solution/src/counter.js', '.tmp/exercise/src/counter.js')"
-pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
 ```
 
 Expected: exit `0`, status `passed`, and the CLI does not replace the copied implementation before verification.
 
+The integration test must perform this reference overlay automatically in its temporary workspace and invoke the same learner verifier used for the starter assertion; a separate reference-only verifier or a manually inspected result is not sufficient.
+
 Commit:
 
 ```bash
-git add exercises/javascript/ex-js-closure-counter tooling/verify-exercise package.json vitest.config.ts
+git add exercises/javascript/ex-js-closure-counter tooling/verify-exercise package.json docs/authoring/exercises.md docs/learner/exercise-workflow.md docs/maintainers/verifier-failures.md
 git commit -m "feat: add progressive closure exercise workflow"
 ```
 
+### WP-05 exercise-only acceptance gate — `WP05_ONLY_EXECUTION_BOUNDARY`
 
-### Task 6: Define criterion-based rubrics and evaluation
+Before leaving WP-05, run the direct machine baseline and learner commands, verify the starter's intended failure, overlay the reference solution and rerun the identical learner verifier, check the edge/negative case, confirm protected-file and non-destructive workspace behavior, and link-check the three WP-05 authoring/learner/maintainer documents. This gate does not evaluate rubrics, evidence trust, remediation, or any other WP-06 concern.
+
+
+### Task 6: Define criterion-based rubrics and evaluation — `WP06_DEFERRED_NOT_AUTHORIZED`
+
+> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
 
 **Files:**
 - Create: `packages/rubric-schema/package.json`
@@ -1757,7 +1908,7 @@ git commit -m "feat: add progressive closure exercise workflow"
 - Create: `packages/rubric-schema/src/evaluate.ts`
 - Create: `packages/rubric-schema/src/index.ts`
 - Create: `packages/rubric-schema/test/rubric.test.ts`
-- Modify: `vitest.config.ts`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: stable criterion IDs and explicit evidence references
@@ -1968,11 +2119,13 @@ pnpm --filter @roadmap/rubric-schema test
 Commit:
 
 ```bash
-git add vitest.config.ts packages/rubric-schema
+git add packages/rubric-schema
 git commit -m "feat: evaluate critical rubric criteria"
 ```
 
-### Task 7: Define versioned evidence with independent trust attestations
+### Task 7: Define versioned evidence with independent trust attestations — `WP06_DEFERRED_NOT_AUTHORIZED`
+
+> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
 
 **Files:**
 - Create: `packages/evidence-schema/package.json`
@@ -1982,7 +2135,7 @@ git commit -m "feat: evaluate critical rubric criteria"
 - Create: `packages/evidence-schema/src/trust.ts`
 - Create: `packages/evidence-schema/src/index.ts`
 - Create: `packages/evidence-schema/test/evidence.test.ts`
-- Modify: `vitest.config.ts`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: curriculum, template, milestone, and immutable repository versions
@@ -2207,12 +2360,14 @@ pnpm --filter @roadmap/evidence-schema test
 Commit:
 
 ```bash
-git add vitest.config.ts packages/evidence-schema
+git add packages/evidence-schema
 git commit -m "feat: validate independent evidence attestations"
 ```
 
 
-### Task 8: Map failed rubric criteria to deterministic remediation
+### Task 8: Map failed rubric criteria to deterministic remediation — `WP06_DEFERRED_NOT_AUTHORIZED`
+
+> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
 
 **Files:**
 - Create: `packages/assessment-core/package.json`
@@ -2223,7 +2378,7 @@ git commit -m "feat: validate independent evidence attestations"
 - Create: `packages/assessment-core/src/index.ts`
 - Create: `packages/assessment-core/test/assessment.test.ts`
 - Create: `fixtures/assessment/closure-counter-remediation.yaml`
-- Modify: `vitest.config.ts`
+- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: `RubricEvaluation`, competency IDs, and remediation metadata
@@ -2438,41 +2593,45 @@ pnpm test
 Commit:
 
 ```bash
-git add vitest.config.ts packages/assessment-core fixtures/assessment
+git add packages/assessment-core fixtures/assessment
 git commit -m "feat: produce criterion-level remediation"
 ```
 
-## WP-05–06 exit gate
+## WP-05 exit gate — `WP05_ONLY_EXECUTION_BOUNDARY`
 
 Run from a fresh clone:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
-pnpm test
-pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise baseline --json
+pnpm verify
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/exercise baseline --json
 ```
 
 Then run learner mode and require the expected non-zero result:
 
 ```bash
-pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/exercise learner --json
 ```
 
 Acceptance evidence must prove:
 
 - Metadata cannot inject shell operators
-- Timeout and missing-command paths fail deterministically
+- Timeout, missing-command, spawn, descendant-cleanup, output-limit, and race paths fail deterministically without raw exception leakage
+- Canonical host-independent path and allow-only glob rules reject drive, UNC, device, control, reserved-name, alias, traversal, and negation/bypass inputs
+- Existing unknown/non-empty output is preserved and rejected; owned sibling staging rolls back without deleting learner content
 - Starter materialization excludes `solution/`
-- Baseline verification passes on incomplete learner work
+- A fresh authoritative baseline is compared on every open/verify, while baseline mode remains disposable and learner mode never overwrites persistent files
+- Baseline infrastructure verification passes on incomplete learner work
 - Learner verification fails for the intended missing implementation
-- Reference solution passes the same learner verifier
-- Protected-file modification is rejected
-- A critical rubric score below `2` blocks completion regardless of other scores
-- Evidence manifests pin immutable commits and explicit, independent trust attestations
-- Missing remediation for a blocking criterion is an error
-- The package graph has no dependency on `apps/docs`
+- The same learner `pnpm verify` verifier fails the starter, passes the overlaid reference solution, and covers an edge/negative case
+- Protected add/delete/modify/rename and reparse-alias changes are rejected before command execution
+- The closure lesson `exercises` reference and closure assessment `artifact` reference resolve through the orchestration adapter
+- The three WP-05 authoring/learner/maintainer documents exist and are link-checked; remediation documentation remains WP-06 deferred
+- The direct machine CLI emits one JSON value on stdout with stable exits and the human root wrapper remains readable
 
-## Checkpoint
+Do not run or claim Tasks 6–8 from this gate. Their rubric, evidence, remediation, and Task 8 YAML consumer remain `WP06_DEFERRED_NOT_AUTHORIZED` reference material for the later WP-06 owner.
+
+## WP-05 checkpoint
 
 Stop after the exit gate. Request independent test-design review for command execution, protected-path detection, rubric false positives, and evidence trust semantics before starting template publication.

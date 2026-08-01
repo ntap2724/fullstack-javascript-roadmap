@@ -259,9 +259,17 @@ git commit -m "feat: finalize root verification contract"
   { "id": "publication-local-path", "command": "node", "args": ["--import", "tsx", "scripts/ci/scan-publication-fixture.ts", "fixtures/publication/invalid/absolute-local-path"], "expectedDiagnostic": "PUBLICATION_INTERNAL_002" },
   { "id": "publication-private-key", "command": "node", "args": ["--import", "tsx", "scripts/ci/scan-publication-fixture.ts", "fixtures/publication/invalid/secret-private-key"], "expectedDiagnostic": "PUBLICATION_SECRET_001" },
   { "id": "publication-token", "command": "node", "args": ["--import", "tsx", "scripts/ci/scan-publication-fixture.ts", "fixtures/publication/invalid/secret-github-token"], "expectedDiagnostic": "PUBLICATION_SECRET_002" },
-  { "id": "exercise-incomplete", "command": "pnpm", "args": ["exercise:verify", "exercises/javascript/ex-js-closure-counter", ".tmp/negative-exercise", "learner", "--json"], "expectedDiagnostic": "EXERCISE_COMMAND_001" }
+  { "id": "exercise-incomplete", "command": "pnpm", "args": ["exec", "tsx", "tooling/verify-exercise/src/main.ts", "exercises/javascript/ex-js-closure-counter", ".tmp/negative-exercise", "learner", "--json"], "expectedDiagnostic": "EXERCISE_COMMAND_001" }
 ]
 ```
+
+The `exercise-incomplete` fixture deliberately uses the direct machine surface:
+
+```bash
+pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-closure-counter .tmp/negative-exercise learner --json
+```
+
+Its parser must read exactly one JSON value from stdout and preserve the declared `EXERCISE_COMMAND_001` diagnostic. Do not route this CI consumer through the human `exercise:verify` wrapper or treat pnpm lifecycle output as machine JSON; the public root script remains available for human use.
 
 - [ ] **Step 2: Create a scanner CLI that emits one JSON object and a non-zero result**
 
