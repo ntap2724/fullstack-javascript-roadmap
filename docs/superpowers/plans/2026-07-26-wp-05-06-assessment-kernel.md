@@ -805,17 +805,225 @@ git commit -m "feat: define safe exercise contracts"
 - Create: `packages/exercise-runner/vitest.config.ts`
 - Create: `packages/exercise-runner/src/load-exercise.ts`
 - Create: `packages/exercise-runner/src/materialize.ts`
+- Create: `packages/exercise-runner/src/materialization-filesystem.ts`
 - Create: `packages/exercise-runner/src/open-workspace.ts`
+- Create: `packages/exercise-runner/src/workspace-paths.ts`
 - Create: `packages/exercise-runner/src/baseline-manifest.ts`
 - Create: `packages/exercise-runner/src/index.ts`
 - Create: `packages/exercise-runner/test/materialize.test.ts`
+- Create: `packages/exercise-runner/test/materialization-filesystem.test.ts`
 - Create: `packages/exercise-runner/test/open-workspace.test.ts`
 - Create: `fixtures/exercises/valid/minimal/**`
 - Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
 
 **Interfaces:**
 - Consumes: `ExerciseDefinitionSchema`, safe path helpers, `ValidationOutcome<T>`, and YAML parsing selected in WP-02
-- Produces: `loadExercise(sourceRoot)`, `materializeExercise(sourceRoot, outputRoot)`, `openExerciseWorkspace(sourceRoot, outputRoot)`, `ExerciseWorkspace`, and baseline-manifest helpers
+- Produces: `loadExercise(sourceRoot)`, `materializeExercise(sourceRoot, outputRoot)`, `openExerciseWorkspace(sourceRoot, outputRoot)`, `ExerciseWorkspace`, the internal operation adapter, and typed baseline/path helpers
+
+### Task 3/4 internal helper and module map — contract excerpt
+
+The following TypeScript blocks are signature-only contract excerpts, not paste-ready standalone `.ts` bodies. Their implementation bodies are supplied by the named Task 3/4 steps below. Every central symbol used by the displayed Task 3/4 snippets is either defined in its named owner module or imported from that module. These signatures are the implementation contract; implementations must not invent a second ownership model.
+
+```ts
+// packages/exercise-runner/src/baseline-manifest.ts
+import type { ExerciseDefinition } from '@roadmap/exercise-contract';
+import type { Diagnostic } from '@roadmap/validation-core';
+
+export interface BaselineFileRecord {
+  path: string;
+  bytes: number;
+  sha256: string;
+}
+
+export interface ExerciseBaselineManifest {
+  schemaVersion: 1;
+  exerciseId: string;
+  exerciseVersion: string;
+  files: readonly BaselineFileRecord[];
+}
+
+export interface WorkspaceFileManifest {
+  schemaVersion: 1;
+  files: readonly BaselineFileRecord[];
+}
+
+export type ManifestComparisonResult =
+  | { ok: true; changed: readonly string[] }
+  | { ok: false; diagnostics: readonly Diagnostic[] };
+
+export async function hashFile(file: string, relativePath: string): Promise<BaselineFileRecord>;
+export async function writeBaselineManifest(
+  file: string,
+  manifest: ExerciseBaselineManifest,
+): Promise<void>;
+export async function readBaselineManifest(file: string): Promise<ExerciseBaselineManifest>;
+export async function deriveAllowlistedManifest(
+  sourceRoot: string,
+  definition: ExerciseDefinition,
+): Promise<ExerciseBaselineManifest>;
+export async function deriveAuthoritativeManifest(
+  sourceRoot: string,
+  definition: ExerciseDefinition,
+): Promise<ExerciseBaselineManifest>;
+export async function deriveWorkspaceManifest(workspaceRoot: string): Promise<WorkspaceFileManifest>;
+export async function validateAuthoritativeManifest(
+  stageRoot: string,
+  sourceRoot: string,
+  definition: ExerciseDefinition,
+  options: { excludedStagePaths: readonly string[] },
+): Promise<void>;
+export function manifestsMatchExactly(
+  left: ExerciseBaselineManifest,
+  right: ExerciseBaselineManifest,
+): boolean;
+export function compareManifestTriplet(
+  authoritative: ExerciseBaselineManifest,
+  cached: ExerciseBaselineManifest,
+  current: WorkspaceFileManifest,
+  editablePaths: readonly string[],
+): ManifestComparisonResult;
+```
+
+```ts
+// packages/exercise-runner/src/materialization-filesystem.ts
+export type OutputState = 'missing' | 'existing-empty' | 'matching-valid' | 'invalid' | 'non-empty-unknown';
+export type OutputDiagnosticCode = 'EXERCISE_OUTPUT_002' | 'EXERCISE_OUTPUT_003';
+
+export class ExerciseOutputError extends Error {
+  readonly diagnosticCode: OutputDiagnosticCode;
+  readonly cleanupFailures?: readonly CleanupFailureDetail[];
+  constructor(
+    diagnosticCode: OutputDiagnosticCode,
+    message: string,
+    cleanupFailures?: readonly CleanupFailureDetail[],
+  );
+}
+
+export interface CleanupFailureDetail {
+  readonly side: 'stage' | 'reservation';
+  readonly message: string;
+}
+
+export interface OwnedStage {
+  readonly root: string;
+  readonly ownershipToken: string;
+  /** Normalized stage-relative paths for token/control metadata only. */
+  readonly controlPaths: readonly string[];
+}
+
+export interface OwnedReservation {
+  readonly root: string;
+  readonly ownershipToken: string;
+  readonly expectedInventory: readonly string[];
+  /** Normalized target-relative paths for token/control metadata only. */
+  readonly controlPaths: readonly string[];
+}
+
+export interface OwnedCleanupOptions {
+  readonly requireOwnershipToken: true;
+  readonly refuseUnexpectedContent: true;
+  readonly allowPartialOwnedInventory: true;
+}
+
+export interface MaterializeFilesystemAdapter {
+  inspectOutputState(target: string): Promise<OutputState>;
+  createOwnedStage(
+    parent: string,
+    prefix: string,
+    starterRoot: string,
+    openTestsRoot: string,
+  ): Promise<OwnedStage>;
+  reserveMissingDirectory(
+    target: string,
+    expectedInventory: readonly string[],
+  ): Promise<OwnedReservation>;
+  populateReservedDirectory(
+    stage: OwnedStage,
+    reservation: OwnedReservation,
+    options: {
+      noOverwrite: true;
+      sourceControlPaths: readonly string[];
+      targetControlPaths: readonly string[];
+    },
+  ): Promise<void>;
+  validateOwnedInventory(reservation: OwnedReservation): Promise<void>;
+  removeOwnedStage(
+    stage: OwnedStage,
+    expectedInventory: readonly string[],
+    options: { controlPaths: readonly string[] },
+  ): Promise<void>;
+  finalizeOwnedReservation(
+    reservation: OwnedReservation,
+    options: { expectedInventory: readonly string[]; controlPaths: readonly string[] },
+  ): Promise<void>;
+  cleanupOwnedMaterialization(
+    stage: OwnedStage | undefined,
+    reservation: OwnedReservation | undefined,
+    options: OwnedCleanupOptions,
+  ): Promise<void>;
+}
+
+export function createProductionMaterializeFilesystemAdapter(): MaterializeFilesystemAdapter;
+```
+
+```ts
+// packages/exercise-runner/src/workspace-paths.ts
+export async function assertSourceOutputAreDisjoint(
+  canonicalSourceRoot: string,
+  outputRoot: string,
+): Promise<void>;
+```
+
+```ts
+// packages/exercise-runner/src/materialize.ts
+import {
+  ExerciseOutputError,
+  createProductionMaterializeFilesystemAdapter,
+  type MaterializeFilesystemAdapter,
+  type OwnedReservation,
+  type OwnedStage,
+} from './materialization-filesystem.js';
+import {
+  deriveAuthoritativeManifest,
+  hashFile,
+  validateAuthoritativeManifest,
+  writeBaselineManifest,
+} from './baseline-manifest.js';
+
+export async function materializeExercise(
+  sourceRootInput: string | URL,
+  outputRoot: string,
+): Promise<ValidationOutcome<ExerciseWorkspace>>;
+
+/** @internal; omitted from src/index.ts and package exports. */
+export async function materializeExerciseWithFilesystemForTest(
+  sourceRootInput: string | URL,
+  outputRoot: string,
+  filesystem: MaterializeFilesystemAdapter,
+): Promise<ValidationOutcome<ExerciseWorkspace>>;
+```
+
+```ts
+// packages/exercise-runner/src/open-workspace.ts
+import {
+  deriveAuthoritativeManifest,
+  manifestsMatchExactly,
+  readBaselineManifest,
+} from './baseline-manifest.js';
+import { assertSourceOutputAreDisjoint } from './workspace-paths.js';
+```
+
+```ts
+// packages/exercise-runner/src/verify-editable-paths.ts
+import {
+  compareManifestTriplet,
+  deriveAuthoritativeManifest,
+  deriveWorkspaceManifest,
+  readBaselineManifest,
+} from './baseline-manifest.js';
+```
+
+The package-local materialization tests import the internal adapter module directly and cover its operation contracts; the public index exports only the public two-argument materializer, workspace type, loader, manifest reader/writer, opener, and verifier surfaces. The new internal modules are package-local and are not package exports.
 
 - [ ] **Step 1: Create the package manifest and failing materialization tests**
 
@@ -848,69 +1056,204 @@ git commit -m "feat: define safe exercise contracts"
 
 ```ts
 // packages/exercise-runner/test/materialize.test.ts
-import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  ExerciseOutputError,
+  createProductionMaterializeFilesystemAdapter,
+  type MaterializeFilesystemAdapter,
+} from '../src/materialization-filesystem.js';
+import {
   materializeExercise,
   materializeExerciseWithFilesystemForTest,
-  type MaterializeFilesystemAdapter,
 } from '../src/materialize.js';
 
 const fixture = new URL('../../../fixtures/exercises/valid/minimal/', import.meta.url);
 
-type LifecycleFailureMode = 'target-appears-after-check' | 'reservation-collision' | 'copy-failure' | 'promotion-failure' | 'unexpected-content-cleanup';
+type LifecycleFailureMode =
+  | 'target-appears-during-reservation'
+  | 'partial-population'
+  | 'stage-cleanup-refusal'
+  | 'finalization-failure'
+  | 'unexpected-reservation-content';
 
-interface TestOnlyLifecycleFilesystemAdapter extends MaterializeFilesystemAdapter {
-  failureMode: LifecycleFailureMode;
-  beforeCleanup?: (reservedTarget: string) => Promise<void>;
+interface OperationTrace {
+  events: string[];
+  stageRoot?: string;
+  stageControlPaths?: readonly string[];
+  reservationRoot?: string;
+  reservationControlPaths?: readonly string[];
+  stageAbsentAtFinalization?: boolean;
+  partialLearnerEntryCreatedAtFailure?: boolean;
 }
 
 function createTestOnlyLifecycleFilesystemAdapter(
-  failureMode: LifecycleFailureMode,
-  beforeCleanup?: (reservedTarget: string) => Promise<void>,
-): TestOnlyLifecycleFilesystemAdapter {
+  failureMode: LifecycleFailureMode | undefined,
+  trace: OperationTrace,
+): MaterializeFilesystemAdapter {
+  const production = createProductionMaterializeFilesystemAdapter();
   return {
-    failureMode,
-    beforeCleanup,
-    injectFailure: async (phase, target) => {
-      if (phase === 'reserve' && (failureMode === 'target-appears-after-check' || failureMode === 'reservation-collision')) {
+    inspectOutputState: async (target) => {
+      trace.events.push('inspect');
+      return production.inspectOutputState(target);
+    },
+    createOwnedStage: async (parent, prefix, starterRoot, openTestsRoot) => {
+      trace.events.push('stage:create');
+      const stage = await production.createOwnedStage(parent, prefix, starterRoot, openTestsRoot);
+      trace.stageRoot = stage.root;
+      trace.stageControlPaths = stage.controlPaths;
+      return stage;
+    },
+    reserveMissingDirectory: async (target, expectedInventory) => {
+      trace.events.push('reserve:begin');
+      if (failureMode === 'target-appears-during-reservation') {
         await mkdir(target);
-        throw new Error('injected target appearance during exclusive reservation');
+        await writeFile(path.join(target, 'foreign-target.txt'), 'preserve exact target bytes\n');
+        trace.reservationRoot = target;
       }
-      if (phase === 'populate' && failureMode === 'copy-failure') {
-        throw new Error('injected partial population failure');
+      try {
+        const reservation = await production.reserveMissingDirectory(target, expectedInventory);
+        trace.reservationRoot = reservation.root;
+        trace.reservationControlPaths = reservation.controlPaths;
+        trace.events.push('reserve:success');
+        return reservation;
+      } catch (error) {
+        trace.events.push(failureMode === 'target-appears-during-reservation'
+          ? 'reserve:collision'
+          : 'reserve:failure');
+        throw error;
       }
-      if (phase === 'stage-cleanup' && failureMode === 'promotion-failure') {
-        throw new Error('injected stage cleanup failure');
+    },
+    populateReservedDirectory: async (stage, reservation, options) => {
+      trace.events.push('populate:begin');
+      let partialEntry: string | undefined;
+      try {
+        if (failureMode === 'partial-population') {
+          // Delete a later expected source entry, then delegate to production. Its
+          // streaming copy must create the first learner entry before discovering
+          // the missing later source and translating the real operation failure.
+          const learnerEntries = reservation.expectedInventory.filter(
+            (entry) => !reservation.controlPaths.includes(entry),
+          );
+          const firstEntry = learnerEntries[0];
+          const laterEntry = learnerEntries[1];
+          if (!firstEntry || !laterEntry) throw new Error('fixture must contain at least two learner entries');
+          partialEntry = firstEntry;
+          await rm(path.join(stage.root, laterEntry), { force: true });
+        }
+        await production.populateReservedDirectory(stage, reservation, options);
+        trace.events.push('populate:success');
+      } catch (error) {
+        if (partialEntry) {
+          trace.partialLearnerEntryCreatedAtFailure = await stat(
+            path.join(reservation.root, partialEntry),
+          ).then(
+            () => true,
+            () => false,
+          );
+        }
+        trace.events.push('populate:failure');
+        throw error;
       }
-      if (phase === 'stage-cleanup' && beforeCleanup) await beforeCleanup(target);
+    },
+    validateOwnedInventory: async (reservation) => {
+      trace.events.push('inventory:begin');
+      if (failureMode === 'unexpected-reservation-content') {
+        await writeFile(path.join(reservation.root, 'foreign-reservation.txt'), 'preserve exact reservation bytes\n');
+      }
+      try {
+        await production.validateOwnedInventory(reservation);
+        trace.events.push('inventory:success');
+      } catch (error) {
+        trace.events.push('inventory:failure');
+        throw error;
+      }
+    },
+    removeOwnedStage: async (stage, expectedInventory, options) => {
+      trace.events.push('stage:cleanup:begin');
+      if (failureMode === 'stage-cleanup-refusal') {
+        await writeFile(path.join(stage.root, 'foreign-stage.txt'), 'preserve exact stage bytes\n');
+      }
+      try {
+        await production.removeOwnedStage(stage, expectedInventory, options);
+        trace.events.push('stage:cleanup:success');
+      } catch (error) {
+        trace.events.push('stage:cleanup:refusal');
+        throw error;
+      }
+    },
+    finalizeOwnedReservation: async (reservation, options) => {
+      trace.events.push('finalize:begin');
+      try {
+        if (failureMode === 'finalization-failure') {
+          if (!trace.stageRoot) throw new Error('stage root must be recorded before finalization');
+          trace.stageAbsentAtFinalization = await stat(trace.stageRoot).then(
+            () => false,
+            () => true,
+          );
+          throw new ExerciseOutputError('EXERCISE_OUTPUT_003', 'real finalization failure after stage cleanup');
+        }
+        await production.finalizeOwnedReservation(reservation, options);
+        trace.events.push('finalize:success');
+      } catch (error) {
+        trace.events.push('finalize:failure');
+        throw error;
+      }
+    },
+    cleanupOwnedMaterialization: async (stage, reservation, options) => {
+      trace.events.push('cleanup:begin');
+      try {
+        await production.cleanupOwnedMaterialization(stage, reservation, options);
+        trace.events.push('cleanup:success');
+      } catch (error) {
+        trace.events.push('cleanup:refused');
+        throw error;
+      }
     },
   };
 }
 
-async function materializeExerciseUsingTestOnlyFilesystemAdapter(
-  sourceRoot: string | URL,
-  outputRoot: string,
-  adapter: TestOnlyLifecycleFilesystemAdapter,
-) {
-  return materializeExerciseWithFilesystemForTest(sourceRoot, outputRoot, adapter);
+async function runLifecycleCase(failureMode: LifecycleFailureMode) {
+  const parent = await mkdtemp(path.join(tmpdir(), `roadmap-${failureMode}-`));
+  const output = path.join(parent, 'workspace');
+  const sentinel = path.join(parent, 'unrelated.sentinel');
+  await writeFile(sentinel, 'preserve unrelated content\n');
+  const trace: OperationTrace = { events: [] };
+  const adapter = createTestOnlyLifecycleFilesystemAdapter(failureMode, trace);
+  const result = await materializeExerciseWithFilesystemForTest(fixture, output, adapter);
+  return { parent, output, sentinel, trace, result };
 }
 
-async function materializeExerciseWithInjectedLifecycleFailure(
-  sourceRoot: string | URL,
-  outputRoot: string,
-  failureMode: LifecycleFailureMode,
-  beforeCleanup?: (reservedTarget: string) => Promise<void>,
-) {
-  const adapter = createTestOnlyLifecycleFilesystemAdapter(failureMode, beforeCleanup);
-  // Test-only internal seam: bind this adapter to the non-exported filesystem operations; never export it from production.
-  return materializeExerciseUsingTestOnlyFilesystemAdapter(sourceRoot, outputRoot, adapter);
-}
+describe('materializeExercise actual filesystem lifecycle', () => {
+  it('records the production operation order on success', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-lifecycle-success-'));
+    const output = path.join(parent, 'workspace');
+    const trace: OperationTrace = { events: [] };
+    const result = await materializeExerciseWithFilesystemForTest(
+      fixture,
+      output,
+      createTestOnlyLifecycleFilesystemAdapter(undefined, trace),
+    );
+    expect(result.ok).toBe(true);
+    expect(trace.events).toEqual([
+      'inspect',
+      'stage:create',
+      'reserve:begin',
+      'reserve:success',
+      'populate:begin',
+      'populate:success',
+      'inventory:begin',
+      'inventory:success',
+      'stage:cleanup:begin',
+      'stage:cleanup:success',
+      'finalize:begin',
+      'finalize:success',
+    ]);
+  });
 
-describe('materializeExercise', () => {
-  it('copies starter and open tests, excludes solutions, and writes a baseline manifest', async () => {
+  it('keeps the public wrapper exactly two-argument and writes a normal workspace', async () => {
     const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-exercise-'));
     const output = path.join(parent, 'workspace');
     const result = await materializeExercise(fixture, output);
@@ -929,6 +1272,14 @@ describe('materializeExercise', () => {
     expect(manifest.files.map((entry: { path: string }) => entry.path)).toEqual(
       expect.arrayContaining(['src/counter.js', 'test/open/counter.contract.test.js']),
     );
+    const manifestPaths = new Set(manifest.files.map((entry: { path: string }) => entry.path));
+    for (const controlPath of [
+      ...(trace.stageControlPaths ?? []),
+      ...(trace.reservationControlPaths ?? []),
+    ]) {
+      expect(manifestPaths.has(controlPath)).toBe(false);
+      await expect(stat(path.join(output, controlPath))).rejects.toThrow();
+    }
   });
 
   it('rejects an existing empty output as existing/unknown without deleting it', async () => {
@@ -942,48 +1293,99 @@ describe('materializeExercise', () => {
     expect((await readdir(parent)).filter((entry) => entry.startsWith('.roadmap-stage-'))).toEqual([]);
   });
 
-  const lifecycleFailures = [
-    { failureMode: 'target-appears-after-check', expectedCode: 'EXERCISE_OUTPUT_002' },
-    { failureMode: 'reservation-collision', expectedCode: 'EXERCISE_OUTPUT_002' },
-    { failureMode: 'copy-failure', expectedCode: 'EXERCISE_OUTPUT_003' },
-    { failureMode: 'promotion-failure', expectedCode: 'EXERCISE_OUTPUT_003' },
+  const lifecycleCases = [
+    {
+      failureMode: 'target-appears-during-reservation',
+      expectedCode: 'EXERCISE_OUTPUT_002',
+      expectedEvents: ['inspect', 'stage:create', 'reserve:begin', 'reserve:collision', 'cleanup:begin', 'cleanup:success'],
+    },
+    {
+      failureMode: 'partial-population',
+      expectedCode: 'EXERCISE_OUTPUT_003',
+      expectedEvents: ['inspect', 'stage:create', 'reserve:begin', 'reserve:success', 'populate:begin', 'populate:failure', 'cleanup:begin', 'cleanup:success'],
+    },
+    {
+      failureMode: 'stage-cleanup-refusal',
+      expectedCode: 'EXERCISE_OUTPUT_003',
+      expectedEvents: ['inspect', 'stage:create', 'reserve:begin', 'reserve:success', 'populate:begin', 'populate:success', 'inventory:begin', 'inventory:success', 'stage:cleanup:begin', 'stage:cleanup:refusal', 'cleanup:begin', 'cleanup:refused'],
+    },
+    {
+      failureMode: 'finalization-failure',
+      expectedCode: 'EXERCISE_OUTPUT_003',
+      expectedEvents: ['inspect', 'stage:create', 'reserve:begin', 'reserve:success', 'populate:begin', 'populate:success', 'inventory:begin', 'inventory:success', 'stage:cleanup:begin', 'stage:cleanup:success', 'finalize:begin', 'finalize:failure', 'cleanup:begin', 'cleanup:success'],
+    },
+    {
+      failureMode: 'unexpected-reservation-content',
+      expectedCode: 'EXERCISE_OUTPUT_003',
+      expectedEvents: ['inspect', 'stage:create', 'reserve:begin', 'reserve:success', 'populate:begin', 'populate:success', 'inventory:begin', 'inventory:failure', 'cleanup:begin', 'cleanup:refused'],
+    },
   ] as const;
 
-  it.each(lifecycleFailures)('fails closed for %s without deleting learner content', async ({ failureMode, expectedCode }) => {
-    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-' + failureMode + '-'));
-    const output = path.join(parent, 'workspace');
-    const sentinel = path.join(parent, failureMode + '.sentinel');
-    await writeFile(sentinel, 'preserve me\n');
-    const result = await materializeExerciseWithInjectedLifecycleFailure(fixture, output, failureMode);
+  it.each(lifecycleCases)('proves the real %s lifecycle boundary and ownership cleanup', async ({ failureMode, expectedCode, expectedEvents }) => {
+    const { output, sentinel, trace, result } = await runLifecycleCase(failureMode);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics[0]?.code).toBe(expectedCode);
-    expect(await readFile(sentinel, 'utf8')).toBe('preserve me\n');
-  });
+    expect(trace.events).toEqual(expectedEvents);
+    expect(await readFile(sentinel, 'utf8')).toBe('preserve unrelated content\n');
 
-  it('preserves unexpected content inside the reserved target when cleanup refuses', async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-unexpected-content-'));
-    const output = path.join(parent, 'workspace');
-    const unexpected = path.join(output, 'unexpected-content.txt');
-    const result = await materializeExerciseWithInjectedLifecycleFailure(
-      fixture,
-      output,
-      'unexpected-content-cleanup',
-      async (reservedTarget) => writeFile(path.join(reservedTarget, 'unexpected-content.txt'), 'preserve inside target\n'),
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.diagnostics[0]?.code).toBe('EXERCISE_OUTPUT_003');
-    expect(await readFile(unexpected, 'utf8')).toBe('preserve inside target\n');
+    if (failureMode === 'target-appears-during-reservation') {
+      expect(await readFile(path.join(output, 'foreign-target.txt'), 'utf8')).toBe('preserve exact target bytes\n');
+      expect(trace.events).not.toContain('populate:begin');
+    }
+    if (failureMode === 'partial-population') {
+      expect(trace.partialLearnerEntryCreatedAtFailure).toBe(true);
+      expect(trace.reservationRoot).toBeTruthy();
+      expect(await stat(output).then(() => true, () => false)).toBe(false);
+      expect(trace.stageRoot && await stat(trace.stageRoot).then(() => true, () => false)).toBe(false);
+    }
+    if (failureMode === 'stage-cleanup-refusal') {
+      expect(trace.stageRoot).toBeTruthy();
+      expect(await readFile(path.join(trace.stageRoot!, 'foreign-stage.txt'), 'utf8')).toBe('preserve exact stage bytes\n');
+      expect(await stat(output).then(() => true, () => false)).toBe(false);
+    }
+    if (failureMode === 'finalization-failure') {
+      expect(trace.stageAbsentAtFinalization).toBe(true);
+      expect(await stat(output).then(() => true, () => false)).toBe(false);
+    }
+    if (failureMode === 'unexpected-reservation-content') {
+      expect(await readFile(path.join(output, 'foreign-reservation.txt'), 'utf8')).toBe('preserve exact reservation bytes\n');
+      expect(await stat(trace.stageRoot!).then(() => true, () => false)).toBe(false);
+    }
+  });
+});
+
+```
+
+```ts
+// packages/exercise-runner/test/materialization-filesystem.test.ts
+import { describe, expect, it } from 'vitest';
+import { createProductionMaterializeFilesystemAdapter } from '../src/materialization-filesystem.js';
+
+describe('materialization filesystem adapter', () => {
+  it('owns every actual lifecycle operation and exposes no phase callback', () => {
+    const adapter = createProductionMaterializeFilesystemAdapter();
+    expect(Object.keys(adapter).sort()).toEqual([
+      'cleanupOwnedMaterialization',
+      'createOwnedStage',
+      'finalizeOwnedReservation',
+      'inspectOutputState',
+      'populateReservedDirectory',
+      'removeOwnedStage',
+      'reserveMissingDirectory',
+      'validateOwnedInventory',
+    ]);
+    expect(Object.keys(adapter)).not.toContain('faultHook');
   });
 });
 ```
 
-`TestOnlyLifecycleFilesystemAdapter`, `createTestOnlyLifecycleFilesystemAdapter`, and `materializeExerciseUsingTestOnlyFilesystemAdapter` are test-module-only fault-injection infrastructure. The production package keeps the adapter private, exports only the two-argument `materializeExercise`, and routes the four injected failures through the internal filesystem seam. The unexpected-content callback runs after reservation and before cleanup, so the assertion proves preservation inside the reserved target rather than relying on an external sentinel.
+The production adapter is the only implementation of the real filesystem operations. `createOwnedStage` creates the token-owned sibling and prepares the allowlisted stage contents; the observable lifecycle log therefore has the required high-level order `inspect -> stage:create -> reserve -> populate -> inventory -> stage:cleanup -> finalize`. `populateReservedDirectory` streams expected entries through no-overwrite copy operations so a missing later source can leave a known earlier learner entry before the operation returns its typed failure. The five-case matrix delegates every wrapped method to the production adapter and changes state only immediately before the named real operation: target bytes appear before exclusive reserve, a later stage source is removed before streaming population, foreign stage content appears before stage removal, finalization fails only after production stage removal, and foreign reserved content appears before production inventory validation. No generic phase callback or pre-operation fault hook remains.
 
-The package-local test imports the public `materializeExercise` and the `@internal` `materializeExerciseWithFilesystemForTest` directly from `src/materialize.ts`; `src/index.ts` and package exports omit the internal seam. The test-only adapter calls that seam with a `MaterializeFilesystemAdapter`, and never passes a third argument to the public two-argument wrapper.
+The matrix asserts exact event arrays, exact diagnostic codes, stage/target state at failure, and unrelated-content preservation. Only the target-appeared exclusive collision maps to `EXERCISE_OUTPUT_002`; all non-collision lifecycle failures map to `EXERCISE_OUTPUT_003`. The normal success test must use a no-failure adapter instance and assert the complete seven-operation event order; the focused adapter test verifies the production surface has actual operation methods and no fault-injection field.
 
 ```ts
 // packages/exercise-runner/test/open-workspace.test.ts
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -1204,16 +1606,33 @@ export async function deriveAuthoritativeManifest(
 
 `deriveAllowlistedManifest` walks only the trusted `starter/` and `tests/open/` regular files, rejects symlink/junction/reparse aliases, and records the source identity/version from the loaded definition. The reader must also reject duplicate or non-canonical paths, invalid byte counts, malformed lowercase SHA-256 values, missing source identity/version, and any record that is not present in the freshly derived authoritative source manifest. The manifest is cache/provenance evidence and never replaces source-derived protected-file truth.
 
+- [ ] **Step 4a: Implement the package-local actual-operation filesystem adapter**
+
+Create `materialization-filesystem.ts` as the sole owner of output-state inspection, token-owned sibling-stage creation, exclusive target reservation, no-overwrite population, inventory validation, stage removal, reservation finalization, and ownership-aware rollback. `createOwnedStage(parent, prefix, starterRoot, openTestsRoot)` creates a unique sibling with an ownership token, copies only the allowlisted trees without dereferencing links, and creates the token-owned `.roadmap` directory before returning normalized stage-relative `controlPaths`. `reserveMissingDirectory` uses an exclusive non-recursive create beneath the already-realpathed parent; only the expected EEXIST/target-appeared branch becomes `ExerciseOutputError('EXERCISE_OUTPUT_002', ...)`, while every other lifecycle uncertainty becomes `ExerciseOutputError('EXERCISE_OUTPUT_003', ...)`.
+
+`populateReservedDirectory` receives separate source and target control-path allowlists and must stream only the exact learner/manifest inventory through no-overwrite copy operations. A real missing/reparse source can therefore leave a known earlier learner entry before returning typed `EXERCISE_OUTPUT_003`, while stage token/control metadata is never copied or hashed. `validateOwnedInventory` rejects foreign, duplicate, or reparse content, permits missing expected entries only for the explicit partial-owned rollback path, and keeps control paths separate from learner inventory. `removeOwnedStage` and `finalizeOwnedReservation` refuse any content outside their ownership token and expected inventory; finalization is a no-replace operation and may not rely on ordinary rename-over-target behavior. `cleanupOwnedMaterialization` attempts stage and reservation cleanup independently, deletes only token-proven subsets, preserves unproven content, accumulates asymmetric `CleanupFailureDetail` values, and rethrows one typed aggregate `EXERCISE_OUTPUT_003` when either side remains unsafe. The adapter never exposes a phase callback or generic fault injector. Its thrown typed errors are the only output-lifecycle inputs consumed by materialize.ts; source enumeration errors continue across the `ValidationOutcome` boundary as `EXERCISE_PATH_001`.
+
 - [ ] **Step 5: Implement allowlisted materialization and non-destructive workspace reopening**
 
 ```ts
 // packages/exercise-runner/src/materialize.ts
-import { cp, mkdir, mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
+import { readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeRelativePath } from '@roadmap/exercise-contract';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
-import { hashFile, writeBaselineManifest } from './baseline-manifest.js';
+import {
+  hashFile,
+  validateAuthoritativeManifest,
+  writeBaselineManifest,
+} from './baseline-manifest.js';
 import { loadExercise, resolveExerciseRoot } from './load-exercise.js';
+import {
+  ExerciseOutputError,
+  createProductionMaterializeFilesystemAdapter,
+  type MaterializeFilesystemAdapter,
+  type OwnedReservation,
+  type OwnedStage,
+} from './materialization-filesystem.js';
 
 export interface ExerciseWorkspace {
   exerciseId: string;
@@ -1222,21 +1641,7 @@ export interface ExerciseWorkspace {
   baselineManifestPath: string;
 }
 
-interface OwnedReservation {
-  root: string;
-  ownershipToken: string;
-  expectedInventory: readonly string[];
-  controlPaths: readonly string[];
-}
-
-export type MaterializeLifecyclePhase = 'reserve' | 'populate' | 'stage-cleanup' | 'finalize';
-
-/** @internal Package-local filesystem fault seam; omitted from src/index.ts and package exports. */
-export interface MaterializeFilesystemAdapter {
-  readonly injectFailure?: (phase: MaterializeLifecyclePhase, target: string) => Promise<void>;
-}
-
-const productionFilesystemAdapter: MaterializeFilesystemAdapter = {};
+const productionFilesystemAdapter = createProductionMaterializeFilesystemAdapter();
 
 async function listRegularFiles(root: string, current = root): Promise<string[]> {
   const output: string[] = [];
@@ -1262,18 +1667,6 @@ function pathFailure(location: string, error: unknown): ValidationOutcome<never>
   }]);
 }
 
-type OutputDiagnosticCode = 'EXERCISE_OUTPUT_002' | 'EXERCISE_OUTPUT_003';
-
-class ExerciseOutputError extends Error {
-  constructor(
-    readonly diagnosticCode: OutputDiagnosticCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ExerciseOutputError';
-  }
-}
-
 function outputFailure(error: ExerciseOutputError): ValidationOutcome<never> {
   const code = error.diagnosticCode;
   return failure([{
@@ -1290,19 +1683,6 @@ function outputFailure(error: ExerciseOutputError): ValidationOutcome<never> {
     remediation: 'Preserve unexpected content, recover the owned reservation, and retry with a fresh absent child path',
     documentation: 'docs/authoring/exercises.md',
   }]);
-}
-
-async function invokeLifecycleFailure(
-  filesystem: MaterializeFilesystemAdapter,
-  phase: MaterializeLifecyclePhase,
-  target: string,
-): Promise<void> {
-  try {
-    await filesystem.injectFailure?.(phase, target);
-  } catch (error) {
-    const code = phase === 'reserve' ? 'EXERCISE_OUTPUT_002' : 'EXERCISE_OUTPUT_003';
-    throw new ExerciseOutputError(code, error instanceof Error ? error.message : String(error));
-  }
 }
 
 /** @internal Test-only seam; the public wrapper below remains exactly two-argument. */
@@ -1347,35 +1727,34 @@ async function materializeExerciseCore(
     }]);
   }
 
-  let stagingRoot: string | undefined;
+  let stagingRoot: OwnedStage | undefined;
   let reservation: OwnedReservation | undefined;
   try {
-    const outputState = await inspectOutputState(resolvedOutput);
+    const outputState = await filesystem.inspectOutputState(resolvedOutput);
     if (outputState !== 'missing') {
       throw new ExerciseOutputError(
         'EXERCISE_OUTPUT_002',
         `refusing to replace existing ${outputState} output`,
       );
     }
-    stagingRoot = await mkdtemp(path.join(
+    stagingRoot = await filesystem.createOwnedStage(
       path.dirname(resolvedOutput),
       `.roadmap-stage-${path.basename(resolvedOutput)}-`,
-    ));
-    await listRegularFiles(starterRoot);
-    await listRegularFiles(openTestsRoot);
-    await mkdir(stagingRoot, { recursive: true });
-    await cp(starterRoot, stagingRoot, { recursive: true, dereference: false });
-    await cp(openTestsRoot, path.join(stagingRoot, 'test', 'open'), {
-      recursive: true,
-      dereference: false,
-    });
-
-    const files = await listRegularFiles(stagingRoot);
-    const records = await Promise.all(
-      files.map((file) => hashFile(path.join(stagingRoot, file), file)),
+      starterRoot,
+      openTestsRoot,
     );
-    const metadataRoot = path.join(stagingRoot, '.roadmap');
-    await mkdir(metadataRoot, { recursive: true });
+
+    const allStageFiles = await listRegularFiles(stagingRoot.root);
+    const stageControlPaths = new Set(
+      stagingRoot.controlPaths.map((controlPath) => normalizeRelativePath(controlPath)),
+    );
+    const learnerFiles = allStageFiles.filter((file) => !stageControlPaths.has(file));
+    const records = await Promise.all(
+      learnerFiles.map((file) => hashFile(path.join(stagingRoot!.root, file), file)),
+    );
+    const metadataRoot = path.join(stagingRoot.root, '.roadmap');
+    // createOwnedStage creates the owned metadata directory; it is included in
+    // the exact inventory after the manifest is written below.
     const baselineManifestPath = path.join(metadataRoot, 'exercise-baseline.json');
     await writeBaselineManifest(baselineManifestPath, {
       schemaVersion: 1,
@@ -1383,27 +1762,25 @@ async function materializeExerciseCore(
       exerciseVersion: loaded.value.version,
       files: records,
     });
-    const stageInventory = [...files, '.roadmap/exercise-baseline.json'];
-    await validateAuthoritativeManifest(stagingRoot, sourceRoot, loaded.value);
-    await invokeLifecycleFailure(filesystem, 'reserve', resolvedOutput);
-    reservation = await reserveMissingDirectory(resolvedOutput, stageInventory);
-    await invokeLifecycleFailure(filesystem, 'populate', resolvedOutput);
-    await populateReservedDirectory(stagingRoot, reservation, {
-      noOverwrite: true,
-      controlPaths: reservation.controlPaths,
+    const stageInventory = [...learnerFiles, '.roadmap/exercise-baseline.json'];
+    await validateAuthoritativeManifest(stagingRoot.root, sourceRoot, loaded.value, {
+      excludedStagePaths: [
+        ...stagingRoot.controlPaths,
+        '.roadmap/exercise-baseline.json',
+      ],
     });
-    await validateOwnedInventory(reservation);
+    reservation = await filesystem.reserveMissingDirectory(resolvedOutput, stageInventory);
+    await filesystem.populateReservedDirectory(stagingRoot, reservation, {
+      noOverwrite: true,
+      sourceControlPaths: stagingRoot.controlPaths,
+      targetControlPaths: reservation.controlPaths,
+    });
+    await filesystem.validateOwnedInventory(reservation);
     const ownedStage = stagingRoot;
     if (!ownedStage) throw new ExerciseOutputError('EXERCISE_OUTPUT_003', 'staging ownership was lost before finalization');
-    await invokeLifecycleFailure(filesystem, 'stage-cleanup', resolvedOutput);
-    try {
-      await removeOwnedStage(ownedStage, stageInventory, { controlPaths: [] });
-    } catch {
-      throw new ExerciseOutputError('EXERCISE_OUTPUT_003', 'EXERCISE_OUTPUT_003: refusing to finalize after owned-stage cleanup failure');
-    }
+    await filesystem.removeOwnedStage(ownedStage, stageInventory, { controlPaths: ownedStage.controlPaths });
     stagingRoot = undefined;
-    await invokeLifecycleFailure(filesystem, 'finalize', resolvedOutput);
-    await finalizeOwnedReservation(reservation, {
+    await filesystem.finalizeOwnedReservation(reservation, {
       expectedInventory: stageInventory,
       controlPaths: reservation.controlPaths,
     });
@@ -1416,7 +1793,15 @@ async function materializeExerciseCore(
     });
   } catch (error) {
     try {
-      await cleanupOwnedMaterialization({ stagingRoot, reservation, requireOwnershipToken: true, refuseUnexpectedContent: true });
+      await filesystem.cleanupOwnedMaterialization(
+        stagingRoot,
+        reservation,
+        {
+          requireOwnershipToken: true,
+          refuseUnexpectedContent: true,
+          allowPartialOwnedInventory: true,
+        },
+      );
     } catch (cleanupError) {
       return outputFailure(new ExerciseOutputError(
         'EXERCISE_OUTPUT_003',
@@ -1429,20 +1814,27 @@ async function materializeExerciseCore(
 }
 ```
 
-The public materializeExercise wrapper remains exactly two-argument and delegates to materializeExerciseCore with productionFilesystemAdapter. The @internal materializeExerciseWithFilesystemForTest seam is exported only from src/materialize.ts for package-local tests, is omitted from src/index.ts and package exports, and delegates to the same core with a supplied MaterializeFilesystemAdapter. The core invokes the adapter only at lifecycle boundaries; the test adapter never passes a third argument to the public wrapper.
+The public materializeExercise wrapper remains exactly two-argument and delegates to materializeExerciseCore with productionFilesystemAdapter. The @internal materializeExerciseWithFilesystemForTest seam is exported only from src/materialize.ts for package-local tests, is omitted from src/index.ts and package exports, and delegates to the same core with a supplied MaterializeFilesystemAdapter. The core invokes the adapter for every filesystem lifecycle operation; the test adapter never passes a third argument to the public wrapper. `createOwnedStage` creates the token-owned sibling, copies only the allowlisted starter/open-test trees, and creates the owned metadata directory before returning the stage handle, so stage preparation is part of the observed `stage:create` operation rather than an untracked filesystem side effect.
 
-inspectOutputState runs before mkdtemp creates any sibling stage. An existing-empty, matching-valid, invalid, or non-empty-unknown target returns a typed ExerciseOutputError with EXERCISE_OUTPUT_002 directly, without stage creation or deletion. reserveMissingDirectory uses an exclusive, non-recursive reservation beneath the already-realpathed parent, receives the exact final inventory derived from the validated stage, and translates only its expected EEXIST/target-appeared collision into ExerciseOutputError with EXERCISE_OUTPUT_002 while preserving the target; other reservation, population, stage-cleanup, or finalization uncertainty is represented as ExerciseOutputError with EXERCISE_OUTPUT_003. Source enumeration and reparse failures that are not output-lifecycle failures remain mapped through EXERCISE_PATH_001.
+The `inspectOutputState` adapter operation runs before `createOwnedStage` creates any sibling stage. An existing-empty, matching-valid, invalid, or non-empty-unknown target returns a typed ExerciseOutputError with EXERCISE_OUTPUT_002 directly, without stage creation or deletion. `reserveMissingDirectory` uses an exclusive, non-recursive reservation beneath the already-realpathed parent, receives the exact final inventory derived from the validated stage, and translates only its expected EEXIST/target-appeared collision into ExerciseOutputError with EXERCISE_OUTPUT_002 while preserving the target; other reservation, population, stage-cleanup, or finalization uncertainty is represented as ExerciseOutputError with EXERCISE_OUTPUT_003. Source enumeration and reparse failures that are not output-lifecycle failures remain mapped through EXERCISE_PATH_001.
 
-reserveMissingDirectory(target, expectedInventory) returns an ownership token, that expected inventory, and explicit controlPaths for temporary reservation metadata. populateReservedDirectory copies into that operation-owned target without overwrite, and validateOwnedInventory confirms the token and every expected learner file while separately allowing only the declared control paths; the token is never silently counted as a learner file. After population and owned-target validation, removeOwnedStage must remove the sibling stage using its exact expected inventory before finalizing the reservation. A stage-cleanup failure leaves the final ownership token available for safe rollback and emits stable EXERCISE_OUTPUT_003; unexpected content makes cleanup refuse, preserve that content, and emit the same stable failure. Only after stage cleanup and reservation finalization succeed are the local stage and reservation handles cleared and success returned. The portable path never treats ordinary rename-over-target behavior as no-clobber; a proven platform no-replace primitive may be an optimization only. Cleanup may remove only the owned stage or reserved target while its token, expected inventory, and control paths prove ownership.
+`createOwnedStage` returns normalized stage-relative `controlPaths` for token/control metadata. The core enumerates the stage, excludes those paths before hashing or writing baseline records, derives `stageInventory` from learner files plus only the explicit baseline-manifest path, and passes the stage and target control paths separately to population. `validateAuthoritativeManifest` receives an explicit `excludedStagePaths` option containing the stage controls and generated manifest; no exclusion relies on an undocumented filename convention. `populateReservedDirectory` copies only the learner inventory and declared manifest, never stage control metadata, and `validateOwnedInventory` confirms the token and every expected learner file while separately allowing only declared target control paths.
+
+After population and owned-target validation, `removeOwnedStage` must remove the sibling stage using its exact learner inventory and stage control paths before finalizing the reservation. `cleanupOwnedMaterialization` attempts stage and reservation rollback independently, even when one side refuses: it deletes only token-proven subsets, allows missing expected entries during partial-owned rollback, preserves any path outside expected inventory plus control paths, and accumulates `CleanupFailureDetail` values before throwing one typed `ExerciseOutputError('EXERCISE_OUTPUT_003', ...)` aggregate if either side remains unsafe. Thus stage-cleanup refusal preserves foreign stage content while still rolling back a safe reservation, and foreign reserved-target content preserves the target while still removing a safe stage. Only after stage cleanup and reservation finalization succeed are the local stage and reservation handles cleared and success returned. The portable path never treats ordinary rename-over-target behavior as no-clobber; a proven platform no-replace primitive may be an optimization only. The adapter must translate only an exclusive target-appearance/EEXIST collision to EXERCISE_OUTPUT_002; non-collision reservation, population, inventory, cleanup, and finalization errors are typed EXERCISE_OUTPUT_003, while source enumeration and reparse failures remain EXERCISE_PATH_001.
 
 ```ts
 // packages/exercise-runner/src/open-workspace.ts
 import { access, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
-import { readBaselineManifest } from './baseline-manifest.js';
+import {
+  deriveAuthoritativeManifest,
+  manifestsMatchExactly,
+  readBaselineManifest,
+} from './baseline-manifest.js';
 import { loadExercise, resolveExerciseRoot } from './load-exercise.js';
 import { materializeExercise, type ExerciseWorkspace } from './materialize.js';
+import { assertSourceOutputAreDisjoint } from './workspace-paths.js';
 
 export async function openExerciseWorkspace(
   sourceRoot: string | URL,
@@ -1532,7 +1924,12 @@ The Windows branch uses a directory junction, which does not require silently sk
 
 ```ts
 // packages/exercise-runner/src/index.ts
-export * from './baseline-manifest.js';
+export {
+  readBaselineManifest,
+  writeBaselineManifest,
+  type BaselineFileRecord,
+  type ExerciseBaselineManifest,
+} from './baseline-manifest.js';
 export * from './load-exercise.js';
 export {
   materializeExercise,
@@ -1625,24 +2022,15 @@ describe('verifyEditablePaths', () => {
 
 ```ts
 // packages/exercise-runner/src/verify-editable-paths.ts
-import { readdir } from 'node:fs/promises';
-import path from 'node:path';
-import { matchesEditablePath, normalizeRelativePath, type ExerciseDefinition } from '@roadmap/exercise-contract';
+import { matchesEditablePath, type ExerciseDefinition } from '@roadmap/exercise-contract';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
-import { deriveAuthoritativeManifest, readBaselineManifest } from './baseline-manifest.js';
+import {
+  compareManifestTriplet,
+  deriveAuthoritativeManifest,
+  deriveWorkspaceManifest,
+  readBaselineManifest,
+} from './baseline-manifest.js';
 import type { ExerciseWorkspace } from './materialize.js';
-
-async function listWorkspaceFiles(root: string, current = root): Promise<string[]> {
-  const output: string[] = [];
-  for (const entry of await readdir(current, { withFileTypes: true })) {
-    if (entry.name === '.roadmap') continue;
-    const absolute = path.join(current, entry.name);
-    if (entry.isSymbolicLink()) throw new Error(`Symlink is not allowed: ${absolute}`);
-    if (entry.isDirectory()) output.push(...await listWorkspaceFiles(root, absolute));
-    if (entry.isFile()) output.push(normalizeRelativePath(path.relative(root, absolute)));
-  }
-  return output.sort();
-}
 
 export async function verifyEditablePaths(
   workspace: ExerciseWorkspace,
