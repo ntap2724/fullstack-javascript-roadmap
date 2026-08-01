@@ -7,3 +7,10 @@ export {
   type BaselineFileRecord,
   type ExerciseBaselineManifest,
 } from './baseline-manifest.js';
+export { verifyEditablePaths } from './verify-editable-paths.js';
+export {
+  verifyExercise,
+  type ExerciseVerificationReport,
+  type VerificationMode,
+  type VerificationStepResult,
+} from './verify-exercise.js';

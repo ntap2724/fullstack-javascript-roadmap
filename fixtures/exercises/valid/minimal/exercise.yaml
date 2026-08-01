@@ -18,6 +18,7 @@ commands:
       required: true
       command: pnpm
       args:
+        - --config.verifyDepsBeforeRun=false
         - test:infrastructure
       cwd: .
       timeoutMs: 60000
@@ -26,6 +27,7 @@ commands:
       required: true
       command: pnpm
       args:
+        - --config.verifyDepsBeforeRun=false
         - verify
       cwd: .
       timeoutMs: 60000
