@@ -1251,6 +1251,21 @@ describe('materializeExercise actual filesystem lifecycle', () => {
       'finalize:begin',
       'finalize:success',
     ]);
+    if (!result.ok) return;
+    const stageControlPaths = trace.stageControlPaths;
+    const reservationControlPaths = trace.reservationControlPaths;
+    if (!stageControlPaths || stageControlPaths.length === 0) {
+      throw new Error('adapter-backed success test requires actual stage control paths');
+    }
+    if (!reservationControlPaths || reservationControlPaths.length === 0) {
+      throw new Error('adapter-backed success test requires actual reservation control paths');
+    }
+    const manifest = JSON.parse(await readFile(result.value.baselineManifestPath, 'utf8'));
+    const manifestPaths = new Set(manifest.files.map((entry: { path: string }) => entry.path));
+    for (const controlPath of [...stageControlPaths, ...reservationControlPaths]) {
+      expect(manifestPaths.has(controlPath)).toBe(false);
+      await expect(stat(path.join(output, controlPath))).rejects.toThrow();
+    }
   });
 
   it('keeps the public wrapper exactly two-argument and writes a normal workspace', async () => {
@@ -1272,14 +1287,6 @@ describe('materializeExercise actual filesystem lifecycle', () => {
     expect(manifest.files.map((entry: { path: string }) => entry.path)).toEqual(
       expect.arrayContaining(['src/counter.js', 'test/open/counter.contract.test.js']),
     );
-    const manifestPaths = new Set(manifest.files.map((entry: { path: string }) => entry.path));
-    for (const controlPath of [
-      ...(trace.stageControlPaths ?? []),
-      ...(trace.reservationControlPaths ?? []),
-    ]) {
-      expect(manifestPaths.has(controlPath)).toBe(false);
-      await expect(stat(path.join(output, controlPath))).rejects.toThrow();
-    }
   });
 
   it('rejects an existing empty output as existing/unknown without deleting it', async () => {
