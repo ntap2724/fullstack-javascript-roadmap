@@ -70,33 +70,35 @@ export function runCommand(spec: CommandSpec): Promise<CommandResult>;
 
 The implementation and tests must additionally prove all of the following:
 
-- Every process is launched with `shell: false`, an argv array, an explicit contained cwd, and deterministic executable resolution. A `.cmd` command is resolved through an explicit platform rule rather than shell interpolation; a literal argument containing metacharacters is never re-parsed as syntax.
-- `timeoutMs` is validated as a finite positive integer no greater than 900000 milliseconds. The cwd is realpath-checked and contained by the caller-provided workspace before spawn.
+- Every process is launched with `shell: false`, an argv array, an explicit usable-directory cwd, and deterministic executable resolution. A `.cmd` command is resolved through an explicit platform rule rather than shell interpolation; a literal argument containing metacharacters is never re-parsed as syntax.
+- `timeoutMs` is validated as a finite positive integer no greater than 900000 milliseconds. Task 1 validates that its final cwd is a real, usable directory; it does not claim workspace containment because the locked runner API has no workspace-root authority.
 - `error`, `exit`, `close`, timeout, output overflow, and cleanup races share one settlement gate. A result is settled once only, and `close` is the completion event after all bounded cleanup has been confirmed.
 - Unix timeout cleanup uses an operation-owned process group with bounded graceful and forced phases. Windows timeout cleanup uses direct `taskkill.exe` argv for the descendant tree, also with bounded graceful and forced phases. Completion before confirmed descendant cleanup is forbidden.
 - A spawn failure, output-limit failure, or unconfirmed cleanup is an internal typed runner error. The runner does not add that error to `CommandResult`; each caller maps it to a stable fail-closed diagnostic without leaking a raw exception or platform-specific stack.
 - UTF-8 stdout and stderr capture is bounded to 1048576 bytes per stream. Overflow terminates the owned process tree, waits for confirmed cleanup, and rejects with the typed output-limit failure. Normal exit and confirmed timeout cleanup resolve the locked `CommandResult` shape.
 - Focused tests cover normal exit, non-zero exit, literal metacharacters, missing executable, spawn failure, bounded timeout, a child that spawns a child, a SIGTERM-resistant child, descendant cleanup failure, output flood, signal/close races, and platform-appropriate process-tree behavior. Windows evidence must not be described as Linux evidence and Linux-only evidence must not be used to claim Windows behavior.
 
+Task 4 owns workspace containment. Its caller resolves the command cwd beneath the trusted workspace, asynchronously realpaths both the canonical workspace root and candidate, compares canonical paths with platform-appropriate case behavior, and rejects symlink, junction, reparse-point, and case-alias escapes before invoking `runCommand`. The runner receives only the locked four-field `CommandSpec` and performs its usable-directory validation at the process boundary.
+
 ### T0_PATH_POLICY_CANONICAL — host-independent paths and allow-only globs
 
-Path validation is a lexical contract independent of the host OS. Normalize only after validation of the raw string and use POSIX separators for the canonical representation. Reject empty paths, NUL and all control characters, absolute paths, drive-absolute paths, drive-relative forms such as `C:answer.js`, UNC roots, device roots, `.` and `..` segments, empty segments created by repeated separators, reserved DOS device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, and `LPT1`–`LPT9`, case-insensitive), trailing dots or spaces, colon aliases, and any segment whose realpath or reparse-point resolution escapes the declared root. A path that is lexically safe but resolves through a symlink, junction, mount, or case-folded alias outside the root is unsafe.
+Path validation is a lexical contract independent of the host OS. Normalize only after validation of the raw string and use POSIX separators for the canonical representation. Ordinary relative paths reject empty paths, NUL and all control characters, absolute paths, drive-absolute paths, drive-relative forms such as `C:answer.js`, UNC roots, device roots, `.` and `..` segments, empty segments created by repeated separators, reserved DOS device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, and `LPT1`–`LPT9`, case-insensitive), trailing dots or spaces, colon aliases, and any segment whose realpath or reparse-point resolution escapes the declared root. Only the separately named command-CWD schema permits the exact semantic workspace root `.`; it still rejects `./x`, `x/.`, `..`, and every other dot-segment alias. A path that is lexically safe but resolves through a symlink, junction, mount, or case-folded alias outside the root is unsafe.
 
-Editable patterns are an allow-only grammar rooted beneath a declared learner directory. Literal segments, `*`, `?`, and a narrowly prefix-rooted recursive suffix such as `src/**` are permitted. Negation (`!`), braces, extglobs, unrooted global `**`, mixed allow/negate sets, absolute roots, and patterns that can match a parent or sibling directory are invalid. Every candidate is normalized and containment-checked before matching. Tests cover Windows drive, drive-relative, UNC, device, control, reserved-name, trailing-dot/space, dot-segment, symlink/junction/reparse, case-alias, recursive-suffix, and glob-bypass cases.
+Editable patterns are an allow-only grammar rooted beneath a declared learner directory. Literal segments, `*`, `?`, and a narrowly prefix-rooted recursive suffix such as `src/**` are permitted. Negation (`!`), braces, every extglob opener (`!(`, `@(`, `+(`, `?(`, `*(`) anywhere in any pattern segment, unrooted global `**`, mixed allow/negate sets, absolute roots, and patterns that can match a parent or sibling directory are invalid. Every candidate is normalized and containment-checked before matching. Tests cover Windows drive, drive-relative, UNC, device, control, reserved-name, trailing-dot/space, dot-segment, symlink/junction/reparse, case-alias, recursive-suffix, embedded-extglob, and glob-bypass cases.
 
 ### T0_WORKSPACE_LIFECYCLE — non-destructive materialization and reopen
 
-Source, staging, output, manifest, enumeration, and command-cwd boundaries are realpath- and reparse-safe. A missing target may be materialized. An existing valid workspace is reopened without replacing learner files. An existing invalid workspace or a non-empty unknown target is an error; it is never recursively deleted and never silently replaced.
+Source, staging, output, manifest, enumeration, and command-cwd boundaries are realpath- and reparse-safe. Output creation is missing-only: an existing empty directory is still existing/unknown and is rejected. An existing valid workspace is reopened without replacing learner files. An existing invalid workspace or any non-empty unknown target is an error; it is never recursively deleted and never silently replaced.
 
-Materialization validates the source and output parents, creates an operation-owned sibling staging directory, copies only the allowlisted starter/open-test regular files without dereferencing links, writes and validates the staging manifest, and atomically promotes the staging directory when the filesystem supports the operation. On every failure path, cleanup may remove only the staging directory owned by that operation. Existing learner content remains byte-for-byte preserved when staging, validation, promotion, or cleanup fails. Tests cover an existing output, partial copy, rollback, failed promotion, source/output aliases, and junction/symlink/reparse attacks.
+Materialization validates the source and output parents, creates an operation-owned sibling staging directory, copies only the allowlisted starter/open-test regular files without dereferencing links, writes and validates the staging manifest, and promotes without clobbering a target. The portable path validates the sibling stage, then acquires the final path through an exclusive non-recursive reservation, populates only that operation-owned target without overwrite, and retains an ownership token/inventory. A proven platform no-replace primitive may optimize promotion, but ordinary rename-over-target semantics are never treated as no-clobber. On every failure path, cleanup may remove an owned stage or reserved target only while the token and exact inventory prove ownership; unexpected content makes cleanup refuse and emit a stable failure. Existing learner content remains byte-for-byte preserved when staging, validation, promotion, or cleanup fails. Tests cover existing-empty output, an absent child beneath a temporary parent for normal success, target appearance after inspection, reservation collision, partial copy/rollback, failed promotion, unexpected-content cleanup refusal, source/output aliases, and Windows/Linux junction/symlink/reparse attacks.
 
 ### T0_AUTHORITATIVE_BASELINE — fresh source truth and learner persistence
 
-A learner workspace manifest is provenance/cache evidence, never the sole truth. On every open or verify, derive an authoritative protected-file manifest freshly from the trusted exercise source, strictly validate schema version, exercise identity, exercise version, normalized unique paths, byte counts, and hashes, and compare it to the workspace manifest. Fail closed on tampering, replayed manifests, deletion, addition, modification, rename, duplicate path, case alias, or symlink/reparse alias. Baseline mode always uses a fresh disposable materialization; learner mode reopens persistent state and never overwrites learner files.
+A learner workspace manifest is provenance/cache evidence, never the sole truth. `ExerciseWorkspace` carries a readonly canonical `sourceRoot` captured by materialize/open after realpath and source/output alias checks; it is not learner-controlled. At the start of every `verifyExercise`, freshly derive an authoritative protected-file manifest from that source root and the loaded definition, strictly validate schema version, exercise identity, exercise version, normalized unique paths, byte counts, and hashes, and compare authoritative source, cached workspace manifest, and current workspace before any command. Fail closed on tampering, replayed manifests, deletion, addition, modification, rename, duplicate path, case alias, or symlink/reparse alias, and prove that `runCommand` is not called on each mismatch. Baseline mode always uses a fresh disposable materialization; learner mode reopens persistent state and never overwrites learner files.
 
 ### T0_PUBLIC_VERIFIER_SURFACES — independent starter and stable CLI
 
-The public workspace materializes starter code, open tests, and the owned package/test harness only. Solutions, walkthroughs, and hints never enter learner materialization. Every learner workspace exposes `pnpm verify`; baseline infrastructure verification is a separate internal mode, and the same learner verifier must fail the starter for the intended reason and pass an overlaid reference solution automatically. The closure exercise must include an edge/negative case and enforce its declared forbidden dependencies/APIs or remove those unenforced fields from the metadata example.
+The public workspace materializes starter code, open tests, and the owned package/test harness only. Solutions, walkthroughs, and hints never enter learner materialization. Every learner workspace exposes `pnpm verify`; baseline infrastructure verification is a separate internal mode, and the same learner verifier must fail the starter for the intended reason and pass an overlaid reference solution automatically. Release 0 has no planned forbidden-dependency/API enforcement path, so `forbiddenDependencies` and `forbiddenApis` must be empty arrays in the schema fixture and Task 5 metadata; non-empty arrays fail schema validation until a later authorized task supplies real enforcement. The closure exercise still includes a behavioral edge/negative case.
 
 The import-safe machine entry point is:
 
@@ -104,13 +106,13 @@ The import-safe machine entry point is:
 pnpm exec tsx tooling/verify-exercise/src/main.ts <exercise-root> <workspace> <baseline|learner> --json
 ```
 
-Machine mode emits exactly one JSON value on stdout, emits no pnpm lifecycle noise, owns its stderr explicitly, and uses stable exits: `0` for passed verification, `1` for expected validation/verification failure, `2` for usage failure, and `3` for internal failure. The human wrapper remains the public root script `exercise:verify` and may render readable diagnostics; CI and machine parsers use the direct command above, not lifecycle output. Missing, existing-valid, existing-invalid, and non-empty-unknown workspaces each have explicit tests and diagnostics.
+Machine mode emits exactly one JSON value on stdout, emits no pnpm lifecycle noise, owns its stderr explicitly, and uses stable exits: `0` for passed verification, `1` for expected validation/verification failure, `2` for usage failure, and `3` for internal failure. Output mode is selected independently of full argument validity: any invocation containing `--json`, including duplicate, reordered, or otherwise malformed usage, receives exactly one JSON usage/error value on stdout with empty stderr; invocations without `--json` retain human output. The human wrapper remains the public root script `exercise:verify` and may render readable diagnostics; CI and machine parsers use the direct command above, not lifecycle output. Missing, existing-valid, existing-invalid, and non-empty-unknown workspaces each have explicit tests and diagnostics.
 
 ### T0_EXERCISE_OWNERSHIP — curriculum closure and documentation map
 
 Task 5 binds the real exercise through the existing curriculum ownership surfaces: the closure lesson's `exercises` reference and the closure assessment's `artifact` reference. The orchestration/tooling adapter validates those references and the exercise contract without reversing dependencies into curriculum domain packages. Task 5 creates and link-checks these future tracked documentation paths: `docs/authoring/exercises.md`, `docs/learner/exercise-workflow.md`, and `docs/maintainers/verifier-failures.md`. `docs/authoring/remediation.md` remains WP-06 deferred and must not be created or claimed by WP-05; WP-07-owned template-publication documentation remains out of scope.
 
-Canonical ownership fields are the lesson exercises reference and the assessment artifact reference.
+Canonical ownership fields are the lesson exercises reference and the assessment artifact reference. Task 5's exact commit recipe must include both declared curriculum paths alongside the exercise/tooling/docs paths, and the same-task reference-resolution test remains required.
 
 The Task 5 evidence matrix must cover invalid YAML/schema, unsafe cwd/path/glob, source and workspace reparse/case aliases, existing output, partial copy/rollback, corrupt/tampered/replayed baseline, protected add/delete/modify/rename, solution exclusion, intended starter failure, the closure edge case, automated reference-solution pass, spawn/cleanup/output failures, strict CLI usage/stream/exit behavior, and internal errors. Every diagnostic links to the correct authoring, learner, or maintainer document.
 
@@ -211,6 +213,7 @@ export type VerificationMode = 'baseline' | 'learner';
 export interface ExerciseWorkspace {
   exerciseId: string;
   root: string;
+  readonly sourceRoot: string;
   baselineManifestPath: string;
 }
 
@@ -352,7 +355,7 @@ Expected: FAIL because `../src/index.js` does not exist.
 
 - [ ] **Step 4: Implement the locked interfaces and single-settlement process-tree runner**
 
-Implement `packages/command-runner/src/run-command.ts` with the exact `CommandSpec`, `CommandResult`, and `runCommand(spec: CommandSpec): Promise<CommandResult>` declarations in the OW0002 contract above. The implementation must validate the spec and realpath-contained cwd before spawning, resolve `.cmd` commands through the documented deterministic platform rule, and launch only this shape:
+Implement `packages/command-runner/src/run-command.ts` with the exact `CommandSpec`, `CommandResult`, and `runCommand(spec: CommandSpec): Promise<CommandResult>` declarations in the OW0002 contract above. The implementation must validate the spec and confirm that cwd is a real, usable directory before spawning; it must not claim workspace containment at this API boundary. Task 4 performs the asynchronous realpath containment proof before calling the runner. Resolve `.cmd` commands through the documented deterministic platform rule, and launch only this shape:
 
 ```ts
 const child = spawn(spec.command, [...spec.args], {
@@ -517,12 +520,12 @@ const validExercise = {
   prerequisites: ['js.function.values'],
   commands: {
     baseline: [{ id: 'infrastructure', required: true, command: 'pnpm', args: ['test:infrastructure'], cwd: '.', timeoutMs: 60_000 }],
-    learner: [{ id: 'contract', required: true, command: 'pnpm', args: ['test'], cwd: '.', timeoutMs: 60_000 }],
+    learner: [{ id: 'contract', required: true, command: 'pnpm', args: ['verify'], cwd: '.', timeoutMs: 60_000 }],
   },
   constraints: {
     editablePaths: ['src/**'],
     forbiddenDependencies: [],
-    forbiddenApis: ['globalThis'],
+    forbiddenApis: [],
   },
   evidence: ['test-report', 'source-diff', 'explanation'],
   hints: [
@@ -562,6 +565,34 @@ describe('ExerciseDefinitionSchema', () => {
     invalidHint.hints[0]!.path = '../../answer.md';
     expect(() => ExerciseDefinitionSchema.parse(invalidHint)).toThrow();
   });
+
+  it('permits the semantic workspace root only for command cwd', () => {
+    expect(ExerciseDefinitionSchema.parse(validExercise).commands.learner[0]!.cwd).toBe('.');
+
+    for (const cwd of ['./x', 'x/.', '..', 'x/../y']) {
+      const invalidCommand = structuredClone(validExercise);
+      invalidCommand.commands.learner[0]!.cwd = cwd;
+      expect(() => ExerciseDefinitionSchema.parse(invalidCommand)).toThrow();
+    }
+
+    const invalidHint = structuredClone(validExercise);
+    invalidHint.hints[0]!.path = '.';
+    expect(() => ExerciseDefinitionSchema.parse(invalidHint)).toThrow();
+
+    const invalidEditable = structuredClone(validExercise);
+    invalidEditable.constraints.editablePaths = ['.'];
+    expect(() => ExerciseDefinitionSchema.parse(invalidEditable)).toThrow();
+  });
+
+  it('rejects unenforced forbidden dependency and API policy arrays', () => {
+    const invalidApiPolicy = structuredClone(validExercise);
+    invalidApiPolicy.constraints.forbiddenApis = ['globalThis'];
+    expect(() => ExerciseDefinitionSchema.parse(invalidApiPolicy)).toThrow();
+
+    const invalidDependencyPolicy = structuredClone(validExercise);
+    invalidDependencyPolicy.constraints.forbiddenDependencies = ['some-package'];
+    expect(() => ExerciseDefinitionSchema.parse(invalidDependencyPolicy)).toThrow();
+  });
 });
 ```
 
@@ -578,8 +609,8 @@ describe('exercise path rules', () => {
   });
 
   it.each([
-    '../secret', '/absolute', 'C:\\secret', 'C:secret', '\\\\server\\share\\secret', '\\\\?\\C:\\secret',
-    'src/../../secret', 'src//secret', 'src/./secret', 'src/CON.txt', 'src/file. ', 'src/file.\\t', '\u0000secret', '',
+    '.', './secret', '../secret', '/absolute', 'C:\\secret', 'C:secret', '\\\\server\\share\\secret', '\\\\?\\C:\\secret',
+    'src/..', 'src/../../secret', 'src//secret', 'src/./secret', 'src/CON.txt', 'src/file. ', 'src/file.\\t', '\u0000secret', '',
   ])('rejects unsafe relative path %s', (input) => {
     expect(isSafeRelativePath(input)).toBe(false);
   });
@@ -589,7 +620,11 @@ describe('exercise path rules', () => {
     expect(matchesEditablePath('test/counter.test.js', ['src/**'])).toBe(false);
   });
 
-  it.each(['**', '!src/**', '{src,test}/**', 'src/@(counter|answer).js', 'src/**/../secret'])('rejects non-allow-only pattern %s', (pattern) => {
+  it.each([
+    '**', '!src/**', '{src,test}/**', 'src/@(counter|answer).js', 'src/foo@(counter|answer).js',
+    'src/foo?(counter).js', 'src/foo+(counter).js', 'src/foo*(counter).js', 'src/foo!(counter).js',
+    'src/**/../secret',
+  ])('rejects non-allow-only pattern %s', (pattern) => {
     expect(matchesEditablePath('src/counter.js', [pattern])).toBe(false);
   });
 });
@@ -616,6 +651,10 @@ const SemverSchema = z.string().regex(/^\d+\.\d+\.\d+$/);
 const CompetencyIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/);
 const ExerciseIdSchema = z.string().regex(/^ex-[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const RelativePathSchema = z.string().min(1).refine(isSafeRelativePath, 'Path must stay within the exercise root');
+const CommandCwdSchema = z.string().refine(
+  (input) => input === '.' || isSafeRelativePath(input),
+  'Command cwd must be the semantic workspace root or a safe relative directory',
+);
 
 export const MasteryLevelSchema = z.enum(['recognize', 'explain', 'implement', 'diagnose', 'design-and-justify']);
 
@@ -624,7 +663,7 @@ export const CommandDefinitionSchema = z.object({
   required: z.boolean(),
   command: z.string().min(1),
   args: z.array(z.string()),
-  cwd: RelativePathSchema,
+  cwd: CommandCwdSchema,
   timeoutMs: z.number().int().positive().max(15 * 60_000),
 }).strict();
 
@@ -663,6 +702,20 @@ export const ExerciseDefinitionSchema = z.object({
       context.addIssue({ code: 'custom', path: ['requiredLevel', competency], message: 'Required level must reference a declared competency' });
     }
   }
+  if (definition.constraints.forbiddenDependencies.length > 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['constraints', 'forbiddenDependencies'],
+      message: 'Release 0 does not support non-empty forbidden dependency policy arrays',
+    });
+  }
+  if (definition.constraints.forbiddenApis.length > 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['constraints', 'forbiddenApis'],
+      message: 'Release 0 does not support non-empty forbidden API policy arrays',
+    });
+  }
 });
 ```
 
@@ -700,7 +753,7 @@ export function isSafeRelativePath(input: string): boolean {
 
 function isAllowOnlyPattern(pattern: string): boolean {
   if (!isSafeRelativePath(pattern)) return false;
-  if (pattern.startsWith('!') || /[{}]/.test(pattern) || /(?:^|[\\/])[!@+?*][(]/.test(pattern)) return false;
+  if (pattern.startsWith('!') || /[{}]/.test(pattern) || /[!@+?*]\(/.test(pattern)) return false;
   const segments = normalizeRelativePath(pattern).split('/');
   if (segments.length < 2 && segments[0] === '**') return false;
   if (segments.slice(0, -1).some((segment) => segment.includes('**'))) return false;
@@ -795,17 +848,71 @@ git commit -m "feat: define safe exercise contracts"
 
 ```ts
 // packages/exercise-runner/test/materialize.test.ts
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { materializeExercise } from '../src/index.js';
+import {
+  materializeExercise,
+  materializeExerciseWithFilesystemForTest,
+  type MaterializeFilesystemAdapter,
+} from '../src/materialize.js';
 
 const fixture = new URL('../../../fixtures/exercises/valid/minimal/', import.meta.url);
 
+type LifecycleFailureMode = 'target-appears-after-check' | 'reservation-collision' | 'copy-failure' | 'promotion-failure' | 'unexpected-content-cleanup';
+
+interface TestOnlyLifecycleFilesystemAdapter extends MaterializeFilesystemAdapter {
+  failureMode: LifecycleFailureMode;
+  beforeCleanup?: (reservedTarget: string) => Promise<void>;
+}
+
+function createTestOnlyLifecycleFilesystemAdapter(
+  failureMode: LifecycleFailureMode,
+  beforeCleanup?: (reservedTarget: string) => Promise<void>,
+): TestOnlyLifecycleFilesystemAdapter {
+  return {
+    failureMode,
+    beforeCleanup,
+    injectFailure: async (phase, target) => {
+      if (phase === 'reserve' && (failureMode === 'target-appears-after-check' || failureMode === 'reservation-collision')) {
+        await mkdir(target);
+        throw new Error('injected target appearance during exclusive reservation');
+      }
+      if (phase === 'populate' && failureMode === 'copy-failure') {
+        throw new Error('injected partial population failure');
+      }
+      if (phase === 'stage-cleanup' && failureMode === 'promotion-failure') {
+        throw new Error('injected stage cleanup failure');
+      }
+      if (phase === 'stage-cleanup' && beforeCleanup) await beforeCleanup(target);
+    },
+  };
+}
+
+async function materializeExerciseUsingTestOnlyFilesystemAdapter(
+  sourceRoot: string | URL,
+  outputRoot: string,
+  adapter: TestOnlyLifecycleFilesystemAdapter,
+) {
+  return materializeExerciseWithFilesystemForTest(sourceRoot, outputRoot, adapter);
+}
+
+async function materializeExerciseWithInjectedLifecycleFailure(
+  sourceRoot: string | URL,
+  outputRoot: string,
+  failureMode: LifecycleFailureMode,
+  beforeCleanup?: (reservedTarget: string) => Promise<void>,
+) {
+  const adapter = createTestOnlyLifecycleFilesystemAdapter(failureMode, beforeCleanup);
+  // Test-only internal seam: bind this adapter to the non-exported filesystem operations; never export it from production.
+  return materializeExerciseUsingTestOnlyFilesystemAdapter(sourceRoot, outputRoot, adapter);
+}
+
 describe('materializeExercise', () => {
   it('copies starter and open tests, excludes solutions, and writes a baseline manifest', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-exercise-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-exercise-'));
+    const output = path.join(parent, 'workspace');
     const result = await materializeExercise(fixture, output);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -823,8 +930,56 @@ describe('materializeExercise', () => {
       expect.arrayContaining(['src/counter.js', 'test/open/counter.contract.test.js']),
     );
   });
+
+  it('rejects an existing empty output as existing/unknown without deleting it', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-existing-empty-'));
+    const output = path.join(parent, 'workspace');
+    await mkdir(output);
+    const result = await materializeExercise(fixture, output);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics[0]?.code).toBe('EXERCISE_OUTPUT_002');
+    expect((await readdir(output)).length).toBe(0);
+    expect((await readdir(parent)).filter((entry) => entry.startsWith('.roadmap-stage-'))).toEqual([]);
+  });
+
+  const lifecycleFailures = [
+    { failureMode: 'target-appears-after-check', expectedCode: 'EXERCISE_OUTPUT_002' },
+    { failureMode: 'reservation-collision', expectedCode: 'EXERCISE_OUTPUT_002' },
+    { failureMode: 'copy-failure', expectedCode: 'EXERCISE_OUTPUT_003' },
+    { failureMode: 'promotion-failure', expectedCode: 'EXERCISE_OUTPUT_003' },
+  ] as const;
+
+  it.each(lifecycleFailures)('fails closed for %s without deleting learner content', async ({ failureMode, expectedCode }) => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-' + failureMode + '-'));
+    const output = path.join(parent, 'workspace');
+    const sentinel = path.join(parent, failureMode + '.sentinel');
+    await writeFile(sentinel, 'preserve me\n');
+    const result = await materializeExerciseWithInjectedLifecycleFailure(fixture, output, failureMode);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics[0]?.code).toBe(expectedCode);
+    expect(await readFile(sentinel, 'utf8')).toBe('preserve me\n');
+  });
+
+  it('preserves unexpected content inside the reserved target when cleanup refuses', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-unexpected-content-'));
+    const output = path.join(parent, 'workspace');
+    const unexpected = path.join(output, 'unexpected-content.txt');
+    const result = await materializeExerciseWithInjectedLifecycleFailure(
+      fixture,
+      output,
+      'unexpected-content-cleanup',
+      async (reservedTarget) => writeFile(path.join(reservedTarget, 'unexpected-content.txt'), 'preserve inside target\n'),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics[0]?.code).toBe('EXERCISE_OUTPUT_003');
+    expect(await readFile(unexpected, 'utf8')).toBe('preserve inside target\n');
+  });
 });
 ```
+
+`TestOnlyLifecycleFilesystemAdapter`, `createTestOnlyLifecycleFilesystemAdapter`, and `materializeExerciseUsingTestOnlyFilesystemAdapter` are test-module-only fault-injection infrastructure. The production package keeps the adapter private, exports only the two-argument `materializeExercise`, and routes the four injected failures through the internal filesystem seam. The unexpected-content callback runs after reservation and before cleanup, so the assertion proves preservation inside the reserved target rather than relying on an external sentinel.
+
+The package-local test imports the public `materializeExercise` and the `@internal` `materializeExerciseWithFilesystemForTest` directly from `src/materialize.ts`; `src/index.ts` and package exports omit the internal seam. The test-only adapter calls that seam with a `MaterializeFilesystemAdapter`, and never passes a third argument to the public two-argument wrapper.
 
 ```ts
 // packages/exercise-runner/test/open-workspace.test.ts
@@ -838,7 +993,8 @@ const fixture = new URL('../../../fixtures/exercises/valid/minimal/', import.met
 
 describe('openExerciseWorkspace', () => {
   it('reuses a matching workspace without replacing learner edits', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-open-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-open-'));
+    const output = path.join(parent, 'workspace');
     const created = await materializeExercise(fixture, output);
     if (!created.ok) throw new Error('Fixture must materialize');
 
@@ -851,7 +1007,8 @@ describe('openExerciseWorkspace', () => {
   });
 
   it('fails closed on an existing workspace from another exercise version', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-mismatch-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-mismatch-'));
+    const output = path.join(parent, 'workspace');
     const created = await materializeExercise(fixture, output);
     if (!created.ok) throw new Error('Fixture must materialize');
 
@@ -865,7 +1022,9 @@ describe('openExerciseWorkspace', () => {
   });
 
   it('rejects a non-empty unknown workspace without deleting its sentinel file', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-unknown-output-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-unknown-output-'));
+    const output = path.join(parent, 'workspace');
+    await mkdir(output);
     const sentinel = path.join(output, 'do-not-delete.txt');
     await writeFile(sentinel, 'learner content\n');
 
@@ -988,7 +1147,8 @@ export async function loadExercise(
 ```ts
 // packages/exercise-runner/src/baseline-manifest.ts
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, realpath, writeFile } from 'node:fs/promises';
+import type { ExerciseDefinition } from '@roadmap/exercise-contract';
 
 export interface BaselineFileRecord {
   path: string;
@@ -1032,15 +1192,23 @@ export async function readBaselineManifest(file: string): Promise<ExerciseBaseli
   }
   return value as ExerciseBaselineManifest;
 }
+
+export async function deriveAuthoritativeManifest(
+  sourceRoot: string,
+  definition: ExerciseDefinition,
+): Promise<ExerciseBaselineManifest> {
+  const canonicalSourceRoot = await realpath(sourceRoot);
+  return deriveAllowlistedManifest(canonicalSourceRoot, definition);
+}
 ```
 
-The reader must also reject duplicate or non-canonical paths, invalid byte counts, malformed lowercase SHA-256 values, missing source identity/version, and any record that is not present in the freshly derived authoritative source manifest. The manifest is cache/provenance evidence and never replaces source-derived protected-file truth.
+`deriveAllowlistedManifest` walks only the trusted `starter/` and `tests/open/` regular files, rejects symlink/junction/reparse aliases, and records the source identity/version from the loaded definition. The reader must also reject duplicate or non-canonical paths, invalid byte counts, malformed lowercase SHA-256 values, missing source identity/version, and any record that is not present in the freshly derived authoritative source manifest. The manifest is cache/provenance evidence and never replaces source-derived protected-file truth.
 
 - [ ] **Step 5: Implement allowlisted materialization and non-destructive workspace reopening**
 
 ```ts
 // packages/exercise-runner/src/materialize.ts
-import { cp, mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeRelativePath } from '@roadmap/exercise-contract';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
@@ -1050,8 +1218,25 @@ import { loadExercise, resolveExerciseRoot } from './load-exercise.js';
 export interface ExerciseWorkspace {
   exerciseId: string;
   root: string;
+  readonly sourceRoot: string;
   baselineManifestPath: string;
 }
+
+interface OwnedReservation {
+  root: string;
+  ownershipToken: string;
+  expectedInventory: readonly string[];
+  controlPaths: readonly string[];
+}
+
+export type MaterializeLifecyclePhase = 'reserve' | 'populate' | 'stage-cleanup' | 'finalize';
+
+/** @internal Package-local filesystem fault seam; omitted from src/index.ts and package exports. */
+export interface MaterializeFilesystemAdapter {
+  readonly injectFailure?: (phase: MaterializeLifecyclePhase, target: string) => Promise<void>;
+}
+
+const productionFilesystemAdapter: MaterializeFilesystemAdapter = {};
 
 async function listRegularFiles(root: string, current = root): Promise<string[]> {
   const output: string[] = [];
@@ -1077,9 +1262,69 @@ function pathFailure(location: string, error: unknown): ValidationOutcome<never>
   }]);
 }
 
+type OutputDiagnosticCode = 'EXERCISE_OUTPUT_002' | 'EXERCISE_OUTPUT_003';
+
+class ExerciseOutputError extends Error {
+  constructor(
+    readonly diagnosticCode: OutputDiagnosticCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ExerciseOutputError';
+  }
+}
+
+function outputFailure(error: ExerciseOutputError): ValidationOutcome<never> {
+  const code = error.diagnosticCode;
+  return failure([{
+    code,
+    severity: 'error',
+    location: { file: 'workspace-output' },
+    observed: error.message,
+    expected: code === 'EXERCISE_OUTPUT_002'
+      ? 'An absent output path or a target that appeared during exclusive reservation'
+      : 'An operation-owned reservation and sibling stage with exact inventory',
+    reason: code === 'EXERCISE_OUTPUT_002'
+      ? 'Materialization would replace an existing or concurrently appearing output'
+      : 'Non-destructive output finalization or owned cleanup could not be proven safe',
+    remediation: 'Preserve unexpected content, recover the owned reservation, and retry with a fresh absent child path',
+    documentation: 'docs/authoring/exercises.md',
+  }]);
+}
+
+async function invokeLifecycleFailure(
+  filesystem: MaterializeFilesystemAdapter,
+  phase: MaterializeLifecyclePhase,
+  target: string,
+): Promise<void> {
+  try {
+    await filesystem.injectFailure?.(phase, target);
+  } catch (error) {
+    const code = phase === 'reserve' ? 'EXERCISE_OUTPUT_002' : 'EXERCISE_OUTPUT_003';
+    throw new ExerciseOutputError(code, error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** @internal Test-only seam; the public wrapper below remains exactly two-argument. */
+export async function materializeExerciseWithFilesystemForTest(
+  sourceRootInput: string | URL,
+  outputRoot: string,
+  filesystem: MaterializeFilesystemAdapter,
+): Promise<ValidationOutcome<ExerciseWorkspace>> {
+  return materializeExerciseCore(sourceRootInput, outputRoot, filesystem);
+}
+
 export async function materializeExercise(
   sourceRootInput: string | URL,
   outputRoot: string,
+): Promise<ValidationOutcome<ExerciseWorkspace>> {
+  return materializeExerciseCore(sourceRootInput, outputRoot, productionFilesystemAdapter);
+}
+
+async function materializeExerciseCore(
+  sourceRootInput: string | URL,
+  outputRoot: string,
+  filesystem: MaterializeFilesystemAdapter,
 ): Promise<ValidationOutcome<ExerciseWorkspace>> {
   const loaded = await loadExercise(sourceRootInput);
   if (!loaded.ok) return loaded;
@@ -1088,7 +1333,8 @@ export async function materializeExercise(
   const starterRoot = path.join(sourceRoot, 'starter');
   const openTestsRoot = path.join(sourceRoot, 'tests', 'open');
   const resolvedOutput = path.resolve(outputRoot);
-  if (resolvedOutput === sourceRoot || resolvedOutput.startsWith(`${sourceRoot}${path.sep}`)) {
+  const outputParent = await realpath(path.dirname(resolvedOutput));
+  if (resolvedOutput === sourceRoot || resolvedOutput.startsWith(`${sourceRoot}${path.sep}`) || outputParent === sourceRoot || outputParent.startsWith(`${sourceRoot}${path.sep}`)) {
     return failure([{
       code: 'EXERCISE_OUTPUT_001',
       severity: 'error',
@@ -1102,15 +1348,19 @@ export async function materializeExercise(
   }
 
   let stagingRoot: string | undefined;
+  let reservation: OwnedReservation | undefined;
   try {
+    const outputState = await inspectOutputState(resolvedOutput);
+    if (outputState !== 'missing') {
+      throw new ExerciseOutputError(
+        'EXERCISE_OUTPUT_002',
+        `refusing to replace existing ${outputState} output`,
+      );
+    }
     stagingRoot = await mkdtemp(path.join(
       path.dirname(resolvedOutput),
       `.roadmap-stage-${path.basename(resolvedOutput)}-`,
     ));
-    const outputState = await inspectOutputState(resolvedOutput);
-    if (outputState !== 'missing') {
-      throw new Error(`EXERCISE_OUTPUT_002: refusing to replace ${outputState} output`);
-    }
     await listRegularFiles(starterRoot);
     await listRegularFiles(openTestsRoot);
     await mkdir(stagingRoot, { recursive: true });
@@ -1133,29 +1383,65 @@ export async function materializeExercise(
       exerciseVersion: loaded.value.version,
       files: records,
     });
+    const stageInventory = [...files, '.roadmap/exercise-baseline.json'];
     await validateAuthoritativeManifest(stagingRoot, sourceRoot, loaded.value);
-    await rename(stagingRoot, resolvedOutput);
+    await invokeLifecycleFailure(filesystem, 'reserve', resolvedOutput);
+    reservation = await reserveMissingDirectory(resolvedOutput, stageInventory);
+    await invokeLifecycleFailure(filesystem, 'populate', resolvedOutput);
+    await populateReservedDirectory(stagingRoot, reservation, {
+      noOverwrite: true,
+      controlPaths: reservation.controlPaths,
+    });
+    await validateOwnedInventory(reservation);
+    const ownedStage = stagingRoot;
+    if (!ownedStage) throw new ExerciseOutputError('EXERCISE_OUTPUT_003', 'staging ownership was lost before finalization');
+    await invokeLifecycleFailure(filesystem, 'stage-cleanup', resolvedOutput);
+    try {
+      await removeOwnedStage(ownedStage, stageInventory, { controlPaths: [] });
+    } catch {
+      throw new ExerciseOutputError('EXERCISE_OUTPUT_003', 'EXERCISE_OUTPUT_003: refusing to finalize after owned-stage cleanup failure');
+    }
+    stagingRoot = undefined;
+    await invokeLifecycleFailure(filesystem, 'finalize', resolvedOutput);
+    await finalizeOwnedReservation(reservation, {
+      expectedInventory: stageInventory,
+      controlPaths: reservation.controlPaths,
+    });
+    reservation = undefined;
     return success({
       exerciseId: loaded.value.id,
       root: resolvedOutput,
+      sourceRoot,
       baselineManifestPath: path.join(resolvedOutput, '.roadmap', 'exercise-baseline.json'),
     });
   } catch (error) {
-    if (stagingRoot) await rm(stagingRoot, { recursive: true, force: true });
+    try {
+      await cleanupOwnedMaterialization({ stagingRoot, reservation, requireOwnershipToken: true, refuseUnexpectedContent: true });
+    } catch (cleanupError) {
+      return outputFailure(new ExerciseOutputError(
+        'EXERCISE_OUTPUT_003',
+        cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      ));
+    }
+    if (error instanceof ExerciseOutputError) return outputFailure(error);
     return pathFailure(sourceRoot, error);
   }
 }
 ```
 
-`inspectOutputState` must classify the target as missing, matching-valid, invalid, or non-empty-unknown without deleting it. `validateAuthoritativeManifest` must derive protected-file truth from the trusted source, reject reparse aliases, and compare normalized unique paths, bytes, hashes, exercise identity, and version before `rename` promotes the operation-owned sibling stage. The catch block may remove only the stage created by this invocation; it must preserve every pre-existing learner file.
+The public materializeExercise wrapper remains exactly two-argument and delegates to materializeExerciseCore with productionFilesystemAdapter. The @internal materializeExerciseWithFilesystemForTest seam is exported only from src/materialize.ts for package-local tests, is omitted from src/index.ts and package exports, and delegates to the same core with a supplied MaterializeFilesystemAdapter. The core invokes the adapter only at lifecycle boundaries; the test adapter never passes a third argument to the public wrapper.
+
+inspectOutputState runs before mkdtemp creates any sibling stage. An existing-empty, matching-valid, invalid, or non-empty-unknown target returns a typed ExerciseOutputError with EXERCISE_OUTPUT_002 directly, without stage creation or deletion. reserveMissingDirectory uses an exclusive, non-recursive reservation beneath the already-realpathed parent, receives the exact final inventory derived from the validated stage, and translates only its expected EEXIST/target-appeared collision into ExerciseOutputError with EXERCISE_OUTPUT_002 while preserving the target; other reservation, population, stage-cleanup, or finalization uncertainty is represented as ExerciseOutputError with EXERCISE_OUTPUT_003. Source enumeration and reparse failures that are not output-lifecycle failures remain mapped through EXERCISE_PATH_001.
+
+reserveMissingDirectory(target, expectedInventory) returns an ownership token, that expected inventory, and explicit controlPaths for temporary reservation metadata. populateReservedDirectory copies into that operation-owned target without overwrite, and validateOwnedInventory confirms the token and every expected learner file while separately allowing only the declared control paths; the token is never silently counted as a learner file. After population and owned-target validation, removeOwnedStage must remove the sibling stage using its exact expected inventory before finalizing the reservation. A stage-cleanup failure leaves the final ownership token available for safe rollback and emits stable EXERCISE_OUTPUT_003; unexpected content makes cleanup refuse, preserve that content, and emit the same stable failure. Only after stage cleanup and reservation finalization succeed are the local stage and reservation handles cleared and success returned. The portable path never treats ordinary rename-over-target behavior as no-clobber; a proven platform no-replace primitive may be an optimization only. Cleanup may remove only the owned stage or reserved target while its token, expected inventory, and control paths prove ownership.
 
 ```ts
 // packages/exercise-runner/src/open-workspace.ts
-import { access } from 'node:fs/promises';
+import { access, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
 import { readBaselineManifest } from './baseline-manifest.js';
-import { loadExercise } from './load-exercise.js';
+import { loadExercise, resolveExerciseRoot } from './load-exercise.js';
 import { materializeExercise, type ExerciseWorkspace } from './materialize.js';
 
 export async function openExerciseWorkspace(
@@ -1166,6 +1452,8 @@ export async function openExerciseWorkspace(
   if (!definition.ok) return definition;
 
   const root = path.resolve(outputRoot);
+  const canonicalSourceRoot = await realpath(resolveExerciseRoot(sourceRoot));
+  await assertSourceOutputAreDisjoint(canonicalSourceRoot, root);
   const baselineManifestPath = path.join(root, '.roadmap', 'exercise-baseline.json');
   try {
     await access(baselineManifestPath);
@@ -1175,7 +1463,7 @@ export async function openExerciseWorkspace(
 
   try {
     const baseline = await readBaselineManifest(baselineManifestPath);
-    const authoritative = await deriveAuthoritativeManifest(sourceRoot, definition.value);
+    const authoritative = await deriveAuthoritativeManifest(canonicalSourceRoot, definition.value);
     if (!manifestsMatchExactly(baseline, authoritative)) {
       return failure([{
         code: 'EXERCISE_WORKSPACE_001',
@@ -1188,7 +1476,7 @@ export async function openExerciseWorkspace(
         documentation: 'docs/learner/exercise-workflow.md',
       }]);
     }
-    return success({ exerciseId: definition.value.id, root, baselineManifestPath });
+    return success({ exerciseId: definition.value.id, root, sourceRoot: canonicalSourceRoot, baselineManifestPath });
   } catch (error) {
     return failure([{
       code: 'EXERCISE_WORKSPACE_002',
@@ -1230,7 +1518,8 @@ it('returns EXERCISE_PATH_001 for a selected source symlink', async () => {
     );
   }
 
-  const output = await mkdtemp(path.join(tmpdir(), 'roadmap-exercise-output-'));
+  const outputParent = await mkdtemp(path.join(tmpdir(), 'roadmap-exercise-output-'));
+  const output = path.join(outputParent, 'workspace');
   const result = await materializeExercise(source, output);
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.diagnostics[0]?.code).toBe('EXERCISE_PATH_001');
@@ -1245,7 +1534,10 @@ The Windows branch uses a directory junction, which does not require silently sk
 // packages/exercise-runner/src/index.ts
 export * from './baseline-manifest.js';
 export * from './load-exercise.js';
-export * from './materialize.js';
+export {
+  materializeExercise,
+  type ExerciseWorkspace,
+} from './materialize.js';
 export * from './open-workspace.js';
 ```
 
@@ -1285,31 +1577,36 @@ import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { materializeExercise, verifyEditablePaths } from '../src/index.js';
+import { loadExercise, materializeExercise, verifyEditablePaths } from '../src/index.js';
 
 const fixture = new URL('../../../fixtures/exercises/valid/minimal/', import.meta.url);
 
 describe('verifyEditablePaths', () => {
   it('allows changes under src/** and rejects changes to open tests', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-editable-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-editable-'));
+    const output = path.join(parent, 'workspace');
     const materialized = await materializeExercise(fixture, output);
-    expect(materialized.ok).toBe(true);
-    if (!materialized.ok) return;
+    const definition = await loadExercise(fixture);
+    expect(materialized.ok && definition.ok).toBe(true);
+    if (!materialized.ok || !definition.ok) return;
 
     await writeFile(path.join(output, 'src/counter.js'), 'export const changed = true;\n');
-    expect((await verifyEditablePaths(materialized.value, ['src/**'])).ok).toBe(true);
+    expect((await verifyEditablePaths(materialized.value, definition.value, ['src/**'])).ok).toBe(true);
 
     const testFile = path.join(output, 'test/open/counter.contract.test.js');
     await writeFile(testFile, `${await readFile(testFile, 'utf8')}\n// modified\n`);
-    const rejected = await verifyEditablePaths(materialized.value, ['src/**']);
+    const rejected = await verifyEditablePaths(materialized.value, definition.value, ['src/**']);
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.diagnostics[0]?.code).toBe('EXERCISE_EDITABLE_001');
   });
 
   it('rejects a symlink added after materialization', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-editable-link-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-editable-link-'));
+    const output = path.join(parent, 'workspace');
     const materialized = await materializeExercise(fixture, output);
     if (!materialized.ok) throw new Error('Fixture must materialize');
+    const definition = await loadExercise(fixture);
+    if (!definition.ok) throw new Error('Fixture definition must load');
 
     if (process.platform === 'win32') {
       await symlink(path.join(output, 'src'), path.join(output, 'linked-src'), 'junction');
@@ -1317,7 +1614,7 @@ describe('verifyEditablePaths', () => {
       await symlink(path.join(output, 'src/counter.js'), path.join(output, 'answer.js'), 'file');
     }
 
-    const result = await verifyEditablePaths(materialized.value, ['src/**']);
+    const result = await verifyEditablePaths(materialized.value, definition.value, ['src/**']);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics[0]?.code).toBe('EXERCISE_EDITABLE_002');
   });
@@ -1328,12 +1625,11 @@ describe('verifyEditablePaths', () => {
 
 ```ts
 // packages/exercise-runner/src/verify-editable-paths.ts
-import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { matchesEditablePath, normalizeRelativePath } from '@roadmap/exercise-contract';
+import { matchesEditablePath, normalizeRelativePath, type ExerciseDefinition } from '@roadmap/exercise-contract';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
-import { readBaselineManifest } from './baseline-manifest.js';
+import { deriveAuthoritativeManifest, readBaselineManifest } from './baseline-manifest.js';
 import type { ExerciseWorkspace } from './materialize.js';
 
 async function listWorkspaceFiles(root: string, current = root): Promise<string[]> {
@@ -1350,24 +1646,23 @@ async function listWorkspaceFiles(root: string, current = root): Promise<string[
 
 export async function verifyEditablePaths(
   workspace: ExerciseWorkspace,
+  definition: ExerciseDefinition,
   editablePaths: readonly string[],
 ): Promise<ValidationOutcome<readonly string[]>> {
   try {
-    const baseline = await readBaselineManifest(workspace.baselineManifestPath);
-    const baselineByPath = new Map(baseline.files.map((file) => [file.path, file.sha256]));
-    const currentPaths = await listWorkspaceFiles(workspace.root);
-    const allPaths = [...new Set([...baselineByPath.keys(), ...currentPaths])].sort();
+    const authoritative = await deriveAuthoritativeManifest(workspace.sourceRoot, definition);
+    const cached = await readBaselineManifest(workspace.baselineManifestPath);
+    const current = await deriveWorkspaceManifest(workspace.root);
+    const manifestCheck = compareManifestTriplet(authoritative, cached, current, editablePaths);
+    if (!manifestCheck.ok) return failure(manifestCheck.diagnostics);
+
+    const authoritativeByPath = new Map(authoritative.files.map((file) => [file.path, file.sha256]));
+    const currentByPath = new Map(current.files.map((file) => [file.path, file.sha256]));
+    const allPaths = [...new Set([...authoritativeByPath.keys(), ...currentByPath.keys()])].sort();
     const changed: string[] = [];
 
     for (const relativePath of allPaths) {
-      let currentHash: string | undefined;
-      try {
-        const bytes = await readFile(path.join(workspace.root, relativePath));
-        currentHash = createHash('sha256').update(bytes).digest('hex');
-      } catch {
-        currentHash = undefined;
-      }
-      if (currentHash !== baselineByPath.get(relativePath)) changed.push(relativePath);
+      if (currentByPath.get(relativePath) !== authoritativeByPath.get(relativePath)) changed.push(relativePath);
     }
 
     const forbidden = changed.filter((candidate) => !matchesEditablePath(candidate, editablePaths));
@@ -1399,6 +1694,8 @@ export async function verifyEditablePaths(
 }
 ```
 
+`deriveAuthoritativeManifest` realpaths the trusted `sourceRoot` and derives the protected starter/open-test records from the loaded definition on every call. `compareManifestTriplet` strictly validates the authoritative source manifest and cached manifest, then compares the current workspace manifest against authoritative records for every protected path while allowing only declared editable-path changes. It rejects source/cache identity or version drift, cached replay, duplicate/non-canonical paths, byte/hash drift, protected deletion/addition/rename/case alias, and reparse aliases before any command can run. The returned failure is stable and includes the manifest path and remediation; it is not converted into a learner success merely because the altered cache agrees with the workspace.
+
 - [ ] **Step 3: Write failing baseline-versus-learner verification tests**
 
 ```ts
@@ -1413,7 +1710,8 @@ const fixture = new URL('../../../fixtures/exercises/valid/minimal/', import.met
 
 describe('verifyExercise', () => {
   it('passes baseline infrastructure while learner verification remains failed', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-verify-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-verify-'));
+    const output = path.join(parent, 'workspace');
     const definition = await loadExercise(fixture);
     const workspace = await materializeExercise(fixture, output);
     expect(definition.ok && workspace.ok).toBe(true);
@@ -1426,7 +1724,8 @@ describe('verifyExercise', () => {
   });
 
   it('does not execute commands after a protected test is changed', async () => {
-    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-protected-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-protected-'));
+    const output = path.join(parent, 'workspace');
     const definition = await loadExercise(fixture);
     const workspace = await materializeExercise(fixture, output);
     if (!definition.ok || !workspace.ok) throw new Error('Fixture must load');
@@ -1440,12 +1739,13 @@ describe('verifyExercise', () => {
 });
 ```
 
-Add focused cases for tampered and replayed manifests, protected deletion, addition, rename, case alias, and reparse alias. Each case must fail before `runCommand` is called and must retain the stable diagnostic location and remediation.
+Add focused cases after a successful open for a tampered manifest hash, a replayed manifest from another exercise/version, protected deletion, protected addition, protected rename, a case-only alias, and a Unix symlink or Windows junction/reparse alias. Each case spies on or injects the locked runner boundary, proves `runCommand` is not called, and retains the stable manifest/protected-path diagnostic location and remediation. The test fixture must first establish a valid opened workspace, then mutate only the named manifest or workspace state so the fresh source derivation—not a failed initial open—causes the pre-command rejection.
 
 - [ ] **Step 4: Implement protected-path verification, contained working directories, and command composition**
 
 ```ts
 // packages/exercise-runner/src/verify-exercise.ts
+import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { CommandResult } from '@roadmap/command-runner';
 import { runCommand } from '@roadmap/command-runner';
@@ -1470,12 +1770,16 @@ export interface ExerciseVerificationReport {
   diagnostics: readonly Diagnostic[];
 }
 
-function resolveWorkspaceDirectory(root: string, relative: string): string {
-  const resolved = path.resolve(root, relative);
-  const relationship = path.relative(root, resolved);
-  if (relationship === '..' || relationship.startsWith(`..${path.sep}`) || path.isAbsolute(relationship)) {
+async function resolveWorkspaceDirectory(root: string, relative: string): Promise<string> {
+  const canonicalRoot = await realpath(root);
+  const resolved = await realpath(path.resolve(canonicalRoot, relative));
+  const comparableRoot = process.platform === 'win32' ? canonicalRoot.toLowerCase() : canonicalRoot;
+  const comparableResolved = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  const comparableRelationship = path.relative(comparableRoot, comparableResolved);
+  if (comparableRelationship === '..' || comparableRelationship.startsWith(`..${path.sep}`) || path.isAbsolute(comparableRelationship)) {
     throw new Error(`Command working directory escapes workspace: ${relative}`);
   }
+  if (!(await stat(resolved)).isDirectory()) throw new Error(`Command working directory is not a directory: ${relative}`);
   return resolved;
 }
 
@@ -1489,6 +1793,7 @@ export async function verifyExercise(
   try {
     const protectedPaths = await verifyEditablePaths(
       workspace,
+      definition,
       definition.constraints.editablePaths,
     );
     if (!protectedPaths.ok) {
@@ -1505,7 +1810,7 @@ export async function verifyExercise(
       const command = await runCommand({
         command: step.command,
         args: step.args,
-        cwd: resolveWorkspaceDirectory(workspace.root, step.cwd),
+        cwd: await resolveWorkspaceDirectory(workspace.root, step.cwd),
         timeoutMs: step.timeoutMs,
       });
       steps.push({ id: step.id, required: step.required, command });
@@ -1552,6 +1857,8 @@ export async function verifyExercise(
 ```
 
 When `runCommand` rejects a typed spawn, output-limit, or cleanup error, `verifyExercise` must convert it to a stable `EXERCISE_COMMAND_003`/`EXERCISE_COMMAND_004`/`EXERCISE_COMMAND_005` diagnostic with the step pointer and remediation, never the raw error text. Only an unexpected verifier crash becomes `EXERCISE_INTERNAL_001`; all of these mappings remain fail closed and are covered by the Task 4 tests.
+
+Add command-CWD tests for a normal root `.` directory, a safe nested directory, a Unix symlink escape, a Windows junction/reparse escape, and a case-only alias. Each escape must be rejected by the asynchronous caller-side realpath comparison before `runCommand` is entered; Task 1's runner tests cover only usable-directory validation and must not claim workspace containment.
 
 - [ ] **Step 5: Export, verify, and commit**
 
@@ -1629,13 +1936,13 @@ commands:
     - id: contract
       required: true
       command: pnpm
-      args: [test]
+      args: [verify]
       cwd: .
       timeoutMs: 60000
 constraints:
   editablePaths: [src/**]
   forbiddenDependencies: []
-  forbiddenApis: [globalThis]
+  forbiddenApis: []
 evidence:
   - test-report
   - source-diff
@@ -1658,7 +1965,8 @@ hints:
   "type": "module",
   "scripts": {
     "test:infrastructure": "node --test test/infrastructure.test.js",
-    "test": "node --test"
+    "test": "node --test",
+    "verify": "node --test test/open"
   }
 }
 ```
@@ -1699,7 +2007,9 @@ test('each counter preserves independent private state', () => {
 
 The materializer copies this open test to `test/open/counter.contract.test.js`. It remains protected by the baseline manifest and fails for the intended missing implementation.
 
-Bind this exercise through the existing curriculum ownership surfaces in the same future Task 5 implementation: add the exercise reference to `curriculum/lessons/lesson-js-closure-private-state.md` and the artifact reference to `curriculum/assessments/assessment-js-closure.md`. The orchestration/tooling adapter must validate that both references resolve to `ex-js-closure-counter` without adding curriculum-package dependencies to `exercise-runner`. Keep `forbiddenDependencies` and `forbiddenApis` only when the verifier enforces them with a focused negative test; otherwise remove those fields from the metadata contract rather than publishing unenforced claims.
+Bind this exercise through the existing curriculum ownership surfaces in the same future Task 5 implementation: add the exercise reference to `curriculum/lessons/lesson-js-closure-private-state.md` and the artifact reference to `curriculum/assessments/assessment-js-closure.md`. The orchestration/tooling adapter must validate that both references resolve to `ex-js-closure-counter` without adding curriculum-package dependencies to `exercise-runner`. Release 0 has no forbidden-dependency/API enforcement path, so both policy arrays remain empty and the schema's negative test rejects any non-empty value; do not publish `globalThis` or any other unenforced claim.
+
+The same Task 5 integration test must resolve both curriculum references to `ex-js-closure-counter` and fail if either the lesson `exercises` reference or assessment `artifact` reference is missing, stale, or reversed.
 
 - [ ] **Step 3: Author three genuinely progressive hints**
 
@@ -1771,13 +2081,15 @@ async function run(workspace: string, mode: 'baseline' | 'learner') {
 
 describe('verify-exercise CLI', () => {
   it('returns JSON and exit 0 for baseline verification', async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), 'roadmap-cli-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-cli-'));
+    const workspace = path.join(parent, 'workspace');
     const { stdout } = await run(workspace, 'baseline');
     expect(JSON.parse(stdout).status).toBe('passed');
   });
 
   it('reopens rather than rematerializes an existing learner workspace', async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), 'roadmap-cli-persist-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'roadmap-cli-persist-'));
+    const workspace = path.join(parent, 'workspace');
     await run(workspace, 'baseline');
     const learnerSource = 'export function createCounter() { return () => 99; }\n';
     await writeFile(path.join(workspace, 'src/counter.js'), learnerSource);
@@ -1798,8 +2110,8 @@ import { loadExercise, openExerciseWorkspace, verifyExercise } from '@roadmap/ex
 
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
   const [sourceArg, workspaceArg, modeArg, ...formatArgs] = argv;
-  const machine = formatArgs.length === 1 && formatArgs[0] === '--json';
-  const validFormat = formatArgs.length === 0 || machine;
+  const machine = argv.includes('--json');
+  const validFormat = formatArgs.length === 0 || (formatArgs.length === 1 && formatArgs[0] === '--json');
   if (!sourceArg || !workspaceArg || (modeArg !== 'baseline' && modeArg !== 'learner') || !validFormat) {
     return emit({ status: 'usage-error', message: 'Usage: verify-exercise <exercise-root> <workspace> <baseline|learner> [--json]' }, machine, 2);
   }
@@ -1851,7 +2163,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 }
 ```
 
-The module must be import-safe: importing it must not parse argv, spawn a process, write lifecycle noise, or terminate the caller. Machine mode writes exactly one JSON value to stdout and no raw exception to stderr; human mode is the only mode that formats readable diagnostics. `emit` is the sole output path so usage, expected validation failure, and internal failure retain exits `2`, `1`, and `3` respectively.
+The module must be import-safe: importing it must not parse argv, spawn a process, write lifecycle noise, or terminate the caller. Machine mode writes exactly one JSON value to stdout and no raw exception to stderr; human mode is the only mode that formats readable diagnostics. Any invocation containing `--json` is machine mode even when usage is malformed, duplicated, reordered, or contains an unknown argument. `emit` is the sole output path so usage, expected validation failure, and internal failure retain exits `2`, `1`, and `3` respectively. Add CLI tests for duplicate `--json`, `--json` before the positional arguments, reordered format arguments, and unknown arguments with and without `--json`, asserting one JSON stdout value and empty stderr for every machine-requested form.
 
 - [ ] **Step 7: Wire the root script and prove baseline passes while learner mode fails**
 
@@ -1871,7 +2183,7 @@ pnpm exec tsx tooling/verify-exercise/src/main.ts exercises/javascript/ex-js-clo
 pnpm exercise:verify -- exercises/javascript/ex-js-closure-counter .tmp/exercise baseline
 ```
 
-Expected: the direct machine baseline exits `0` with one JSON value; the direct machine learner exits `1` with `EXERCISE_COMMAND_001` because the starter intentionally has no learner implementation; the human wrapper prints readable output without being used as a machine parser. Add focused tests for usage exit `2`, internal exit `3`, empty/owned stderr, one-value stdout, missing targets, valid reopens, invalid manifests, non-empty unknown targets, and reference-solution overlay.
+Expected: the direct machine baseline exits `0` with one JSON value; the direct machine learner executes the metadata's `pnpm verify` command and exits `1` with `EXERCISE_COMMAND_001` because the starter intentionally has no learner implementation; the human wrapper prints readable output without being used as a machine parser. Add focused tests for usage exit `2`, internal exit `3`, empty/owned stderr, one-value stdout, missing targets, valid reopens, invalid manifests, non-empty unknown targets, and reference-solution overlay.
 
 - [ ] **Step 8: Install the reference source only in the temporary workspace and prove learner mode passes**
 
@@ -1887,7 +2199,7 @@ The integration test must perform this reference overlay automatically in its te
 Commit:
 
 ```bash
-git add exercises/javascript/ex-js-closure-counter tooling/verify-exercise package.json docs/authoring/exercises.md docs/learner/exercise-workflow.md docs/maintainers/verifier-failures.md
+git add exercises/javascript/ex-js-closure-counter tooling/verify-exercise package.json docs/authoring/exercises.md docs/learner/exercise-workflow.md docs/maintainers/verifier-failures.md curriculum/lessons/lesson-js-closure-private-state.md curriculum/assessments/assessment-js-closure.md
 git commit -m "feat: add progressive closure exercise workflow"
 ```
 
@@ -2634,4 +2946,4 @@ Do not run or claim Tasks 6–8 from this gate. Their rubric, evidence, remediat
 
 ## WP-05 checkpoint
 
-Stop after the exit gate. Request independent test-design review for command execution, protected-path detection, rubric false positives, and evidence trust semantics before starting template publication.
+Stop after the exit gate. Record only a deferred handoff to the later WP-06 owner for rubric and evidence-trust review after that owner receives explicit authorization; do not perform or request that substantive WP-06 review from the WP-05 checkpoint.
