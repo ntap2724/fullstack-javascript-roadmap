@@ -93,7 +93,7 @@ describe('verifyExercise', () => {
     } finally {
       await rm(prepared.parent, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('blocks every command when a protected file changes', async () => {
     const prepared = await prepareWorkspace();

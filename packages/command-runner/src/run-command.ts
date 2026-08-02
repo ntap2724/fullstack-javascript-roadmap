@@ -1,6 +1,18 @@
-import { access, constants, realpath, stat } from 'node:fs/promises';
+import {
+  access,
+  constants,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import spawn from 'cross-spawn';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const MAX_STREAM_BYTES = 1_048_576;
 const CLEANUP_GRACE_MS = 250;
@@ -42,10 +54,19 @@ export class CommandRunnerError extends Error {
 
 type SpawnImplementation = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 
+type WindowsJobHostFailurePhase =
+  | 'SETUP'
+  | 'ASSIGN'
+  | 'PROTOCOL'
+  | 'CONTAINMENT_QUERY'
+  | 'CONTAINMENT_TERMINATE'
+  | 'CONTAINMENT_WAIT';
+
 export interface CommandRunnerTestHooks {
   readonly spawn?: SpawnImplementation;
   readonly taskkill?: SpawnImplementation;
   readonly windowsProcessAlive?: (pid: number) => boolean;
+  readonly windowsJobHostSetup?: (phase: WindowsJobHostFailurePhase) => void;
   readonly unixKill?: (pid: number, signal: NodeJS.Signals) => void;
   readonly terminateOwnedTree?: (pid: number) => Promise<void>;
   readonly onSettle?: (kind: 'resolve' | 'reject') => void;
@@ -54,6 +75,20 @@ export interface CommandRunnerTestHooks {
 
 let activeTestHooks: CommandRunnerTestHooks = {};
 
+interface WindowsJobHostOperation {
+  readonly root: string;
+  readonly executable: string;
+  readonly payload: string;
+  readonly status: string;
+  readonly ready: string;
+}
+
+interface WindowsJobHostStatus {
+  readonly ok: boolean;
+  readonly phase: string | undefined;
+  readonly exitCode: number | undefined;
+}
+
 /** @internal Package-local seam for deterministic lifecycle tests; not exported from index.ts. */
 export function __setCommandRunnerTestHooks(hooks: CommandRunnerTestHooks = {}): () => void {
   const previous = activeTestHooks;
@@ -61,6 +96,13 @@ export function __setCommandRunnerTestHooks(hooks: CommandRunnerTestHooks = {}):
   return () => {
     activeTestHooks = previous;
   };
+}
+
+function injectWindowsJobHostPhase(
+  hooks: CommandRunnerTestHooks,
+  phase: WindowsJobHostFailurePhase,
+): void {
+  hooks.windowsJobHostSetup?.(phase);
 }
 
 interface OutputAccumulator {
@@ -162,6 +204,216 @@ async function validateCommandSpec(spec: CommandSpec): Promise<string> {
   } catch (error) {
     if (error instanceof CommandRunnerError) throw error;
     throw invalidSpec();
+  }
+}
+
+const commandRunnerModuleDirectory = dirname(fileURLToPath(import.meta.url));
+const windowsJobHostSource = join(commandRunnerModuleDirectory, 'windows-job-host.cs');
+const windowsJobHostCompilerRelativePaths = [
+  ['Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'],
+  ['Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe'],
+] as const;
+
+function encodeWindowsJobField(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64');
+}
+
+async function waitForChildClose(child: ChildProcess, timeoutMs: number): Promise<number | null> {
+  return await new Promise<number | null>((resolve) => {
+    let finished = false;
+    const finish = (exitCode: number | null): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      child.removeListener('error', onError);
+      child.removeListener('close', onClose);
+      resolve(exitCode);
+    };
+    const onError = (): void => {
+      finish(null);
+    };
+    const onClose = (exitCode: number | null): void => {
+      finish(exitCode);
+    };
+    child.once('error', onError);
+    child.once('close', onClose);
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+        // The bounded liveness check below remains the cleanup proof.
+      }
+      if (typeof child.pid !== 'number') {
+        finish(null);
+        return;
+      }
+      void waitUntilGone(() => isWindowsProcessAlive(child.pid as number), CLEANUP_FORCE_MS).then(
+        () => {
+          finish(null);
+        },
+        () => {
+          finish(null);
+        },
+      );
+    }, timeoutMs);
+  });
+}
+
+async function waitForChildCloseEvent(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return await new Promise<boolean>((resolve) => {
+    let finished = false;
+    const finish = (closed: boolean): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      child.removeListener('error', onError);
+      child.removeListener('close', onClose);
+      resolve(closed);
+    };
+    const onError = (): void => {
+      finish(false);
+    };
+    const onClose = (): void => {
+      finish(true);
+    };
+    child.once('error', onError);
+    child.once('close', onClose);
+    const timer = setTimeout(() => {
+      finish(false);
+    }, timeoutMs);
+  });
+}
+
+async function terminateWindowsJobHostProcess(child: ChildProcess): Promise<void> {
+  if (typeof child.pid !== 'number') return;
+  try {
+    child.kill();
+  } catch {
+    // The bounded process-liveness and close checks below remain authoritative.
+  }
+  if (!(await waitUntilGone(() => isWindowsProcessAlive(child.pid as number), CLEANUP_FORCE_MS))) {
+    throw new Error('Windows job host remained alive');
+  }
+  if (!(await waitForChildCloseEvent(child, CLEANUP_HELPER_TIMEOUT_MS))) {
+    throw new Error('Windows job host close was not confirmed');
+  }
+}
+
+async function createWindowsJobHost(
+  spec: CommandSpec,
+  hooks: CommandRunnerTestHooks,
+): Promise<WindowsJobHostOperation> {
+  injectWindowsJobHostPhase(hooks, 'SETUP');
+  const root = await mkdtemp(join(tmpdir(), 'roadmap-command-runner-job-'));
+  const executable = join(root, 'windows-job-host.exe');
+  const payload = join(root, 'payload.txt');
+  const status = join(root, 'status.txt');
+  const ready = join(root, 'ready.txt');
+  try {
+    const payloadLines = [
+      'WP05-JOB-2',
+      encodeWindowsJobField(spec.command),
+      encodeWindowsJobField(spec.cwd),
+      encodeWindowsJobField(status),
+      encodeWindowsJobField(ready),
+      String(spec.args.length),
+      ...spec.args.map(encodeWindowsJobField),
+    ];
+    await writeFile(payload, `${payloadLines.join('\n')}\n`, 'utf8');
+    await compileWindowsJobHost(executable);
+    return { root, executable, payload, status, ready };
+  } catch (error) {
+    try {
+      await rm(root, { recursive: true, force: true });
+    } catch {
+      throw cleanupFailure();
+    }
+    if (error instanceof CommandRunnerError) throw error;
+    throw spawnFailure();
+  }
+}
+
+async function waitForWindowsJobHostReady(
+  operation: WindowsJobHostOperation,
+  child: ChildProcess,
+): Promise<void> {
+  const deadline = Date.now() + CLEANUP_FORCE_MS;
+  while (Date.now() < deadline) {
+    try {
+      if ((await readFile(operation.ready, 'utf8')).trim() === 'READY') return;
+    } catch {
+      // The helper has not completed its pre-resume handshake yet.
+    }
+    if (child.exitCode !== null || child.signalCode !== null) throw spawnFailure();
+    await sleep(CLEANUP_POLL_MS);
+  }
+  throw spawnFailure();
+}
+
+async function compileWindowsJobHost(executable: string): Promise<void> {
+  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  if (systemRoot === undefined) throw spawnFailure();
+
+  let compiler: string | undefined;
+  for (const relativePath of windowsJobHostCompilerRelativePaths) {
+    const candidate = join(systemRoot, ...relativePath);
+    try {
+      await access(candidate, constants.F_OK);
+      compiler = candidate;
+      break;
+    } catch {
+      // Try the 32-bit framework only when the 64-bit compiler is absent.
+    }
+  }
+  if (compiler === undefined) throw spawnFailure();
+
+  try {
+    const compilerProcess = spawn(
+      compiler,
+      ['/nologo', '/target:exe', `/out:${executable}`, windowsJobHostSource],
+      {
+        cwd: commandRunnerModuleDirectory,
+        env: process.env,
+        shell: false,
+        stdio: ['ignore', 'ignore', 'ignore'],
+        windowsHide: true,
+      },
+    );
+    const compilerExitCode = await waitForChildClose(compilerProcess, 30_000);
+    if (compilerExitCode !== 0) throw spawnFailure();
+    await access(executable, constants.F_OK);
+  } catch (error) {
+    if (error instanceof CommandRunnerError) throw error;
+    throw spawnFailure();
+  }
+}
+
+async function readWindowsJobHostStatus(
+  operation: WindowsJobHostOperation,
+): Promise<WindowsJobHostStatus> {
+  try {
+    const fields = (await readFile(operation.status, 'utf8')).trim().split('|');
+    if (fields[0] === 'OK' && fields.length === 2) {
+      const exitCode = Number(fields[1]);
+      if (Number.isSafeInteger(exitCode) && exitCode >= 0) {
+        return { ok: true, phase: undefined, exitCode };
+      }
+    }
+    if (fields[0] === 'FAIL' && fields.length === 2) {
+      return { ok: false, phase: fields[1], exitCode: undefined };
+    }
+  } catch {
+    // A missing or malformed status is an unconfirmed containment result.
+  }
+  return { ok: false, phase: 'PROTOCOL', exitCode: undefined };
+}
+
+async function removeWindowsJobHost(operation: WindowsJobHostOperation): Promise<void> {
+  try {
+    await rm(operation.root, { recursive: true, force: true });
+  } catch {
+    throw cleanupFailure();
   }
 }
 
@@ -392,26 +644,70 @@ async function terminateOwnedTree(pid: number, hooks: CommandRunnerTestHooks): P
 export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
   const operationSpec = snapshotCommandSpec(spec);
   const validatedCwd = await validateCommandSpec(operationSpec);
-  const startedAt = Date.now();
   const hooks = activeTestHooks;
   const spawnProcess = hooks.spawn ?? spawn;
+  const useWindowsJobHost = process.platform === 'win32' && hooks.spawn === undefined;
+  let windowsJobHost: WindowsJobHostOperation | undefined;
+  if (useWindowsJobHost) {
+    try {
+      windowsJobHost = await createWindowsJobHost({ ...operationSpec, cwd: validatedCwd }, hooks);
+    } catch (error) {
+      if (error instanceof CommandRunnerError) throw error;
+      throw spawnFailure();
+    }
+  }
   let child: ChildProcess;
   try {
-    child = spawnProcess(operationSpec.command, [...operationSpec.args], {
-      cwd: validatedCwd,
-      env: process.env,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-    });
+    child = spawnProcess(
+      windowsJobHost?.executable ?? operationSpec.command,
+      windowsJobHost === undefined ? [...operationSpec.args] : [windowsJobHost.payload],
+      {
+        cwd: validatedCwd,
+        env: process.env,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        detached: windowsJobHost === undefined && process.platform !== 'win32',
+      },
+    );
   } catch {
+    if (windowsJobHost !== undefined) {
+      await removeWindowsJobHost(windowsJobHost);
+    }
     throw spawnFailure();
   }
+
+  if (windowsJobHost !== undefined) {
+    try {
+      await waitForWindowsJobHostReady(windowsJobHost, child);
+      injectWindowsJobHostPhase(hooks, 'ASSIGN');
+      injectWindowsJobHostPhase(hooks, 'PROTOCOL');
+    } catch (error) {
+      try {
+        await terminateWindowsJobHostProcess(child);
+      } catch {
+        await removeWindowsJobHost(windowsJobHost);
+        throw cleanupFailure();
+      }
+      await removeWindowsJobHost(windowsJobHost);
+      if (error instanceof CommandRunnerError) throw error;
+      throw spawnFailure();
+    }
+  }
+
+  const startedAt = Date.now();
 
   const childStdout = child.stdout;
   const childStderr = child.stderr;
   if (childStdout === null || childStderr === null) {
+    try {
+      child.kill();
+    } catch {
+      // The helper/process has no usable output channel; report a stable spawn failure.
+    }
+    if (windowsJobHost !== undefined) {
+      await removeWindowsJobHost(windowsJobHost);
+    }
     throw spawnFailure();
   }
 
@@ -474,10 +770,29 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
               state.cleanupConfirmed = true;
               return;
             }
-            if (hooks.terminateOwnedTree !== undefined) {
+            if (windowsJobHost !== undefined && !state.closed) {
+              await terminateWindowsJobHostProcess(child);
+              injectWindowsJobHostPhase(hooks, 'CONTAINMENT_TERMINATE');
+              injectWindowsJobHostPhase(hooks, 'CONTAINMENT_WAIT');
+            } else if (hooks.terminateOwnedTree !== undefined) {
               await hooks.terminateOwnedTree(child.pid);
             } else {
               await terminateOwnedTree(child.pid, hooks);
+            }
+            if (windowsJobHost !== undefined && !state.timedOut && state.failure === undefined) {
+              injectWindowsJobHostPhase(hooks, 'CONTAINMENT_QUERY');
+              const status = await readWindowsJobHostStatus(windowsJobHost);
+              if (!status.ok) {
+                state.failure =
+                  status.phase === 'SETUP' ||
+                  status.phase === 'ASSIGN' ||
+                  status.phase === 'PROTOCOL'
+                    ? spawnFailure()
+                    : cleanupFailure();
+              } else if (status.exitCode !== undefined) {
+                state.exitCode = status.exitCode;
+                state.signal = null;
+              }
             }
             state.cleanupConfirmed = true;
           } catch {
@@ -545,5 +860,9 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
       void ensureCleanup().catch(() => undefined);
     }, operationSpec.timeoutMs);
     hooks.onReady?.();
+  }).finally(async () => {
+    if (windowsJobHost !== undefined) {
+      await removeWindowsJobHost(windowsJobHost);
+    }
   });
 }

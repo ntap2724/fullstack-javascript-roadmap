@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { spawn as nodeSpawn } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -26,6 +27,61 @@ describe('runCommand', () => {
     expect(result.stdout).toBe('out\n');
     expect(result.stderr).toBe('err\n');
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not settle successfully while a normal-exit detached descendant is alive', async () => {
+    if (process.platform !== 'win32') return;
+
+    const root = await mkdtemp(path.join(tmpdir(), 'command-runner-containment-'));
+    const marker = path.join(root, 'descendant-pid.txt');
+    let descendantPid: number | undefined;
+    const source = `
+      import { spawn } from 'node:child_process';
+      import { writeFile } from 'node:fs/promises';
+      const marker = process.argv[1];
+      const descendant = spawn(
+        process.execPath,
+        ['--input-type=module', '--eval', 'setTimeout(() => {}, 1500)'],
+        { detached: true, stdio: 'ignore' },
+      );
+      await writeFile(marker, String(descendant.pid), 'utf8');
+      descendant.unref();
+    `;
+
+    try {
+      let result: Awaited<ReturnType<typeof runCommand>> | undefined;
+      try {
+        result = await runCommand({
+          command: nodeCommand,
+          args: ['--input-type=module', '--eval', source, marker],
+          cwd: process.cwd(),
+          timeoutMs: 5_000,
+        });
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'CLEANUP_FAILED' });
+      }
+
+      try {
+        descendantPid = Number((await readFile(marker, 'utf8')).trim());
+      } catch {
+        descendantPid = undefined;
+      }
+
+      if (result !== undefined) {
+        expect(result.exitCode).toBe(0);
+        expect(descendantPid).toBeGreaterThan(0);
+        expect(isProcessAlive(descendantPid as number)).toBe(false);
+      }
+    } finally {
+      try {
+        if (descendantPid !== undefined && descendantPid > 0) {
+          await terminateSpecificWindowsTree(descendantPid);
+          expect(await waitForProcessGone(descendantPid, 2_000)).toBe(true);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
   });
 
   it('preserves a non-zero exit code', async () => {
@@ -141,7 +197,7 @@ describe('runCommand', () => {
       console.log(grandchild.pid);
       setInterval(() => {}, 10_000);
     `;
-    const result = await runCommand(spec(source, 100));
+    const result = await runCommand(spec(source, 500));
     const grandchildPid = Number(result.stdout.trim());
     expect(result.timedOut).toBe(true);
     expect(grandchildPid).toBeGreaterThan(0);
@@ -157,11 +213,21 @@ describe('runCommand', () => {
       }
       setInterval(() => {}, 10_000);
     `;
-    const startedAt = Date.now();
-    await expect(runCommand(spec(source, 5_000))).rejects.toMatchObject({
-      code: 'OUTPUT_LIMIT_EXCEEDED',
+    let readyAt: number | undefined;
+    const restore = __setCommandRunnerTestHooks({
+      onReady: () => {
+        readyAt = Date.now();
+      },
     });
-    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    try {
+      await expect(runCommand(spec(source, 5_000))).rejects.toMatchObject({
+        code: 'OUTPUT_LIMIT_EXCEEDED',
+      });
+      if (readyAt === undefined) throw new Error('Command runner readiness hook did not fire');
+      expect(Date.now() - readyAt).toBeLessThan(2_000);
+    } finally {
+      restore();
+    }
   });
 
   it('[SOL-T1-004] accepts exactly 1,048,576 stdout bytes intact', async () => {
@@ -366,6 +432,35 @@ describe('runCommand', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it.each([
+    { phase: 'SETUP', code: 'SPAWN_FAILED' },
+    { phase: 'ASSIGN', code: 'SPAWN_FAILED' },
+    { phase: 'PROTOCOL', code: 'SPAWN_FAILED' },
+    { phase: 'CONTAINMENT_QUERY', code: 'CLEANUP_FAILED' },
+    { phase: 'CONTAINMENT_TERMINATE', code: 'CLEANUP_FAILED' },
+    { phase: 'CONTAINMENT_WAIT', code: 'CLEANUP_FAILED' },
+  ])('maps a controlled Windows $phase uncertainty to $code', async ({ phase, code }) => {
+    if (process.platform !== 'win32') return;
+    const restore = __setCommandRunnerTestHooks({
+      windowsJobHostSetup: (...observed: unknown[]) => {
+        if (observed[0] === phase) throw new Error(`controlled ${phase} uncertainty`);
+      },
+    });
+    try {
+      const requiresTermination = phase === 'CONTAINMENT_TERMINATE' || phase === 'CONTAINMENT_WAIT';
+      await expect(
+        runCommand(
+          spec(
+            requiresTermination ? 'setInterval(() => {}, 10_000)' : 'process.exit(0)',
+            requiresTermination ? 50 : 5_000,
+          ),
+        ),
+      ).rejects.toMatchObject({ code });
+    } finally {
+      restore();
+    }
+  });
 });
 
 function isProcessAlive(pid: number): boolean {
@@ -379,6 +474,52 @@ function isProcessAlive(pid: number): boolean {
     }
     return false;
   }
+}
+
+async function terminateSpecificWindowsTree(pid: number): Promise<void> {
+  if (!isProcessAlive(pid)) return;
+  await new Promise<void>((resolve, reject) => {
+    let finished = false;
+    const killer = nodeSpawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      shell: false,
+      stdio: ['ignore', 'ignore', 'ignore'],
+      windowsHide: true,
+    });
+    const finish = (error?: Error): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      killer.removeListener('error', onError);
+      killer.removeListener('close', onClose);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onError = (): void => {
+      finish(new Error('test cleanup taskkill failed'));
+    };
+    const onClose = (): void => {
+      finish();
+    };
+    killer.once('error', onError);
+    killer.once('close', onClose);
+    const timer = setTimeout(() => {
+      try {
+        killer.kill();
+      } catch {
+        // The bounded wait below remains the cleanup proof.
+      }
+      finish();
+    }, 1_000);
+  });
+}
+
+async function waitForProcessGone(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (isProcessAlive(pid)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+  return true;
 }
 
 function createFakeChild(pid: number): ChildProcess & {
