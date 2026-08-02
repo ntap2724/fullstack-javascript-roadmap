@@ -5,5 +5,8 @@ export default defineProject({
     name: 'command-runner',
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    sequence: {
+      groupOrder: 1,
+    },
   },
 });

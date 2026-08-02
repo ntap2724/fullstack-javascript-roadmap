@@ -1,0 +1,23 @@
+{
+  "name": "@roadmap/verify-exercise",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "check": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@roadmap/curriculum-graph": "workspace:*",
+    "@roadmap/exercise-runner": "workspace:*"
+  },
+  "devDependencies": {
+    "@roadmap/curriculum-loader": "workspace:*",
+    "@roadmap/curriculum-schema": "workspace:*",
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

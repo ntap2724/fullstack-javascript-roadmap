@@ -11,6 +11,7 @@ prerequisites:
 assessmentType: focused-exercise
 competencies:
   - js.function.closure
+artifact: ex-js-closure-counter
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
 ---

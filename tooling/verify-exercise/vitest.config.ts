@@ -2,11 +2,12 @@ import { defineProject } from 'vitest/config';
 
 export default defineProject({
   test: {
-    name: 'exercise-runner',
+    name: 'verify-exercise',
     environment: 'node',
+    testTimeout: 20000,
     include: ['test/**/*.test.ts'],
     sequence: {
-      groupOrder: 2,
+      groupOrder: 3,
     },
   },
 });

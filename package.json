@@ -26,6 +26,7 @@
     "verify:templates": "node scripts/unavailable-command.mjs verify:templates",
     "verify:release": "node scripts/unavailable-command.mjs verify:release",
     "content:validate": "pnpm --filter @roadmap/validate-content start --",
+    "exercise:verify": "tsx tooling/verify-exercise/src/main.ts",
     "content:validate:curriculum": "pnpm content:validate curriculum --format text",
     "schema:generate": "tsx scripts/generate-json-schema.ts",
     "schema:check": "pnpm schema:generate && git diff --exit-code -- packages/curriculum-schema/generated/curriculum.schema.json"

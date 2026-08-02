@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: ex-js-closure-counter
+version: 1.0.0
+title: 'Xây bộ đếm có trạng thái riêng'
+type: focused-exercise
+language: javascript
+competencies:
+  - js.scope.lexical
+  - js.function.closure
+requiredLevel:
+  js.scope.lexical: implement
+  js.function.closure: implement
+prerequisites:
+  - js.function.values
+commands:
+  baseline:
+    - id: infrastructure
+      required: true
+      command: pnpm
+      args:
+        - --config.verifyDepsBeforeRun=false
+        - test:infrastructure
+      cwd: .
+      timeoutMs: 60000
+  learner:
+    - id: contract
+      required: true
+      command: pnpm
+      args:
+        - --config.verifyDepsBeforeRun=false
+        - verify
+      cwd: .
+      timeoutMs: 60000
+constraints:
+  editablePaths:
+    - src/**
+  forbiddenDependencies: []
+  forbiddenApis: []
+evidence:
+  - test-report
+  - source-diff
+  - explanation
+hints:
+  - level: 1
+    path: hints/01-concept.md
+  - level: 2
+    path: hints/02-diagnostic.md
+  - level: 3
+    path: hints/03-structure.md

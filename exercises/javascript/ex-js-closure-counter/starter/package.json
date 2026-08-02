@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:infrastructure": "node --test test/infrastructure.test.js",
+    "test": "node --test",
+    "verify": "node --test test/open/counter.contract.test.js"
+  }
+}

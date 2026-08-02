@@ -11,7 +11,8 @@ prerequisites:
 module: module-js-functions
 competencies:
   - js.function.closure
-exercises: []
+exercises:
+  - ex-js-closure-counter
 assessments:
   - assessment-js-closure
 sourceLanguage: vi
