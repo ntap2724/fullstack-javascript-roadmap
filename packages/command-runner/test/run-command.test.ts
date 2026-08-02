@@ -433,6 +433,23 @@ describe('runCommand', () => {
     }
   });
 
+  it('waits for a delayed Windows helper readiness handshake before running a real command', async () => {
+    if (process.platform !== 'win32') return;
+    const restore = __setCommandRunnerTestHooks({
+      windowsJobHostReady: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_250));
+      },
+    });
+    try {
+      const result = await runCommand(spec('setTimeout(() => process.exit(0), 1_500)', 5_000));
+      expect(result.exitCode).toBe(0);
+      expect(result.signal).toBeNull();
+      expect(result.timedOut).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
   it.each([
     { phase: 'SETUP', code: 'SPAWN_FAILED' },
     { phase: 'ASSIGN', code: 'SPAWN_FAILED' },
@@ -442,21 +459,28 @@ describe('runCommand', () => {
     { phase: 'CONTAINMENT_WAIT', code: 'CLEANUP_FAILED' },
   ])('maps a controlled Windows $phase uncertainty to $code', async ({ phase, code }) => {
     if (process.platform !== 'win32') return;
+    const observedPhases: string[] = [];
     const restore = __setCommandRunnerTestHooks({
-      windowsJobHostSetup: (...observed: unknown[]) => {
-        if (observed[0] === phase) throw new Error(`controlled ${phase} uncertainty`);
+      windowsJobHostSetup: (observedPhase) => {
+        observedPhases.push(observedPhase);
+        if (observedPhase === phase) throw new Error(`controlled ${phase} uncertainty`);
       },
     });
     try {
       const requiresTermination = phase === 'CONTAINMENT_TERMINATE' || phase === 'CONTAINMENT_WAIT';
-      await expect(
-        runCommand(
+      let rejection: unknown;
+      try {
+        await runCommand(
           spec(
             requiresTermination ? 'setInterval(() => {}, 10_000)' : 'process.exit(0)',
             requiresTermination ? 50 : 5_000,
           ),
-        ),
-      ).rejects.toMatchObject({ code });
+        );
+      } catch (error: unknown) {
+        rejection = error;
+      }
+      expect(observedPhases).toContain(phase);
+      expect(rejection).toMatchObject({ code });
     } finally {
       restore();
     }

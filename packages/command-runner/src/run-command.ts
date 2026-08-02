@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const MAX_STREAM_BYTES = 1_048_576;
 const CLEANUP_GRACE_MS = 250;
 const CLEANUP_FORCE_MS = 750;
+const WINDOWS_JOB_HOST_READY_TIMEOUT_MS = 5_000;
 const CLEANUP_POLL_MS = 25;
 const CLEANUP_GRACEFUL_COMMAND_TIMEOUT_MS = 700;
 const CLEANUP_FORCE_COMMAND_TIMEOUT_MS = 900;
@@ -67,6 +68,7 @@ export interface CommandRunnerTestHooks {
   readonly taskkill?: SpawnImplementation;
   readonly windowsProcessAlive?: (pid: number) => boolean;
   readonly windowsJobHostSetup?: (phase: WindowsJobHostFailurePhase) => void;
+  readonly windowsJobHostReady?: () => Promise<void>;
   readonly unixKill?: (pid: number, signal: NodeJS.Signals) => void;
   readonly terminateOwnedTree?: (pid: number) => Promise<void>;
   readonly onSettle?: (kind: 'resolve' | 'reject') => void;
@@ -337,8 +339,10 @@ async function createWindowsJobHost(
 async function waitForWindowsJobHostReady(
   operation: WindowsJobHostOperation,
   child: ChildProcess,
+  hooks: CommandRunnerTestHooks,
 ): Promise<void> {
-  const deadline = Date.now() + CLEANUP_FORCE_MS;
+  const deadline = Date.now() + WINDOWS_JOB_HOST_READY_TIMEOUT_MS;
+  await hooks.windowsJobHostReady?.();
   while (Date.now() < deadline) {
     try {
       if ((await readFile(operation.ready, 'utf8')).trim() === 'READY') return;
@@ -679,7 +683,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
 
   if (windowsJobHost !== undefined) {
     try {
-      await waitForWindowsJobHostReady(windowsJobHost, child);
+      await waitForWindowsJobHostReady(windowsJobHost, child, hooks);
       injectWindowsJobHostPhase(hooks, 'ASSIGN');
       injectWindowsJobHostPhase(hooks, 'PROTOCOL');
     } catch (error) {
