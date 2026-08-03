@@ -7,6 +7,7 @@ import {
   RubricSchema,
   RubricSubmissionSchema,
 } from '../src/index.js';
+import type { CriterionResult } from '../src/index.js';
 import { generateRubricJsonSchema } from '../src/json-schema.js';
 
 interface CriticalCriterionFixture {
@@ -19,6 +20,14 @@ interface InlineCriterion {
   readonly critical: boolean;
   readonly required: boolean;
 }
+
+const criticalOnlyFailedCriterion = {
+  criterionId: 'closure.private-state',
+  critical: true,
+  required: false,
+  score: 1,
+  status: 'failed',
+} satisfies CriterionResult;
 
 async function readCriticalCriterionFixture(): Promise<CriticalCriterionFixture> {
   return JSON.parse(
@@ -77,6 +86,22 @@ describe('evaluateRubric', () => {
         status: 'passed',
       },
     ]);
+  });
+
+  it('blocks a below-threshold critical criterion that is not required', () => {
+    const rubric = RubricSchema.parse(
+      createRubric([{ id: 'closure.private-state', critical: true, required: false }]),
+    );
+
+    const result = evaluateRubric(rubric, {
+      rubricId: rubric.id,
+      rubricVersion: rubric.version,
+      scores: { 'closure.private-state': 1 },
+    });
+
+    expect(result.status).toBe('needs-remediation');
+    expect(result.blockingCriterionIds).toEqual(['closure.private-state']);
+    expect(result.criteria).toEqual([criticalOnlyFailedCriterion]);
   });
 
   it('requires a missing required criterion even when the critical criterion passes', () => {

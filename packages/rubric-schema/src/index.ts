@@ -1,5 +1,5 @@
 export { evaluateRubric } from './evaluate.js';
-export type { RubricEvaluation } from './evaluate.js';
+export type { CriterionResult, RubricEvaluation } from './evaluate.js';
 export {
   CriterionIdSchema,
   EvidenceReferenceSchema,

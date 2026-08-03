@@ -5,7 +5,7 @@ import {
   type RubricSubmission,
 } from './schema.js';
 
-interface CriterionResult {
+export interface CriterionResult {
   criterionId: string;
   critical: boolean;
   required: boolean;
