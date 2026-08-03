@@ -29,7 +29,7 @@
     "exercise:verify": "tsx tooling/verify-exercise/src/main.ts",
     "content:validate:curriculum": "pnpm content:validate curriculum --format text",
     "schema:generate": "tsx scripts/generate-json-schema.ts",
-    "schema:check": "pnpm schema:generate && git diff --exit-code -- packages/curriculum-schema/generated/curriculum.schema.json packages/rubric-schema/generated/rubric.schema.json"
+    "schema:check": "pnpm schema:generate && git diff --exit-code -- packages/curriculum-schema/generated/curriculum.schema.json packages/rubric-schema/generated/rubric.schema.json packages/evidence-schema/generated/evidence-manifest.schema.json"
   },
   "engines": {
     "node": ">=24 <25"

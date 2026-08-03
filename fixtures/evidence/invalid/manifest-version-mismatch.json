@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "curriculumVersion": "0.1.0",
+  "templateVersion": "0.1.0",
+  "milestoneId": "milestone-fullstack-vertical-slice",
+  "repository": {
+    "url": "https://github.com/example/workshop-enrollment",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "attestations": ["repository-verifiable"]
+  },
+  "verification": {
+    "ciRun": "https://github.com/example/workshop-enrollment/actions/runs/123",
+    "status": "passed",
+    "attestations": ["ci-verified"]
+  },
+  "artifacts": [
+    {
+      "id": "evidence-architecture-overview",
+      "path": "evidence/architecture/overview.md",
+      "attestations": ["repository-verifiable"]
+    }
+  ]
+}

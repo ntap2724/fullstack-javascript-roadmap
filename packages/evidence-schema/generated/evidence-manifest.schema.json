@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "curriculumVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "templateVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "milestoneId": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        {
+          "pattern": "^milestone-"
+        }
+      ]
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "allOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "string",
+              "pattern": "^https:\\/\\/"
+            }
+          ]
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "attestations": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "self-reported",
+              "repository-verifiable",
+              "ci-verified",
+              "externally-observable",
+              "human-reviewed"
+            ]
+          }
+        }
+      },
+      "required": ["url", "commit", "attestations"],
+      "additionalProperties": false
+    },
+    "deployment": {
+      "type": "object",
+      "properties": {
+        "frontend": {
+          "allOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "string",
+              "pattern": "^https:\\/\\/"
+            }
+          ]
+        },
+        "api": {
+          "allOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "string",
+              "pattern": "^https:\\/\\/"
+            }
+          ]
+        },
+        "attestations": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "self-reported",
+              "repository-verifiable",
+              "ci-verified",
+              "externally-observable",
+              "human-reviewed"
+            ]
+          }
+        }
+      },
+      "required": ["attestations"],
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "ciRun": {
+          "allOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "string",
+              "pattern": "^https:\\/\\/"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed"]
+        },
+        "attestations": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "self-reported",
+              "repository-verifiable",
+              "ci-verified",
+              "externally-observable",
+              "human-reviewed"
+            ]
+          }
+        }
+      },
+      "required": ["ciRun", "status", "attestations"],
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "pattern": "^evidence-"
+              }
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?![A-Za-z]:)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^\\\\]+$"
+          },
+          "attestations": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "self-reported",
+                "repository-verifiable",
+                "ci-verified",
+                "externally-observable",
+                "human-reviewed"
+              ]
+            }
+          }
+        },
+        "required": ["id", "path", "attestations"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "curriculumVersion",
+    "templateVersion",
+    "milestoneId",
+    "repository",
+    "verification",
+    "artifacts"
+  ],
+  "additionalProperties": false
+}
