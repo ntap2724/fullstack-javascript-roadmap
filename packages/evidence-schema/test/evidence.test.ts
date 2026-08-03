@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { generateEvidenceManifestJsonSchema } from '../src/json-schema.js';
 import { EvidenceManifestSchema, satisfiesTrustRequirement } from '../src/index.js';
+import type { EvidenceAttestations, EvidenceManifest, EvidenceTrustLevel } from '../src/index.js';
 
 async function readManifestVersionMismatchFixture(): Promise<unknown> {
   return JSON.parse(
@@ -34,7 +35,7 @@ const valid = {
       attestations: ['repository-verifiable'],
     },
   ],
-};
+} as const;
 
 describe('EvidenceManifestSchema', () => {
   it('accepts a versioned evidence manifest', () => {
@@ -74,19 +75,56 @@ describe('EvidenceManifestSchema', () => {
     ).toThrow(/failed verification cannot claim ci-verified/);
   });
 
-  it('rejects duplicate artifact IDs, traversal paths, insecure URLs, and duplicate attestations', () => {
+  it('keeps artifacts[].id uniqueness as a runtime invariant beyond stock JSON Schema object equality', () => {
     expect(() =>
       EvidenceManifestSchema.parse({
         ...valid,
-        artifacts: [valid.artifacts[0], valid.artifacts[0]],
+        artifacts: [
+          valid.artifacts[0],
+          {
+            ...valid.artifacts[0],
+            path: 'evidence/architecture/alternate.md',
+          },
+        ],
       }),
     ).toThrow(/Artifact IDs must be unique/);
-    expect(() =>
-      EvidenceManifestSchema.parse({
+  });
+
+  it('requires canonical repository-relative evidence paths', () => {
+    const invalidPaths = [
+      'https://example.invalid/evidence.json',
+      'mailto:owner@example.invalid',
+      '/absolute.md',
+      'C:/absolute.md',
+      'C:\\absolute.md',
+      'evidence\\architecture\\overview.md',
+      '.\\evidence.md',
+      './evidence.md',
+      'evidence/./file.md',
+      'evidence/../file.md',
+      'evidence//file.md',
+      'evidence/',
+      '',
+    ];
+
+    for (const path of invalidPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(false);
+    }
+
+    expect(
+      EvidenceManifestSchema.safeParse({
         ...valid,
-        artifacts: [{ ...valid.artifacts[0], path: '../answer.md' }],
-      }),
-    ).toThrow();
+        artifacts: [{ ...valid.artifacts[0], path: 'evidence/architecture/overview.md' }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects insecure URLs and duplicate attestations', () => {
     expect(() =>
       EvidenceManifestSchema.parse({
         ...valid,
@@ -145,6 +183,32 @@ describe('EvidenceManifestSchema', () => {
     ).toBe(false);
     expect(EvidenceManifestSchema.safeParse({ ...valid, artifacts: [] }).success).toBe(false);
   });
+
+  it('accepts omitted and valid deployment records but rejects unknown deployment fields', () => {
+    expect(EvidenceManifestSchema.parse(valid).deployment).toBeUndefined();
+
+    const deployment = {
+      frontend: 'https://example.invalid/deployment',
+      attestations: ['externally-observable'],
+    };
+
+    expect(EvidenceManifestSchema.parse({ ...valid, deployment }).deployment).toEqual(deployment);
+    expect(
+      EvidenceManifestSchema.safeParse({
+        ...valid,
+        deployment: { ...deployment, undocumentedField: true },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('supports external consumers of EvidenceManifest and trust public types', () => {
+    const requiredTrust: EvidenceTrustLevel = 'ci-verified';
+    const attestations: EvidenceAttestations = [requiredTrust];
+    const manifest: EvidenceManifest = EvidenceManifestSchema.parse(valid);
+
+    expect(satisfiesTrustRequirement(attestations, requiredTrust)).toBe(true);
+    expect(manifest.artifacts).toHaveLength(1);
+  });
 });
 
 describe('generated JSON Schema', () => {
@@ -156,6 +220,25 @@ describe('generated JSON Schema', () => {
       ),
     ) as unknown;
 
+    expect(committed).toMatchObject({
+      properties: {
+        repository: { properties: { attestations: { uniqueItems: true } } },
+        deployment: { properties: { attestations: { uniqueItems: true } } },
+        verification: {
+          properties: { attestations: { uniqueItems: true } },
+          not: {
+            properties: {
+              status: { const: 'failed' },
+              attestations: { contains: { const: 'ci-verified' } },
+            },
+            required: ['status', 'attestations'],
+          },
+        },
+        artifacts: {
+          items: { properties: { attestations: { uniqueItems: true } } },
+        },
+      },
+    });
     expect(committed).toEqual(generateEvidenceManifestJsonSchema());
   });
 });

@@ -20,7 +20,7 @@ const UrlSchema = z.url().and(z.string().regex(/^https:\/\//, 'Evidence URLs mus
 const RelativeEvidencePathSchema = z
   .string()
   .regex(
-    /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\]+$/,
+    /^(?!\.{1,2}(?:\/|$))(?!.*\/\.{1,2}(?:\/|$))[^/:\\]+(?:\/[^/:\\]+)*$/,
     'Evidence paths must be repository-relative and cannot traverse',
   );
 

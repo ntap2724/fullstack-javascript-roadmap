@@ -56,7 +56,8 @@
               "externally-observable",
               "human-reviewed"
             ]
-          }
+          },
+          "uniqueItems": true
         }
       },
       "required": ["url", "commit", "attestations"],
@@ -101,7 +102,8 @@
               "externally-observable",
               "human-reviewed"
             ]
-          }
+          },
+          "uniqueItems": true
         }
       },
       "required": ["attestations"],
@@ -138,11 +140,25 @@
               "externally-observable",
               "human-reviewed"
             ]
-          }
+          },
+          "uniqueItems": true
         }
       },
       "required": ["ciRun", "status", "attestations"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "not": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          },
+          "attestations": {
+            "contains": {
+              "const": "ci-verified"
+            }
+          }
+        },
+        "required": ["status", "attestations"]
+      }
     },
     "artifacts": {
       "minItems": 1,
@@ -163,7 +179,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(?!\\/)(?![A-Za-z]:)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^\\\\]+$"
+            "pattern": "^(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/:\\\\]+(?:\\/[^/:\\\\]+)*$"
           },
           "attestations": {
             "minItems": 1,
@@ -177,7 +193,8 @@
                 "externally-observable",
                 "human-reviewed"
               ]
-            }
+            },
+            "uniqueItems": true
           }
         },
         "required": ["id", "path", "attestations"],
