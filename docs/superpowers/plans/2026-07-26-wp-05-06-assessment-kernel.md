@@ -120,6 +120,206 @@ The Task 5 evidence matrix must cover invalid YAML/schema, unsafe cwd/path/glob,
 
 Each future task file map must name every file it creates or modifies, its focused test command, its broader verification command, and a commit command containing only that task's owned paths. The root catalog/lockfile changes are future Task 1/2 implementation work, not this documentation commit. Before the WP-05 checkpoint, run the focused contract probes, strict UTF-8/LF/no-BOM checks, formatting, `git diff --check`, package-local checks/tests, `pnpm check`, and the relevant `pnpm verify`/exercise verifier commands required by the task. Do not claim the deferred WP-06 tasks are implemented or verified from WP-05 evidence.
 
+## WP-06 Phase-B Task-0 canonical amendment — WP06_PHASE_B_AUTHORIZED
+
+### Activation, authority, and historical boundary
+
+The human-authorized WP-06 Phase-B branch activates Tasks 6–8 after the accepted takeover and the owner’s Task 0 dispatch. This Task 0 amendment changes only this plan. It creates no package, fixture, generated schema, documentation guide, lockfile, product behavior, or verification evidence for Tasks 6–8.
+
+The earlier WP-05 Task 0 contract, its WP-05 execution boundary, and the WP-05 exit gate remain historical WP-05 authority. The marker WP06_DEFERRED_NOT_AUTHORIZED described the completed WP-05 dispatch and its authority limit. It no longer labels Tasks 6–8 as inactive on this separately authorized WP-06 Phase-B branch. The active Task 6–8 specifications in this amendment supersede only stale illustrative WP-06 file maps, snippets, commands, and status wording; they do not alter Tasks 1–5, accepted WP-05 interfaces, WP-05 package ownership, or the original WP-05 acceptance evidence.
+
+Tasks 6–8 now carry the marker WP06_PHASE_B_AUTHORIZED. That marker authorizes future bounded WP-06 task dispatches only. It does not assert that Task 0 implemented, tested, generated, or verified any future task.
+
+### Canonical WP-06 file ownership and supporting-scope allocation
+
+All later create, modify, and preserve paths are listed here and in the active files list for the owning task. No supporting scope item is prose-only.
+
+#### Task 6 ownership — rubric schema and S1/S2/S3/S4/S7
+
+Create:
+
+- packages/rubric-schema/package.json
+- packages/rubric-schema/tsconfig.json
+- packages/rubric-schema/vitest.config.ts
+- packages/rubric-schema/src/schema.ts
+- packages/rubric-schema/src/evaluate.ts
+- packages/rubric-schema/src/json-schema.ts
+- packages/rubric-schema/src/index.ts
+- packages/rubric-schema/test/rubric.test.ts
+- packages/rubric-schema/generated/rubric.schema.json
+- fixtures/rubric/invalid/critical-criterion-below-threshold.json
+
+Modify in Task 6 only:
+
+- scripts/generate-json-schema.ts, extending the existing curriculum generator with the rubric package generator and committed rubric artifact
+- package.json, extending the existing schema:check dirty-diff path list with packages/rubric-schema/generated/rubric.schema.json
+- pnpm-lock.yaml, only the Task-6 package importer resolution after the Task-6 manifest exists
+
+Preserve:
+
+- pnpm-workspace.yaml and vitest.config.ts
+- packages/command-runner/**, packages/exercise-contract/**, packages/exercise-runner/**, all apps/**, curriculum/**, exercises/**, templates/**, release/CI/publication surfaces, and WP-07+ work
+
+#### Task 7 ownership — evidence schema and S1/S2/S3/S4/S7
+
+Create:
+
+- packages/evidence-schema/package.json
+- packages/evidence-schema/tsconfig.json
+- packages/evidence-schema/vitest.config.ts
+- packages/evidence-schema/src/schema.ts
+- packages/evidence-schema/src/trust.ts
+- packages/evidence-schema/src/json-schema.ts
+- packages/evidence-schema/src/index.ts
+- packages/evidence-schema/test/evidence.test.ts
+- packages/evidence-schema/generated/evidence-manifest.schema.json
+- fixtures/evidence/invalid/manifest-version-mismatch.json
+
+Modify in Task 7 only:
+
+- scripts/generate-json-schema.ts, incrementally adding the evidence package generator and committed evidence-manifest artifact to the existing root path
+- package.json, incrementally adding packages/evidence-schema/generated/evidence-manifest.schema.json to the existing schema:check dirty-diff coverage
+- pnpm-lock.yaml, only the Task-7 package importer resolution after the Task-7 manifest exists
+
+Preserve:
+
+- pnpm-workspace.yaml and vitest.config.ts
+- the Task-6 public package surface after its accepted commit
+- packages/command-runner/**, packages/exercise-contract/**, packages/exercise-runner/**, apps/**, curriculum/**, exercises/**, templates/**, release/CI/publication surfaces, and WP-07+ work
+
+#### Task 8 ownership — assessment composition and S1/S2/S3/S4/S5/S6/S7
+
+Create:
+
+- packages/assessment-core/package.json
+- packages/assessment-core/tsconfig.json
+- packages/assessment-core/vitest.config.ts
+- packages/assessment-core/src/remediation.ts
+- packages/assessment-core/src/result.ts
+- packages/assessment-core/src/json-schema.ts
+- packages/assessment-core/src/index.ts
+- packages/assessment-core/test/assessment.test.ts
+- packages/assessment-core/generated/remediation-catalog.schema.json
+- fixtures/assessment/closure-counter-remediation.yaml
+- docs/authoring/remediation.md
+
+Modify in Task 8 only:
+
+- scripts/generate-json-schema.ts, incrementally adding the assessment package generator and committed remediation-catalog artifact to the existing root path
+- package.json, incrementally adding packages/assessment-core/generated/remediation-catalog.schema.json to the existing schema:check dirty-diff coverage
+- pnpm-lock.yaml, only the Task-8 package importer resolution after the Task-8 manifest exists
+- tooling/verify-exercise/test/cli.test.ts, only its documentation-boundary assertion so docs/authoring/remediation.md is expected, link-checked, and no longer required to be absent; preserve every WP-05 behavior assertion
+
+Preserve:
+
+- pnpm-workspace.yaml and vitest.config.ts
+- every WP-05 runtime package source and test, including packages/command-runner/**, packages/exercise-contract/**, packages/exercise-runner/**, their public interfaces, apps/**, curriculum/**, exercises/**, templates/**, release/CI/publication surfaces, and WP-07+ work
+
+S1 is the per-task pnpm-lock.yaml importer update above. S2 is the three package-owned json-schema.ts files and generated artifacts. S3 is the existing scripts/generate-json-schema.ts and existing root package.json schema:check coverage, extended incrementally in the owning task without a new generator or public command. S4 is the two exact JSON negative fixtures and the Task-8 YAML fixture. S5 is docs/authoring/remediation.md in Task 8. S6 is the narrow Task-8 tooling/verify-exercise/test/cli.test.ts assertion update. S7 is the package-manifest workspace dependencies and canonical schema imports in all three future packages.
+
+### Canonical interfaces, stable IDs, and dependency direction
+
+- rubric-schema and evidence-schema are pure domain packages. They must not import Astro, Starlight, React, Express, GitHub, application, template, or any WP-05 package.
+- rubric-schema depends on @roadmap/curriculum-schema: workspace:* and zod: catalog:. It imports CompetencyIdSchema and ArtifactIdSchema from @roadmap/curriculum-schema. It owns and exports CriterionIdSchema for criterion IDs; it does not recreate competency or artifact regex authority.
+- evidence-schema depends on @roadmap/curriculum-schema: workspace:* and zod: catalog:. It imports ArtifactIdSchema for milestone and artifact identity; it does not recreate artifact regex authority.
+- assessment-core depends on @roadmap/rubric-schema: workspace:*, @roadmap/curriculum-schema: workspace:*, @roadmap/validation-core: workspace:*, and zod: catalog:. Its test-only YAML parsing dependency is yaml: catalog: in the package-local manifest. It imports CriterionIdSchema from rubric-schema and CompetencyIdSchema and ArtifactIdSchema from curriculum-schema.
+- Each fixture-reading package declares @types/node: catalog:, typescript: catalog:, and vitest: catalog: as package-local development dependencies; assessment-core also declares yaml: catalog: for its YAML fixture parser.
+- assessment-core uses the canonical Diagnostic, ValidationOutcome, failure, and success shapes from @roadmap/validation-core. Missing coverage for any required or critical criterion yields ASSESSMENT_REMEDIATION_001 with severity error and documentation docs/authoring/remediation.md.
+- Keep the accepted public names exactly: RubricSchema, Rubric, RubricSubmissionSchema, evaluateRubric, RubricEvaluation, EvidenceManifestSchema, EvidenceManifest, EvidenceTrustLevel, EvidenceAttestations, satisfiesTrustRequirement, RemediationCatalogSchema, RemediationCatalog, validateRemediationCoverage, AssessmentResult, and createAssessmentResult.
+- Rubric evaluation remains criterion-level: a missing score, a required score below 2, or a critical score below 2 blocks independently. No total or average score can override a blocker.
+- Evidence attestations remain independent membership claims. Do not add a generic verified boolean, compareTrustLevel function, or total trust ordering.
+- rubric-schema owns a closed evidence-reference compatibility contract. Its explicit literal set is test-report, source-diff, explanation, observation-report, and debugging-report; it is a compatibility boundary for the accepted WP-05 reference strings, not authority for a direct dependency on a WP-05 package.
+
+### Required future RED, GREEN, fixture, and generated-schema evidence
+
+Each future task begins with a genuine focused RED using its named repository fixture before production implementation, then performs the smallest coherent GREEN change. The RED must be preserved as evidence of the missing behavior; product implementation, generated output, and package-manager changes occur only in the corresponding future task, never in Task 0.
+
+- Task 6 reads fixtures/rubric/invalid/critical-criterion-below-threshold.json from the repository in packages/rubric-schema/test/rubric.test.ts. The fixture demonstrates a critical criterion below threshold while another criterion is high; the test proves the critical criterion blocks independently. The focused test also covers missing required scores, unknown criterion IDs, and rubric-version mismatch.
+- Task 7 reads fixtures/evidence/invalid/manifest-version-mismatch.json from the repository in packages/evidence-schema/test/evidence.test.ts. The focused test proves the named manifest version mismatch is rejected in addition to mutable commits, invalid attestation claims, duplicates, traversal, and insecure URLs.
+- Task 8 reads fixtures/assessment/closure-counter-remediation.yaml from the repository in packages/assessment-core/test/assessment.test.ts using the package-local yaml dependency. The test verifies deterministic remediation composition and the required/critical-coverage failure. Inline helpers are permitted only for behavior not already expressed by the canonical fixture.
+
+Each package owns one deterministic draft-2020-12 JSON Schema generator:
+
+- generateRubricJsonSchema in packages/rubric-schema/src/json-schema.ts produces packages/rubric-schema/generated/rubric.schema.json from RubricSchema.
+- generateEvidenceManifestJsonSchema in packages/evidence-schema/src/json-schema.ts produces packages/evidence-schema/generated/evidence-manifest.schema.json from EvidenceManifestSchema.
+- generateRemediationCatalogJsonSchema in packages/assessment-core/src/json-schema.ts produces packages/assessment-core/generated/remediation-catalog.schema.json from RemediationCatalogSchema.
+
+Each package test reads its committed generated JSON artifact and compares it exactly with its package-owned generator result, following the existing curriculum-schema generated-schema test pattern. The existing root scripts/generate-json-schema.ts imports these generators alongside generateCurriculumJsonSchema and writes all currently owned artifacts. The existing root schema:check command generates the curriculum artifact plus every currently committed WP-06 artifact, then performs one dirty diff over exactly those artifact paths. Generated artifacts are committed, visually inspected as data, and schema generation/check evidence is fresh after each task’s final relevant edit.
+
+### Future task sequence, exact verification, and bounded commits
+
+#### Task 6 — WP06_PHASE_B_AUTHORIZED
+
+1. Add the Task-6 package files and the required JSON fixture in a RED state. Run pnpm --filter @roadmap/rubric-schema test -- rubric.test.ts and record its failing critical-threshold fixture assertion before implementation.
+2. Implement the canonical stable-ID imports, the rubric-owned CriterionIdSchema, closed evidence-reference compatibility literals, strict schemas, independent criterion gate, generated-schema function, artifact comparison test, and incremental root generator/check wiring.
+3. Run pnpm --filter @roadmap/rubric-schema check, pnpm --filter @roadmap/rubric-schema test, and pnpm schema:check. Inspect the generated rubric artifact and run strict byte and git diff review before staging.
+4. Stage only these owned paths, never a broad directory:
+
+~~~text
+git add packages/rubric-schema/package.json packages/rubric-schema/tsconfig.json packages/rubric-schema/vitest.config.ts packages/rubric-schema/src/schema.ts packages/rubric-schema/src/evaluate.ts packages/rubric-schema/src/json-schema.ts packages/rubric-schema/src/index.ts packages/rubric-schema/test/rubric.test.ts packages/rubric-schema/generated/rubric.schema.json fixtures/rubric/invalid/critical-criterion-below-threshold.json scripts/generate-json-schema.ts package.json pnpm-lock.yaml
+git commit -m "feat: evaluate critical rubric criteria"
+~~~
+
+#### Task 7 — WP06_PHASE_B_AUTHORIZED
+
+1. Add the Task-7 package files and required JSON fixture in a RED state. Run pnpm --filter @roadmap/evidence-schema test -- evidence.test.ts and record its failing manifest-version-mismatch fixture assertion before implementation.
+2. Implement canonical ArtifactIdSchema imports, independent trust attestations, strict evidence manifest validation, generated-schema function, artifact comparison test, and the incremental existing root generator/check extension.
+3. Run pnpm --filter @roadmap/evidence-schema check, pnpm --filter @roadmap/evidence-schema test, and pnpm schema:check. Inspect the generated evidence-manifest artifact and run strict byte and git diff review before staging.
+4. Stage only these owned paths, never a broad directory:
+
+~~~text
+git add packages/evidence-schema/package.json packages/evidence-schema/tsconfig.json packages/evidence-schema/vitest.config.ts packages/evidence-schema/src/schema.ts packages/evidence-schema/src/trust.ts packages/evidence-schema/src/json-schema.ts packages/evidence-schema/src/index.ts packages/evidence-schema/test/evidence.test.ts packages/evidence-schema/generated/evidence-manifest.schema.json fixtures/evidence/invalid/manifest-version-mismatch.json scripts/generate-json-schema.ts package.json pnpm-lock.yaml
+git commit -m "feat: validate independent evidence attestations"
+~~~
+
+#### Task 8 — WP06_PHASE_B_AUTHORIZED
+
+1. Add the Task-8 package files, YAML fixture, remediation guide, and narrow documentation-boundary test update in a RED state. Run pnpm --filter @roadmap/assessment-core test -- assessment.test.ts and pnpm --filter @roadmap/verify-exercise test -- cli.test.ts; record the missing required/critical remediation diagnostic and the WP-05 documentation-boundary expectation before implementation.
+2. Implement the canonical stable-ID imports, remediation catalog, deterministic assessment result, ASSESSMENT_REMEDIATION_001 error diagnostic, generated-schema function, committed artifact comparison test, YAML fixture loading, guide, narrow CLI test update, and incremental existing root generator/check extension.
+3. Run the inherited preservation gate:
+
+~~~text
+pnpm --filter @roadmap/command-runner test
+pnpm --filter @roadmap/exercise-contract test
+pnpm --filter @roadmap/exercise-runner test
+pnpm --filter @roadmap/verify-exercise test -- cli.test.ts
+pnpm --filter @roadmap/rubric-schema check
+pnpm --filter @roadmap/rubric-schema test
+pnpm --filter @roadmap/evidence-schema check
+pnpm --filter @roadmap/evidence-schema test
+pnpm --filter @roadmap/assessment-core check
+pnpm --filter @roadmap/assessment-core test
+pnpm schema:check
+pnpm check
+pnpm test
+pnpm verify
+~~~
+
+The Task-6 critical-threshold fixture, Task-7 manifest-version-mismatch fixture, Task-8 YAML fixture, and every focused negative assertion are mandatory negative controls. Record their actual platform-specific outcomes; never generalize Windows or Linux evidence that was not run.
+
+4. Inspect all three generated artifacts, complete strict byte/diff review, then stage only these owned paths:
+
+~~~text
+git add packages/assessment-core/package.json packages/assessment-core/tsconfig.json packages/assessment-core/vitest.config.ts packages/assessment-core/src/remediation.ts packages/assessment-core/src/result.ts packages/assessment-core/src/json-schema.ts packages/assessment-core/src/index.ts packages/assessment-core/test/assessment.test.ts packages/assessment-core/generated/remediation-catalog.schema.json fixtures/assessment/closure-counter-remediation.yaml docs/authoring/remediation.md tooling/verify-exercise/test/cli.test.ts scripts/generate-json-schema.ts package.json pnpm-lock.yaml
+git commit -m "feat: produce criterion-level remediation"
+~~~
+
+No future task may amend, rewrite history, integrate to main, mutate a remote, publish, or stage a broad directory. One coherent accepted commit is required per future task or accepted correction.
+
+### WP-06 exit checkpoint — distinct from the historical WP-05 exit gate
+
+Before WP-07 may consume any WP-06 interface, the WP-06 owner must record:
+
+- focused Task 6–8 RED/GREEN evidence and the exact invalid-fixture outcomes
+- package checks/tests, root checks, schema:check, and the Task-8 inherited preservation gate with actual command exits
+- inspection of all three committed generated-schema artifacts and fresh generator/dirty-diff evidence
+- strict UTF-8/no-BOM/zero-CR/final-LF and complete changed-path inventory evidence for every accepted task
+- clean index, worktree, and non-ignored-untracked evidence
+- independent semantic review and independent verification after the writer freezes
+- explicit known limitations, unverified claims, and platform boundaries rather than inferred passing claims
+
+The historical WP-05 exit gate remains unchanged and does not run or certify this WP-06 checkpoint.
+
 ---
 
 ## File map
@@ -162,8 +362,10 @@ packages/rubric-schema/
 ├── vitest.config.ts
 ├── src/schema.ts
 ├── src/evaluate.ts
+├── src/json-schema.ts
 ├── src/index.ts
-└── test/rubric.test.ts
+├── test/rubric.test.ts
+└── generated/rubric.schema.json
 
 packages/evidence-schema/
 ├── package.json
@@ -171,8 +373,10 @@ packages/evidence-schema/
 ├── vitest.config.ts
 ├── src/schema.ts
 ├── src/trust.ts
+├── src/json-schema.ts
 ├── src/index.ts
-└── test/evidence.test.ts
+├── test/evidence.test.ts
+└── generated/evidence-manifest.schema.json
 
 packages/assessment-core/
 ├── package.json
@@ -180,8 +384,33 @@ packages/assessment-core/
 ├── vitest.config.ts
 ├── src/remediation.ts
 ├── src/result.ts
+├── src/json-schema.ts
 ├── src/index.ts
-└── test/assessment.test.ts
+├── test/assessment.test.ts
+└── generated/remediation-catalog.schema.json
+
+fixtures/
+├── rubric/invalid/critical-criterion-below-threshold.json
+├── evidence/invalid/manifest-version-mismatch.json
+└── assessment/closure-counter-remediation.yaml
+
+scripts/generate-json-schema.ts (incrementally modified by Tasks 6, 7, and 8)
+package.json (existing schema:check coverage incrementally modified by Tasks 6, 7, and 8)
+pnpm-lock.yaml (the corresponding importer only, modified by Tasks 6, 7, and 8)
+docs/authoring/remediation.md (created by Task 8)
+tooling/verify-exercise/test/cli.test.ts (narrow documentation-boundary update in Task 8)
+
+Preserve for WP-06:
+pnpm-workspace.yaml
+vitest.config.ts
+packages/command-runner/**
+packages/exercise-contract/**
+packages/exercise-runner/**
+apps/**
+curriculum/**
+exercises/**
+templates/**
+WP-07+ and release/CI/publication surfaces
 
 exercises/javascript/ex-js-closure-counter/
 ├── exercise.yaml
@@ -2603,31 +2832,59 @@ git commit -m "feat: add progressive closure exercise workflow"
 Before leaving WP-05, run the direct machine baseline and learner commands, verify the starter's intended failure, overlay the reference solution and rerun the identical learner verifier, check the edge/negative case, confirm protected-file and non-destructive workspace behavior, and link-check the three WP-05 authoring/learner/maintainer documents. This gate does not evaluate rubrics, evidence trust, remediation, or any other WP-06 concern.
 
 
-### Task 6: Define criterion-based rubrics and evaluation — `WP06_DEFERRED_NOT_AUTHORIZED`
+### Task 6: Define criterion-based rubrics and evaluation — `WP06_PHASE_B_AUTHORIZED`
 
-> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
+> **WP06_PHASE_B_AUTHORIZED:** Active only under a separately bounded WP-06 writer dispatch after this Task 0 plan amendment is accepted. Task 0 itself does not implement, test, commit, or claim Task 6.
 
-**Files:**
+**Files (Task 6 ownership):**
 - Create: `packages/rubric-schema/package.json`
 - Create: `packages/rubric-schema/tsconfig.json`
 - Create: `packages/rubric-schema/vitest.config.ts`
 - Create: `packages/rubric-schema/src/schema.ts`
 - Create: `packages/rubric-schema/src/evaluate.ts`
+- Create: `packages/rubric-schema/src/json-schema.ts`
 - Create: `packages/rubric-schema/src/index.ts`
 - Create: `packages/rubric-schema/test/rubric.test.ts`
-- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
+- Create: `packages/rubric-schema/generated/rubric.schema.json`
+- Create: `fixtures/rubric/invalid/critical-criterion-below-threshold.json`
+- Modify incrementally: `scripts/generate-json-schema.ts` and root `package.json` only in the existing schema:generate/schema:check path
+- Modify: `pnpm-lock.yaml` only for the Task-6 package importer after the manifest exists
+- Preserve: root `vitest.config.ts`, `pnpm-workspace.yaml`, all WP-05 runtime package sources/tests, apps, curriculum, exercises, templates, release/CI/publication surfaces, and WP-07+ work
 
 **Interfaces:**
-- Consumes: stable criterion IDs and explicit evidence references
+- Consumes: `CompetencyIdSchema` and `ArtifactIdSchema` from `@roadmap/curriculum-schema`, a rubric-owned `CriterionIdSchema`, and explicit closed evidence-reference compatibility values
 - Produces: `RubricSchema`, `Rubric`, `RubricSubmissionSchema`, `evaluateRubric`, and `RubricEvaluation`
 
 - [ ] **Step 1: Write failing tests for critical, required, and missing criteria**
 
 ```ts
 // packages/rubric-schema/test/rubric.test.ts
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { evaluateRubric, RubricSchema } from '../src/index.js';
+import {
+  evaluateRubric,
+  RubricSchema,
+  RubricSubmissionSchema,
+} from '../src/index.js';
 
+interface CriticalCriterionFixture {
+  readonly rubric: unknown;
+  readonly submission: unknown;
+}
+
+async function readCriticalCriterionFixture(): Promise<CriticalCriterionFixture> {
+  return JSON.parse(
+    await readFile(
+      new URL(
+        '../../../fixtures/rubric/invalid/critical-criterion-below-threshold.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as CriticalCriterionFixture;
+}
+
+// This inline helper covers version and unknown-key behavior beyond the canonical fixture.
 const rubric = RubricSchema.parse({
   schemaVersion: 1,
   id: 'rubric-js-closure-counter',
@@ -2663,14 +2920,25 @@ const rubric = RubricSchema.parse({
 });
 
 describe('evaluateRubric', () => {
-  it('fails when a critical criterion is below 2 regardless of another score', () => {
+  it('fails when the repository fixture has a critical criterion below 2 regardless of another score', async () => {
+    const fixture = await readCriticalCriterionFixture();
+    const fixtureRubric = RubricSchema.parse(fixture.rubric);
+    const result = evaluateRubric(
+      fixtureRubric,
+      RubricSubmissionSchema.parse(fixture.submission),
+    );
+    expect(result.status).toBe('needs-remediation');
+    expect(result.blockingCriterionIds).toEqual(['closure.private-state']);
+  });
+
+  it('requires each required criterion even when the critical criterion passes', () => {
     const result = evaluateRubric(rubric, {
       rubricId: rubric.id,
       rubricVersion: rubric.version,
-      scores: { 'closure.private-state': 1, 'documentation.explanation': 3 },
+      scores: { 'closure.private-state': 2 },
     });
     expect(result.status).toBe('needs-remediation');
-    expect(result.blockingCriterionIds).toEqual(['closure.private-state']);
+    expect(result.blockingCriterionIds).toEqual(['documentation.explanation']);
   });
 
   it('passes only when every required criterion is present and at least 2', () => {
@@ -2709,14 +2977,26 @@ describe('evaluateRubric', () => {
 ```ts
 // packages/rubric-schema/src/schema.ts
 import { z } from 'zod';
+import { ArtifactIdSchema, CompetencyIdSchema } from '@roadmap/curriculum-schema';
 
 const ScoreSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
-const CriterionIdSchema = z.string().regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/);
-const CompetencyIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/);
+export const CriterionIdSchema = z.string().regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/);
+const RubricArtifactIdSchema = ArtifactIdSchema.regex(
+  /^rubric-/,
+  'Rubric IDs must use the canonical rubric artifact family',
+);
+export const rubricEvidenceReferences = [
+  'test-report',
+  'source-diff',
+  'explanation',
+  'observation-report',
+  'debugging-report',
+] as const;
+export const EvidenceReferenceSchema = z.enum(rubricEvidenceReferences);
 
 export const RubricSchema = z.object({
   schemaVersion: z.literal(1),
-  id: z.string().regex(/^rubric-[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  id: RubricArtifactIdSchema,
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   title: z.string().min(1),
   criteria: z.array(z.object({
@@ -2725,7 +3005,7 @@ export const RubricSchema = z.object({
     critical: z.boolean(),
     required: z.boolean(),
     competency: CompetencyIdSchema,
-    evidence: z.array(z.string().min(1)).min(1),
+    evidence: z.array(EvidenceReferenceSchema).min(1),
     levels: z.object({
       '0': z.string().min(1),
       '1': z.string().min(1),
@@ -2739,7 +3019,7 @@ export const RubricSchema = z.object({
 });
 
 export const RubricSubmissionSchema = z.object({
-  rubricId: z.string(),
+  rubricId: RubricArtifactIdSchema,
   rubricVersion: z.string(),
   scores: z.record(CriterionIdSchema, ScoreSchema),
 }).strict();
@@ -2826,26 +3106,31 @@ pnpm --filter @roadmap/rubric-schema test
 Commit:
 
 ```bash
-git add packages/rubric-schema
+git add packages/rubric-schema/package.json packages/rubric-schema/tsconfig.json packages/rubric-schema/vitest.config.ts packages/rubric-schema/src/schema.ts packages/rubric-schema/src/evaluate.ts packages/rubric-schema/src/json-schema.ts packages/rubric-schema/src/index.ts packages/rubric-schema/test/rubric.test.ts packages/rubric-schema/generated/rubric.schema.json fixtures/rubric/invalid/critical-criterion-below-threshold.json scripts/generate-json-schema.ts package.json pnpm-lock.yaml
 git commit -m "feat: evaluate critical rubric criteria"
 ```
 
-### Task 7: Define versioned evidence with independent trust attestations — `WP06_DEFERRED_NOT_AUTHORIZED`
+### Task 7: Define versioned evidence with independent trust attestations — `WP06_PHASE_B_AUTHORIZED`
 
-> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
+> **WP06_PHASE_B_AUTHORIZED:** Active only under a separately bounded WP-06 writer dispatch after Task 6 is accepted. Task 0 itself does not implement, test, commit, or claim Task 7.
 
-**Files:**
+**Files (Task 7 ownership):**
 - Create: `packages/evidence-schema/package.json`
 - Create: `packages/evidence-schema/tsconfig.json`
 - Create: `packages/evidence-schema/vitest.config.ts`
 - Create: `packages/evidence-schema/src/schema.ts`
 - Create: `packages/evidence-schema/src/trust.ts`
+- Create: `packages/evidence-schema/src/json-schema.ts`
 - Create: `packages/evidence-schema/src/index.ts`
 - Create: `packages/evidence-schema/test/evidence.test.ts`
-- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
+- Create: `packages/evidence-schema/generated/evidence-manifest.schema.json`
+- Create: `fixtures/evidence/invalid/manifest-version-mismatch.json`
+- Modify incrementally: `scripts/generate-json-schema.ts` and root `package.json` only in the existing schema:generate/schema:check path
+- Modify: `pnpm-lock.yaml` only for the Task-7 package importer after the manifest exists
+- Preserve: root `vitest.config.ts`, `pnpm-workspace.yaml`, accepted Task-6 interfaces, all WP-05 runtime package sources/tests, apps, curriculum, exercises, templates, release/CI/publication surfaces, and WP-07+ work
 
 **Interfaces:**
-- Consumes: curriculum, template, milestone, and immutable repository versions
+- Consumes: `ArtifactIdSchema` from `@roadmap/curriculum-schema`, curriculum/template/milestone/repository versions, and explicit independent trust attestations
 - Produces: `EvidenceManifestSchema`, `EvidenceManifest`, `EvidenceTrustLevel`, `EvidenceAttestations`, and `satisfiesTrustRequirement`
 
 - [ ] **Step 1: Create the package and write failing evidence tests**
@@ -2864,9 +3149,11 @@ git commit -m "feat: evaluate critical rubric criteria"
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@roadmap/curriculum-schema": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
@@ -2875,9 +3162,23 @@ git commit -m "feat: evaluate critical rubric criteria"
 
 ```ts
 // packages/evidence-schema/test/evidence.test.ts
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { EvidenceManifestSchema, satisfiesTrustRequirement } from '../src/index.js';
 
+async function readManifestVersionMismatchFixture(): Promise<unknown> {
+  return JSON.parse(
+    await readFile(
+      new URL(
+        '../../../fixtures/evidence/invalid/manifest-version-mismatch.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as unknown;
+}
+
+// This inline helper covers unrelated URL, attestation, and duplicate behavior.
 const valid = {
   schemaVersion: 1,
   curriculumVersion: '0.1.0',
@@ -2895,7 +3196,7 @@ const valid = {
   },
   artifacts: [
     {
-      id: 'architecture',
+      id: 'evidence-architecture-overview',
       path: 'evidence/architecture/overview.md',
       attestations: ['repository-verifiable'],
     },
@@ -2905,6 +3206,11 @@ const valid = {
 describe('EvidenceManifestSchema', () => {
   it('accepts a versioned evidence manifest', () => {
     expect(EvidenceManifestSchema.parse(valid)).toEqual(valid);
+  });
+
+  it('rejects the named repository manifest-version-mismatch fixture', async () => {
+    const fixture = await readManifestVersionMismatchFixture();
+    expect(() => EvidenceManifestSchema.parse(fixture)).toThrow();
   });
 
   it('rejects mutable branch names as repository commits', () => {
@@ -2982,6 +3288,7 @@ Do not add `compareTrustLevel`. Human review, CI execution, repository immutabil
 ```ts
 // packages/evidence-schema/src/schema.ts
 import { z } from 'zod';
+import { ArtifactIdSchema } from '@roadmap/curriculum-schema';
 import { evidenceTrustLevels } from './trust.js';
 
 const TrustSchema = z.enum(evidenceTrustLevels);
@@ -2991,20 +3298,28 @@ const AttestationsSchema = z.array(TrustSchema).min(1).superRefine((attestations
   }
 });
 const SemverSchema = z.string().regex(/^\d+\.\d+\.\d+$/);
-const UrlSchema = z.string().url().refine(
-  (url) => url.startsWith('https://'),
-  'Evidence URLs must use HTTPS',
-);
+const UrlSchema = z
+  .string()
+  .url()
+  .and(z.string().regex(/^https:\/\//, 'Evidence URLs must use HTTPS'));
 const RelativeEvidencePathSchema = z.string().regex(
   /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/,
   'Evidence paths must be repository-relative and cannot traverse',
+);
+const MilestoneIdSchema = ArtifactIdSchema.regex(
+  /^milestone-/,
+  'Milestone IDs must use the canonical milestone artifact family',
+);
+const EvidenceArtifactIdSchema = ArtifactIdSchema.regex(
+  /^evidence-/,
+  'Evidence artifact IDs must use the canonical evidence artifact family',
 );
 
 export const EvidenceManifestSchema = z.object({
   schemaVersion: z.literal(1),
   curriculumVersion: SemverSchema,
   templateVersion: SemverSchema,
-  milestoneId: z.string().regex(/^milestone-[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  milestoneId: MilestoneIdSchema,
   repository: z.object({
     url: UrlSchema,
     commit: z.string().regex(/^[0-9a-f]{40}$/),
@@ -3021,7 +3336,7 @@ export const EvidenceManifestSchema = z.object({
     attestations: AttestationsSchema,
   }).strict(),
   artifacts: z.array(z.object({
-    id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    id: EvidenceArtifactIdSchema,
     path: RelativeEvidencePathSchema,
     attestations: AttestationsSchema,
   }).strict()).min(1),
@@ -3067,28 +3382,34 @@ pnpm --filter @roadmap/evidence-schema test
 Commit:
 
 ```bash
-git add packages/evidence-schema
+git add packages/evidence-schema/package.json packages/evidence-schema/tsconfig.json packages/evidence-schema/vitest.config.ts packages/evidence-schema/src/schema.ts packages/evidence-schema/src/trust.ts packages/evidence-schema/src/json-schema.ts packages/evidence-schema/src/index.ts packages/evidence-schema/test/evidence.test.ts packages/evidence-schema/generated/evidence-manifest.schema.json fixtures/evidence/invalid/manifest-version-mismatch.json scripts/generate-json-schema.ts package.json pnpm-lock.yaml
 git commit -m "feat: validate independent evidence attestations"
 ```
 
 
-### Task 8: Map failed rubric criteria to deterministic remediation — `WP06_DEFERRED_NOT_AUTHORIZED`
+### Task 8: Map failed rubric criteria to deterministic remediation — `WP06_PHASE_B_AUTHORIZED`
 
-> **WP06_DEFERRED_NOT_AUTHORIZED:** Reference material only. Do not implement, test, commit, or claim this task under the WP-05 dispatch.
+> **WP06_PHASE_B_AUTHORIZED:** Active only under a separately bounded WP-06 writer dispatch after Tasks 6 and 7 are accepted. Task 0 itself does not implement, test, commit, or claim Task 8.
 
-**Files:**
+**Files (Task 8 ownership):**
 - Create: `packages/assessment-core/package.json`
 - Create: `packages/assessment-core/tsconfig.json`
 - Create: `packages/assessment-core/vitest.config.ts`
 - Create: `packages/assessment-core/src/remediation.ts`
 - Create: `packages/assessment-core/src/result.ts`
+- Create: `packages/assessment-core/src/json-schema.ts`
 - Create: `packages/assessment-core/src/index.ts`
 - Create: `packages/assessment-core/test/assessment.test.ts`
+- Create: `packages/assessment-core/generated/remediation-catalog.schema.json`
 - Create: `fixtures/assessment/closure-counter-remediation.yaml`
-- Preserve: root `vitest.config.ts` and its existing workspace globs; do not edit it
+- Create: `docs/authoring/remediation.md`
+- Modify incrementally: `scripts/generate-json-schema.ts` and root `package.json` only in the existing schema:generate/schema:check path
+- Modify: `pnpm-lock.yaml` only for the Task-8 package importer after the manifest exists
+- Modify narrowly: `tooling/verify-exercise/test/cli.test.ts` so it expects and link-checks the new remediation guide instead of requiring it to be absent
+- Preserve: root `vitest.config.ts`, `pnpm-workspace.yaml`, all WP-05 runtime package sources/tests and behavior, apps, curriculum, exercises, templates, release/CI/publication surfaces, and WP-07+ work
 
 **Interfaces:**
-- Consumes: `RubricEvaluation`, competency IDs, and remediation metadata
+- Consumes: `Rubric`, `RubricEvaluation`, the rubric-owned `CriterionIdSchema`, canonical `CompetencyIdSchema` and `ArtifactIdSchema`, canonical `Diagnostic`/ `ValidationOutcome`/ `failure`/ `success`, and remediation metadata
 - Produces: `RemediationCatalogSchema`, `createAssessmentResult`, and `AssessmentResult`
 
 - [ ] **Step 1: Write the remediation fixture and failing test**
@@ -3111,7 +3432,9 @@ entries:
 
 ```ts
 // packages/assessment-core/test/assessment.test.ts
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 import { RubricSchema } from '@roadmap/rubric-schema';
 import {
   createAssessmentResult,
@@ -3119,29 +3442,46 @@ import {
   validateRemediationCoverage,
 } from '../src/index.js';
 
-const catalog = RemediationCatalogSchema.parse({
-  schemaVersion: 1,
-  entries: [{
-    criterion: 'closure.private-state',
-    competency: 'js.function.closure',
-    lessons: ['lesson-js-closure-private-state'],
-    exercises: ['ex-js-closure-counter'],
-    retake: ['Restore independent state', 'Add negative test'],
-  }],
-});
+async function readRemediationCatalogFixture() {
+  return RemediationCatalogSchema.parse(
+    parse(
+      await readFile(
+        new URL(
+          '../../../fixtures/assessment/closure-counter-remediation.yaml',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ),
+  );
+}
 
 describe('createAssessmentResult', () => {
-  it('returns exact remediation for each blocking criterion', () => {
+  it('returns exact remediation from the repository YAML fixture for each blocking criterion', async () => {
+    const catalog = await readRemediationCatalogFixture();
     const result = createAssessmentResult({
       status: 'needs-remediation',
       criteria: [{ criterionId: 'closure.private-state', critical: true, required: true, score: 1, status: 'failed' }],
       blockingCriterionIds: ['closure.private-state'],
     }, catalog);
     expect(result.status).toBe('needs-remediation');
-    expect(result.blocking[0]?.competency).toBe('js.function.closure');
+    expect(result.blocking).toEqual([
+      {
+        criterion: 'closure.private-state',
+        competency: 'js.function.closure',
+        lessons: ['lesson-js-closure-private-state'],
+        exercises: ['ex-js-closure-counter'],
+        retake: [
+          'Restore independent state for each counter instance',
+          'Add the negative independence test',
+          'Update the technical explanation',
+        ],
+      },
+    ]);
   });
 
-  it('fails closed when a blocking criterion has no remediation entry', () => {
+  it('fails closed when a blocking criterion has no remediation entry', async () => {
+    const catalog = await readRemediationCatalogFixture();
     expect(() => createAssessmentResult({
       status: 'needs-remediation',
       criteria: [{ criterionId: 'missing.entry', critical: true, required: true, score: 0, status: 'failed' }],
@@ -3150,7 +3490,7 @@ describe('createAssessmentResult', () => {
   });
 
 
-  it('reports every required rubric criterion without remediation as an error', () => {
+  it('reports every required rubric criterion without remediation as an error', async () => {
     const rubric = RubricSchema.parse({
       schemaVersion: 1,
       id: 'rubric-js-closure-counter',
@@ -3166,6 +3506,7 @@ describe('createAssessmentResult', () => {
         levels: { '0': 'Missing', '1': 'Partial', '2': 'Meets', '3': 'Strong' },
       }],
     });
+    const catalog = await readRemediationCatalogFixture();
     const outcome = validateRemediationCoverage(rubric, catalog);
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
@@ -3193,29 +3534,42 @@ describe('createAssessmentResult', () => {
   },
   "dependencies": {
     "@roadmap/rubric-schema": "workspace:*",
+    "@roadmap/curriculum-schema": "workspace:*",
     "@roadmap/validation-core": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }
 ```
 
 ```ts
 // packages/assessment-core/src/remediation.ts
-import type { Rubric } from '@roadmap/rubric-schema';
+import { CriterionIdSchema, type Rubric } from '@roadmap/rubric-schema';
+import { ArtifactIdSchema, CompetencyIdSchema } from '@roadmap/curriculum-schema';
 import { failure, success, type ValidationOutcome } from '@roadmap/validation-core';
 import { z } from 'zod';
+
+const LessonArtifactIdSchema = ArtifactIdSchema.regex(
+  /^lesson-/,
+  'Lesson IDs must use the canonical lesson artifact family',
+);
+const ExerciseArtifactIdSchema = ArtifactIdSchema.regex(
+  /^ex-/,
+  'Exercise IDs must use the canonical exercise artifact family',
+);
 
 export const RemediationCatalogSchema = z.object({
   schemaVersion: z.literal(1),
   entries: z.array(z.object({
-    criterion: z.string().min(1),
-    competency: z.string().regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/),
-    lessons: z.array(z.string().regex(/^lesson-[a-z0-9]+(?:-[a-z0-9]+)*$/)),
-    exercises: z.array(z.string().regex(/^ex-[a-z0-9]+(?:-[a-z0-9]+)*$/)),
+    criterion: CriterionIdSchema,
+    competency: CompetencyIdSchema,
+    lessons: z.array(LessonArtifactIdSchema),
+    exercises: z.array(ExerciseArtifactIdSchema),
     retake: z.array(z.string().min(1)).min(1),
   }).strict()).min(1),
 }).strict().superRefine((catalog, context) => {
@@ -3290,17 +3644,23 @@ Run:
 pnpm --filter @roadmap/command-runner test
 pnpm --filter @roadmap/exercise-contract test
 pnpm --filter @roadmap/exercise-runner test
+pnpm --filter @roadmap/verify-exercise test -- cli.test.ts
+pnpm --filter @roadmap/rubric-schema check
 pnpm --filter @roadmap/rubric-schema test
+pnpm --filter @roadmap/evidence-schema check
 pnpm --filter @roadmap/evidence-schema test
+pnpm --filter @roadmap/assessment-core check
 pnpm --filter @roadmap/assessment-core test
+pnpm schema:check
 pnpm check
 pnpm test
+pnpm verify
 ```
 
 Commit:
 
 ```bash
-git add packages/assessment-core fixtures/assessment
+git add packages/assessment-core/package.json packages/assessment-core/tsconfig.json packages/assessment-core/vitest.config.ts packages/assessment-core/src/remediation.ts packages/assessment-core/src/result.ts packages/assessment-core/src/json-schema.ts packages/assessment-core/src/index.ts packages/assessment-core/test/assessment.test.ts packages/assessment-core/generated/remediation-catalog.schema.json fixtures/assessment/closure-counter-remediation.yaml docs/authoring/remediation.md tooling/verify-exercise/test/cli.test.ts scripts/generate-json-schema.ts package.json pnpm-lock.yaml
 git commit -m "feat: produce criterion-level remediation"
 ```
 
