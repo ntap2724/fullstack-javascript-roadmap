@@ -62,6 +62,14 @@ function createRubric(criteria: readonly InlineCriterion[]) {
   };
 }
 
+function getFirstCriterion(rubric: ReturnType<typeof createRubric>) {
+  const criterion = rubric.criteria[0];
+  if (criterion === undefined) {
+    throw new Error('Expected rubric test data to contain a criterion');
+  }
+  return criterion;
+}
+
 describe('evaluateRubric', () => {
   it('fails when the repository fixture has a critical criterion below 2 regardless of another score', async () => {
     const fixture = await readCriticalCriterionFixture();
@@ -251,7 +259,7 @@ describe('RubricSchema', () => {
     const invalidCompetency = createRubric([
       { id: 'closure.private-state', critical: true, required: true },
     ]);
-    invalidCompetency.criteria[0]!.competency = 'closure';
+    getFirstCriterion(invalidCompetency).competency = 'closure';
 
     expect(() => RubricSchema.parse(invalidCompetency)).toThrow();
   });
@@ -269,7 +277,7 @@ describe('RubricSchema', () => {
       const rubric = createRubric([
         { id: 'closure.private-state', critical: true, required: true },
       ]);
-      rubric.criteria[0]!.evidence = [evidenceReference];
+      getFirstCriterion(rubric).evidence = [evidenceReference];
 
       expect(RubricSchema.safeParse(rubric).success).toBe(true);
     }
@@ -277,7 +285,7 @@ describe('RubricSchema', () => {
     const invalidEvidence = createRubric([
       { id: 'closure.private-state', critical: true, required: true },
     ]);
-    invalidEvidence.criteria[0]!.evidence = ['screen-recording'];
+    getFirstCriterion(invalidEvidence).evidence = ['screen-recording'];
 
     expect(RubricSchema.safeParse(invalidEvidence).success).toBe(false);
   });
@@ -304,7 +312,7 @@ describe('RubricSchema', () => {
     const criterionFixture = createRubric([
       { id: 'closure.private-state', critical: true, required: true },
     ]);
-    const criterion = criterionFixture.criteria[0]!;
+    const criterion = getFirstCriterion(criterionFixture);
     const unknownCriterionField = {
       ...criterionFixture,
       criteria: [{ ...criterion, undocumentedField: true }],
@@ -320,9 +328,10 @@ describe('RubricSchema', () => {
 
   it('requires schema version, semver, title, criteria, and every nonempty level', () => {
     const valid = createRubric([{ id: 'closure.private-state', critical: true, required: true }]);
+    const criterion = getFirstCriterion(valid);
     const missingLevel = {
       ...valid,
-      criteria: [{ ...valid.criteria[0]!, levels: { ...valid.criteria[0]!.levels, '3': '' } }],
+      criteria: [{ ...criterion, levels: { ...criterion.levels, '3': '' } }],
     };
 
     expect(RubricSchema.safeParse({ ...valid, schemaVersion: 2 }).success).toBe(false);
