@@ -124,6 +124,58 @@ describe('EvidenceManifestSchema', () => {
     ).toBe(true);
   });
 
+  it('rejects control characters in runtime and generated evidence paths', () => {
+    const generatedPathPattern = (
+      generateEvidenceManifestJsonSchema() as {
+        properties: {
+          artifacts: {
+            items: {
+              properties: {
+                path: {
+                  pattern: string;
+                };
+              };
+            };
+          };
+        };
+      }
+    ).properties.artifacts.items.properties.path.pattern;
+    const generatedPathRegex = new RegExp(generatedPathPattern);
+    const invalidPaths = [
+      '\nevidence/architecture/overview.md',
+      'evidence/architecture/overview.md\n',
+      'evidence/architecture/\roverview.md',
+      'evidence/architecture/\noverview.md',
+      'evidence/architecture/\r\noverview.md',
+      'evidence/architecture/\0overview.md',
+      'evidence/architecture/\toverview.md',
+      'evidence/architecture/\u001foverview.md',
+      'evidence/architecture/\u007foverview.md',
+      'evidence/architecture/\u0085overview.md',
+      'evidence/architecture/\u2028overview.md',
+      'evidence/architecture/\u2029overview.md',
+    ];
+
+    const runtimeResults = invalidPaths.map(
+      (path) =>
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+    );
+    const generatedResults = invalidPaths.map((path) => generatedPathRegex.test(path));
+
+    expect(runtimeResults).toEqual(invalidPaths.map(() => false));
+    expect(generatedResults).toEqual(invalidPaths.map(() => false));
+    expect(
+      EvidenceManifestSchema.safeParse({
+        ...valid,
+        artifacts: [{ ...valid.artifacts[0], path: 'evidence/architecture/overview.md' }],
+      }).success,
+    ).toBe(true);
+    expect(generatedPathRegex.test('evidence/architecture/overview.md')).toBe(true);
+  });
+
   it('rejects insecure URLs and duplicate attestations', () => {
     expect(() =>
       EvidenceManifestSchema.parse({

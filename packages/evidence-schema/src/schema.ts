@@ -17,10 +17,19 @@ const SemverSchema = z.string().regex(/^\d+\.\d+\.\d+$/);
 
 const UrlSchema = z.url().and(z.string().regex(/^https:\/\//, 'Evidence URLs must use HTTPS'));
 
+const EvidencePathControlCharacterClass =
+  '[\\u' + '0000-\\u' + '001f\\u007f-\\u009f\\u2028\\u2029]';
+
+const RelativeEvidencePathPattern = new RegExp(
+  '^(?![\\s\\S]*' +
+    EvidencePathControlCharacterClass +
+    ')(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/:\\\\]+(?:\\/[^/:\\\\]+)*$',
+);
+
 const RelativeEvidencePathSchema = z
   .string()
   .regex(
-    /^(?!\.{1,2}(?:\/|$))(?!.*\/\.{1,2}(?:\/|$))[^/:\\]+(?:\/[^/:\\]+)*$/,
+    RelativeEvidencePathPattern,
     'Evidence paths must be repository-relative and cannot traverse',
   );
 
