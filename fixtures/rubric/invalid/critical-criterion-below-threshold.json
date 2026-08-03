@@ -1,0 +1,46 @@
+{
+  "rubric": {
+    "schemaVersion": 1,
+    "id": "rubric-js-closure-counter",
+    "version": "1.0.0",
+    "title": "Closure counter rubric",
+    "criteria": [
+      {
+        "id": "closure.private-state",
+        "title": "Private state",
+        "critical": true,
+        "required": true,
+        "competency": "js.function.closure",
+        "evidence": ["source-diff", "test-report"],
+        "levels": {
+          "0": "State is global or absent",
+          "1": "State is local but instances interfere",
+          "2": "Each counter has independent private state and negative tests",
+          "3": "Meets level 2 and clearly explains lexical environment lifetime"
+        }
+      },
+      {
+        "id": "documentation.explanation",
+        "title": "Explanation",
+        "critical": false,
+        "required": true,
+        "competency": "js.function.closure",
+        "evidence": ["explanation"],
+        "levels": {
+          "0": "Missing",
+          "1": "Describes code only",
+          "2": "Explains mechanism",
+          "3": "Explains trade-offs and counterexample"
+        }
+      }
+    ]
+  },
+  "submission": {
+    "rubricId": "rubric-js-closure-counter",
+    "rubricVersion": "1.0.0",
+    "scores": {
+      "closure.private-state": 1,
+      "documentation.explanation": 3
+    }
+  }
+}
