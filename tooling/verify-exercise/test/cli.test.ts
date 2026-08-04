@@ -707,6 +707,7 @@ describe('verify-exercise CLI', () => {
   it('verifies projected documentation files and every local Markdown link', async () => {
     const documentationFiles = [
       path.join(repoRoot, 'docs/authoring/exercises.md'),
+      path.join(repoRoot, 'docs/authoring/remediation.md'),
       path.join(repoRoot, 'docs/learner/exercise-workflow.md'),
       path.join(repoRoot, 'docs/maintainers/verifier-failures.md'),
     ];
@@ -721,6 +722,6 @@ describe('verify-exercise CLI', () => {
         expect(await exists(targetPath)).toBe(true);
       }
     }
-    expect(await exists(path.join(repoRoot, 'docs/authoring/remediation.md'))).toBe(false);
+    expect(await exists(path.join(repoRoot, 'docs/authoring/remediation.md'))).toBe(true);
   });
 });

@@ -1,0 +1,12 @@
+schemaVersion: 1
+entries:
+  - criterion: closure.private-state
+    competency: js.function.closure
+    lessons:
+      - lesson-js-closure-private-state
+    exercises:
+      - ex-js-closure-counter
+    retake:
+      - Restore independent state for each counter instance
+      - Add the negative independence test
+      - Update the technical explanation

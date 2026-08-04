@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "entries": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+          },
+          "competency": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z0-9][a-z0-9-]*)+$"
+          },
+          "lessons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                {
+                  "pattern": "^lesson-"
+                }
+              ]
+            }
+          },
+          "exercises": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                {
+                  "pattern": "^ex-"
+                }
+              ]
+            }
+          },
+          "retake": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": ["criterion", "competency", "lessons", "exercises", "retake"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "entries"],
+  "additionalProperties": false
+}

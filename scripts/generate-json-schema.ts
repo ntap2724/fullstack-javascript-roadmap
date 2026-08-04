@@ -4,6 +4,7 @@ import { format, resolveConfig } from 'prettier';
 import { generateCurriculumJsonSchema } from '../packages/curriculum-schema/src/json-schema.js';
 import { generateEvidenceManifestJsonSchema } from '../packages/evidence-schema/src/json-schema.js';
 import { generateRubricJsonSchema } from '../packages/rubric-schema/src/json-schema.js';
+import { generateRemediationCatalogJsonSchema } from '../packages/assessment-core/src/json-schema.js';
 
 const curriculumOutput = new URL(
   '../packages/curriculum-schema/generated/curriculum.schema.json',
@@ -17,11 +18,17 @@ const evidenceOutput = new URL(
   '../packages/evidence-schema/generated/evidence-manifest.schema.json',
   import.meta.url,
 );
+const assessmentOutput = new URL(
+  '../packages/assessment-core/generated/remediation-catalog.schema.json',
+  import.meta.url,
+);
 const rubricDirectory = new URL('../packages/rubric-schema/generated/', import.meta.url);
 const evidenceDirectory = new URL('../packages/evidence-schema/generated/', import.meta.url);
+const assessmentDirectory = new URL('../packages/assessment-core/generated/', import.meta.url);
 const curriculumSchema = generateCurriculumJsonSchema();
 const rubricSchema = generateRubricJsonSchema();
 const evidenceSchema = generateEvidenceManifestJsonSchema();
+const assessmentSchema = generateRemediationCatalogJsonSchema();
 const rubricOutputPath = fileURLToPath(rubricOutput);
 const rubricFormattingOptions = (await resolveConfig(rubricOutputPath)) ?? {};
 const formattedRubricSchema = await format(JSON.stringify(rubricSchema, null, 2), {
@@ -34,11 +41,19 @@ const formattedEvidenceSchema = await format(JSON.stringify(evidenceSchema, null
   ...evidenceFormattingOptions,
   filepath: evidenceOutputPath,
 });
+const assessmentOutputPath = fileURLToPath(assessmentOutput);
+const assessmentFormattingOptions = (await resolveConfig(assessmentOutputPath)) ?? {};
+const formattedAssessmentSchema = await format(JSON.stringify(assessmentSchema, null, 2), {
+  ...assessmentFormattingOptions,
+  filepath: assessmentOutputPath,
+});
 
 await mkdir(rubricDirectory, { recursive: true });
 await mkdir(evidenceDirectory, { recursive: true });
+await mkdir(assessmentDirectory, { recursive: true });
 await Promise.all([
   writeFile(curriculumOutput, `${JSON.stringify(curriculumSchema, null, 2)}\n`),
   writeFile(rubricOutput, formattedRubricSchema),
   writeFile(evidenceOutput, formattedEvidenceSchema),
+  writeFile(assessmentOutput, formattedAssessmentSchema),
 ]);
