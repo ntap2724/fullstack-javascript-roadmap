@@ -39,7 +39,12 @@ entry is an error; it is never silently omitted or replaced with a generic recom
 
 Run pnpm --filter @roadmap/assessment-core check, pnpm --filter @roadmap/assessment-core test,
 pnpm schema:generate, and pnpm schema:check while authoring. The generated remediation catalog
-schema is committed with the package.
+schema is committed with the package. Its Draft 2020-12 JSON Schema is structural
+prevalidation only, so schema-only acceptance is unsupported. Every supported ingestion path must
+parse the same value through RemediationCatalogSchema after JSON-Schema prevalidation.
+
+Exactly one entry per criterion is enforced by that runtime parser because Draft 2020-12 cannot
+compare one property across distinct array objects.
 
 Keep remediation focused: ask the learner to revisit only the lessons, exercises, and retake
 requirements needed to recover the failed criterion, unless the rubric explicitly establishes

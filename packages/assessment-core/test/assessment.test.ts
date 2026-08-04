@@ -91,11 +91,15 @@ describe('RemediationCatalogSchema', () => {
     const entry = catalog.entries[0];
     if (entry === undefined)
       throw new Error('Expected the fixture to contain one remediation entry');
+    const duplicateCriterionWithDifferentRetake = {
+      ...entry,
+      retake: [...entry.retake, 'Add a focused verification step'],
+    };
 
     expect(() =>
       RemediationCatalogSchema.parse({
         schemaVersion: 1,
-        entries: [entry, entry],
+        entries: [entry, duplicateCriterionWithDifferentRetake],
       }),
     ).toThrow('One remediation entry per criterion is allowed');
     expect(
@@ -311,5 +315,33 @@ describe('generated remediation catalog JSON Schema', () => {
     ) as unknown;
 
     expect(committed).toEqual(generateRemediationCatalogJsonSchema());
+  });
+
+  it('advertises structural prevalidation while runtime parsing enforces criterion uniqueness', async () => {
+    const catalog = await readRemediationCatalogFixture();
+    const entry = catalog.entries[0];
+    if (entry === undefined)
+      throw new Error('Expected the fixture to contain one remediation entry');
+    const duplicateCriterionWithDifferentRetake = {
+      ...entry,
+      retake: [...entry.retake, 'Add a focused verification step'],
+    };
+    const expectedComment =
+      'Draft 2020-12 cannot express uniqueness of entries[].criterion across distinct objects. This schema provides structural prevalidation only; every supported consumer must also parse the catalog with RemediationCatalogSchema.';
+    const committed: unknown = JSON.parse(
+      await readFile(
+        new URL('../generated/remediation-catalog.schema.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown;
+
+    expect(committed).toMatchObject({ $comment: expectedComment });
+    expect(generateRemediationCatalogJsonSchema()).toMatchObject({ $comment: expectedComment });
+    expect(
+      RemediationCatalogSchema.safeParse({
+        schemaVersion: 1,
+        entries: [entry, duplicateCriterionWithDifferentRetake],
+      }).success,
+    ).toBe(false);
   });
 });
