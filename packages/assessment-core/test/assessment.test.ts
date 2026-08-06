@@ -173,6 +173,82 @@ describe('RemediationCatalogSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects an entry offering no learning resource across lessons and exercises', async () => {
+    const catalog = await readRemediationCatalogFixture();
+    const entry = catalog.entries[0];
+    if (entry === undefined)
+      throw new Error('Expected the fixture to contain one remediation entry');
+
+    expect(
+      RemediationCatalogSchema.safeParse({
+        schemaVersion: 1,
+        entries: [{ ...entry, lessons: [], exercises: [] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts lessons-only, exercises-only, and both, because only the union must be nonempty', async () => {
+    const catalog = await readRemediationCatalogFixture();
+    const entry = catalog.entries[0];
+    if (entry === undefined)
+      throw new Error('Expected the fixture to contain one remediation entry');
+
+    expect(
+      RemediationCatalogSchema.safeParse({
+        schemaVersion: 1,
+        entries: [{ ...entry, lessons: ['lesson-js-closure-private-state'], exercises: [] }],
+      }).success,
+    ).toBe(true);
+    expect(
+      RemediationCatalogSchema.safeParse({
+        schemaVersion: 1,
+        entries: [{ ...entry, lessons: [], exercises: ['ex-js-closure-counter'] }],
+      }).success,
+    ).toBe(true);
+    expect(
+      RemediationCatalogSchema.safeParse({
+        schemaVersion: 1,
+        entries: [
+          {
+            ...entry,
+            lessons: ['lesson-js-closure-private-state'],
+            exercises: ['ex-js-closure-counter'],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts an entry competency that differs from the rubric criterion competency (HR0001)', async () => {
+    // HR0001 rules that remediation.entries[].competency is the primary related competency the
+    // learner should revisit, which MAY differ from the competency assessed by the rubric
+    // criterion. Remediation through a prerequisite or foundational competency is deliberate, so
+    // no equality invariant exists at runtime or in the generated schema. This is a regression
+    // lock, not a defect reproduction.
+    const catalog = await readRemediationCatalogFixture();
+    const entry = catalog.entries[0];
+    if (entry === undefined)
+      throw new Error('Expected the fixture to contain one remediation entry');
+
+    const rubric = createRubric([{ id: 'closure.private-state', critical: true, required: true }]);
+    const prerequisiteCompetency = 'js.function.scope';
+    const differing = {
+      schemaVersion: 1,
+      entries: [{ ...entry, competency: prerequisiteCompetency }],
+    };
+
+    expect(rubric.criteria[0]?.competency).toBe('js.function.closure');
+
+    const parsed = RemediationCatalogSchema.parse(differing);
+
+    expect(parsed.entries[0]?.competency).toBe(prerequisiteCompetency);
+    expect(validateRemediationCoverage(rubric, parsed)).toEqual({
+      ok: true,
+      value: undefined,
+      diagnostics: [],
+    });
+  });
 });
 
 describe('validateRemediationCoverage', () => {
@@ -343,5 +419,25 @@ describe('generated remediation catalog JSON Schema', () => {
         entries: [entry, duplicateCriterionWithDifferentRetake],
       }).success,
     ).toBe(false);
+  });
+
+  it('expresses the learning-resource requirement as anyOf minItems in the generated schema', async () => {
+    const committed: unknown = JSON.parse(
+      await readFile(
+        new URL('../generated/remediation-catalog.schema.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown;
+    const expectedAnyOf = [
+      { properties: { lessons: { minItems: 1 } }, required: ['lessons'] },
+      { properties: { exercises: { minItems: 1 } }, required: ['exercises'] },
+    ];
+
+    expect(committed).toMatchObject({
+      properties: { entries: { items: { anyOf: expectedAnyOf } } },
+    });
+    expect(generateRemediationCatalogJsonSchema()).toMatchObject({
+      properties: { entries: { items: { anyOf: expectedAnyOf } } },
+    });
   });
 });

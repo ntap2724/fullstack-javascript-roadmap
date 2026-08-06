@@ -93,5 +93,6 @@
     }
   },
   "required": ["schemaVersion", "id", "version", "title", "criteria"],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$comment": "Draft 2020-12 cannot express uniqueness of criteria[].id across distinct objects. This schema provides structural prevalidation only; every supported consumer must also parse the rubric with RubricSchema."
 }

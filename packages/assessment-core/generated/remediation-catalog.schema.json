@@ -58,7 +58,25 @@
           }
         },
         "required": ["criterion", "competency", "lessons", "exercises", "retake"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "properties": {
+              "lessons": {
+                "minItems": 1
+              }
+            },
+            "required": ["lessons"]
+          },
+          {
+            "properties": {
+              "exercises": {
+                "minItems": 1
+              }
+            },
+            "required": ["exercises"]
+          }
+        ]
       }
     }
   },

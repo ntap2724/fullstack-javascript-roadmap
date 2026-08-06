@@ -377,6 +377,19 @@ describe('generated JSON Schema', () => {
 
     expect(committed).toEqual(generateRubricJsonSchema());
   });
+
+  it('names the cross-object criteria[].id invariant it cannot express', async () => {
+    const committed: unknown = JSON.parse(
+      await readFile(new URL('../generated/rubric.schema.json', import.meta.url), 'utf8'),
+    );
+    const comment = (committed as { $comment?: unknown }).$comment;
+
+    expect(typeof comment).toBe('string');
+    expect(comment).toContain('criteria[].id');
+    expect(comment).toContain('structural prevalidation only');
+    expect(comment).toContain('RubricSchema');
+    expect(generateRubricJsonSchema()).toMatchObject({ $comment: comment });
+  });
 });
 
 describe('public schema surface', () => {

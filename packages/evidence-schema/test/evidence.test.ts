@@ -13,6 +13,28 @@ async function readManifestVersionMismatchFixture(): Promise<unknown> {
   ) as unknown;
 }
 
+function generatedEvidencePathPattern(): string {
+  return (
+    generateEvidenceManifestJsonSchema() as {
+      properties: {
+        artifacts: {
+          items: {
+            properties: {
+              path: {
+                pattern: string;
+              };
+            };
+          };
+        };
+      };
+    }
+  ).properties.artifacts.items.properties.path.pattern;
+}
+
+function generatedEvidencePathRegex(): RegExp {
+  return new RegExp(generatedEvidencePathPattern());
+}
+
 const valid = {
   schemaVersion: 1,
   curriculumVersion: '0.1.0',
@@ -125,22 +147,7 @@ describe('EvidenceManifestSchema', () => {
   });
 
   it('rejects control characters in runtime and generated evidence paths', () => {
-    const generatedPathPattern = (
-      generateEvidenceManifestJsonSchema() as {
-        properties: {
-          artifacts: {
-            items: {
-              properties: {
-                path: {
-                  pattern: string;
-                };
-              };
-            };
-          };
-        };
-      }
-    ).properties.artifacts.items.properties.path.pattern;
-    const generatedPathRegex = new RegExp(generatedPathPattern);
+    const generatedPathRegex = generatedEvidencePathRegex();
     const invalidPaths = [
       '\nevidence/architecture/overview.md',
       'evidence/architecture/overview.md\n',
@@ -261,6 +268,148 @@ describe('EvidenceManifestSchema', () => {
     expect(satisfiesTrustRequirement(attestations, requiredTrust)).toBe(true);
     expect(manifest.artifacts).toHaveLength(1);
   });
+
+  it('rejects reserved DOS device-name segments in runtime and generated evidence paths', () => {
+    const reservedPaths = [
+      'CON',
+      'con',
+      'Con',
+      'NUL',
+      'AUX',
+      'PRN',
+      'COM1',
+      'COM9',
+      'LPT1',
+      'LPT9',
+      'CON.md',
+      'nul.txt',
+      'CON.foo.md',
+      'evidence/CON',
+      'evidence/CON/overview.md',
+      'evidence/nul.txt',
+      'evidence/architecture/aux.md',
+    ];
+
+    for (const path of reservedPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(false);
+      expect(generatedEvidencePathRegex().test(path)).toBe(false);
+    }
+  });
+
+  it('rejects trailing dot and trailing space segments in runtime and generated evidence paths', () => {
+    const trailingPaths = [
+      'evidence/overview.md.',
+      'evidence/overview.',
+      'evidence/overview.md ',
+      'evidence/dir./overview.md',
+      'evidence/dir /overview.md',
+    ];
+
+    for (const path of trailingPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(false);
+      expect(generatedEvidencePathRegex().test(path)).toBe(false);
+    }
+  });
+
+  it('still accepts legitimate names that merely share a reserved device-name prefix', () => {
+    const acceptedPaths = [
+      'evidence/architecture/overview.md',
+      'evidence/console.md',
+      'evidence/conform/notes.md',
+      'evidence/auxiliary.md',
+      'evidence/nullable.md',
+      'evidence/com10/notes.md',
+      'evidence/lpt0/notes.md',
+    ];
+
+    for (const path of acceptedPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(true);
+      expect(generatedEvidencePathRegex().test(path)).toBe(true);
+    }
+  });
+
+  it('keeps every previously rejected evidence path rejected in runtime and generated schemas', () => {
+    const invalidPaths = [
+      'https://example.invalid/evidence.json',
+      'mailto:owner@example.invalid',
+      '/absolute.md',
+      'C:/absolute.md',
+      'C:\\absolute.md',
+      'C:answer.js',
+      '\\\\server\\share\\overview.md',
+      'evidence\\architecture\\overview.md',
+      '.\\evidence.md',
+      './evidence.md',
+      '.',
+      '..',
+      'evidence/./file.md',
+      'evidence/../file.md',
+      'evidence//file.md',
+      'evidence/',
+      '',
+      'evidence/architecture/\u0000overview.md',
+      'evidence/architecture/\u001foverview.md',
+      'evidence/architecture/\u007foverview.md',
+      'evidence/architecture/\u0085overview.md',
+      'evidence/architecture/\u2028overview.md',
+      'evidence/architecture/\u2029overview.md',
+    ];
+
+    for (const path of invalidPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(false);
+      expect(generatedEvidencePathRegex().test(path)).toBe(false);
+    }
+  });
+
+  it('rejects a present deployment record that names neither frontend nor api', () => {
+    expect(
+      EvidenceManifestSchema.safeParse({
+        ...valid,
+        deployment: { attestations: ['externally-observable'] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts absent, frontend-only, api-only, and both-endpoint deployment records', () => {
+    const frontend = 'https://example.invalid/deployment';
+    const api = 'https://api.example.invalid';
+    const attestations = ['externally-observable'];
+
+    expect(EvidenceManifestSchema.safeParse(valid).success).toBe(true);
+    expect(
+      EvidenceManifestSchema.safeParse({ ...valid, deployment: { frontend, attestations } })
+        .success,
+    ).toBe(true);
+    expect(
+      EvidenceManifestSchema.safeParse({ ...valid, deployment: { api, attestations } }).success,
+    ).toBe(true);
+    expect(
+      EvidenceManifestSchema.safeParse({
+        ...valid,
+        deployment: { frontend, api, attestations },
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe('generated JSON Schema', () => {
@@ -292,5 +441,38 @@ describe('generated JSON Schema', () => {
       },
     });
     expect(committed).toEqual(generateEvidenceManifestJsonSchema());
+  });
+
+  it('expresses the deployment endpoint requirement as anyOf in the generated schema', async () => {
+    const committed: unknown = JSON.parse(
+      await readFile(
+        new URL('../generated/evidence-manifest.schema.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown;
+    const expectedAnyOf = [{ required: ['frontend'] }, { required: ['api'] }];
+
+    expect(committed).toMatchObject({
+      properties: { deployment: { anyOf: expectedAnyOf } },
+    });
+    expect(generateEvidenceManifestJsonSchema()).toMatchObject({
+      properties: { deployment: { anyOf: expectedAnyOf } },
+    });
+  });
+
+  it('names the cross-object artifacts[].id invariant it cannot express', async () => {
+    const committed: unknown = JSON.parse(
+      await readFile(
+        new URL('../generated/evidence-manifest.schema.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown;
+    const comment = (committed as { $comment?: unknown }).$comment;
+
+    expect(typeof comment).toBe('string');
+    expect(comment).toContain('artifacts[].id');
+    expect(comment).toContain('structural prevalidation only');
+    expect(comment).toContain('EvidenceManifestSchema');
+    expect(generateEvidenceManifestJsonSchema()).toMatchObject({ $comment: comment });
   });
 });

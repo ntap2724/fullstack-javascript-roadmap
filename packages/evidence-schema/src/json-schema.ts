@@ -79,5 +79,10 @@ export function generateEvidenceManifestJsonSchema(): object {
     required: ['status', 'attestations'],
   };
 
+  deploymentSchema.anyOf = [{ required: ['frontend'] }, { required: ['api'] }];
+
+  generatedSchema.$comment =
+    'Draft 2020-12 cannot express uniqueness of artifacts[].id across distinct objects. This schema provides structural prevalidation only; every supported consumer must also parse the manifest with EvidenceManifestSchema.';
+
   return generatedSchema;
 }

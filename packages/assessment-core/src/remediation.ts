@@ -27,7 +27,15 @@ export const RemediationCatalogSchema = z
             exercises: z.array(ExerciseArtifactIdSchema),
             retake: z.array(z.string().min(1)).min(1),
           })
-          .strict(),
+          .strict()
+          .superRefine((entry, context) => {
+            if (entry.lessons.length === 0 && entry.exercises.length === 0) {
+              context.addIssue({
+                code: 'custom',
+                message: 'A remediation entry must offer at least one lesson or exercise',
+              });
+            }
+          }),
       )
       .min(1),
   })

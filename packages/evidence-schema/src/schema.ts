@@ -23,7 +23,10 @@ const EvidencePathControlCharacterClass =
 const RelativeEvidencePathPattern = new RegExp(
   '^(?![\\s\\S]*' +
     EvidencePathControlCharacterClass +
-    ')(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/:\\\\]+(?:\\/[^/:\\\\]+)*$',
+    ')(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))' +
+    '(?!(?:[^/]*\\/)*(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\.[^/]*)?(?:\\/|$))' +
+    '(?!(?:[^/]*\\/)*[^/]*[. ](?:\\/|$))' +
+    '[^/:\\\\]+(?:\\/[^/:\\\\]+)*$',
 );
 
 const RelativeEvidencePathSchema = z
@@ -103,6 +106,18 @@ export const EvidenceManifestSchema = z
         code: 'custom',
         path: ['verification', 'attestations'],
         message: 'A failed verification cannot claim ci-verified attestation',
+      });
+    }
+
+    if (
+      manifest.deployment !== undefined &&
+      manifest.deployment.frontend === undefined &&
+      manifest.deployment.api === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['deployment'],
+        message: 'A deployment record must name a frontend or an api endpoint',
       });
     }
   });

@@ -107,7 +107,15 @@
         }
       },
       "required": ["attestations"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": ["frontend"]
+        },
+        {
+          "required": ["api"]
+        }
+      ]
     },
     "verification": {
       "type": "object",
@@ -179,7 +187,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029])(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/:\\\\]+(?:\\/[^/:\\\\]+)*$"
+            "pattern": "^(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029])(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))(?!(?:[^/]*\\/)*(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\.[^/]*)?(?:\\/|$))(?!(?:[^/]*\\/)*[^/]*[. ](?:\\/|$))[^/:\\\\]+(?:\\/[^/:\\\\]+)*$"
           },
           "attestations": {
             "minItems": 1,
@@ -211,5 +219,6 @@
     "verification",
     "artifacts"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$comment": "Draft 2020-12 cannot express uniqueness of artifacts[].id across distinct objects. This schema provides structural prevalidation only; every supported consumer must also parse the manifest with EvidenceManifestSchema."
 }
