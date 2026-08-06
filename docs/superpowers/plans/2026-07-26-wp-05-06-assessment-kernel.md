@@ -322,6 +322,135 @@ The historical WP-05 exit gate remains unchanged and does not run or certify thi
 
 ---
 
+## WP06-POST-AUDIT-CORRECTION — post-audit closeout correction amendment
+
+### Identity, authority, and historical boundary
+
+This amendment records the post-audit WP-06 closeout correction whose identity is `WP06-POST-AUDIT-CORRECTION`. It is not Task 9; `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in force, and the identity "Task 9" must not be used for this work in any file, commit message, or report.
+
+Its governing authorities are the human ruling `HR0001` (remediation competency semantics) and the owner's post-audit adjudication. Where the two differ, `HR0001` governs.
+
+Task 8's historical acceptance at `191ff7458add6751d75a178208ddc0260552118f`, its acceptance evidence, `R0060`, and revision 106 remain immutable and are not reopened. This correction supersedes only the terminal WP-06 branch identity and the final completion claim. Every WP-05 statement, the WP-05 execution boundary, the WP-05 exit gate, and the accepted Tasks 6–8 history are preserved verbatim; nothing above is renumbered, rewritten, or deleted.
+
+This amendment is additive and documentary. It changes no product code, no test, no fixture, no generated output, no package manifest, no lockfile, and no documentation implementation. The amendment commit itself changes exactly one tracked path — this plan. The corrections below define required behavior for a later product-correction dispatch that is not yet issued.
+
+The audit finding set is closed. No deferred audit item remains.
+
+### Accepted finding H4 — evidence path host-independence (Critical)
+
+`EvidenceManifestSchema` `artifacts[].path` is governed by the same host-independent lexical contract as `T0_PATH_POLICY_CANONICAL`. That inheritance was previously unstated for WP-06 evidence paths, and the canonical Task 7 evidence path regex is weaker than both the shipped code and that policy. The correction states the inheritance and closes the gap.
+
+The evidence path rule must reject, **in every path segment**:
+
+- the reserved DOS device names `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, and `LPT1`–`LPT9`, case-insensitive, whether bare or followed by any extension. This is the same `(?:\..*)?` trailing semantics already used by `RESERVED_DOS_NAME` in `packages/exercise-contract/src/paths.ts`, so `CON`, `con`, `CON.md`, and `CON.foo.md` are all rejected;
+- any segment ending in a dot or a space.
+
+Legitimate names that merely share a reserved prefix must remain accepted. At least these must be proven accepted: `evidence/console.md`, `evidence/conform/notes.md`, `evidence/auxiliary.md`, `evidence/nullable.md`, `evidence/com10/notes.md`, and `evidence/lpt0/notes.md`.
+
+Every input rejected today must stay rejected: traversal, `.` and `..` segments, absolute paths, drive-absolute paths, drive-relative forms, UNC roots, backslash separators, repeated separators, a trailing separator, the empty string, URL and `mailto:` forms, and all control characters including `\u0000`, `\u001f`, `\u007f`, `\u0085`, `\u2028`, `\u2029`.
+
+The runtime schema and the generated schema must express **exactly equivalent** rules. Two observed implementation constraints force how this is written, and both are binding:
+
+1. The rule must extend the **single existing** `path` pattern rather than add a second `.regex()` call. A second call restructures the emitted schema into `allOf:[{pattern},{pattern}]`, which breaks the artifact test at `packages/evidence-schema/test/evidence.test.ts:128` because that test reads `properties.artifacts.items.properties.path.pattern` directly.
+2. Case-insensitivity must be an explicit **flagless** character-class construction. `z.toJSONSchema` silently discards a regex `i` flag, so a flagged pattern would emit a case-sensitive generated schema that diverges from runtime.
+
+A broad unverified regex is forbidden. Each accepted and rejected case above requires its own negative or positive test rather than a single sweeping assertion.
+
+### Accepted finding H2 — a deployment record must name an endpoint (Important)
+
+`deployment` remains **optional**, consistent with design `§17.3` ("Deployment URLs where applicable"). The canonical Task 7 snippet is defective only in that it permits a *present* `deployment` object carrying neither `frontend` nor `api`.
+
+A present `deployment` record must carry at least one of `frontend` or `api`. The justification is design `§17.2` together with the design risk-register entry "Evidence inflation | Self-report labeled verified | Explicit trust levels": a record that claims `externally-observable` while naming nothing observable is unfalsifiable.
+
+The generated schema must express the identical rule as `anyOf:[{required:["frontend"]},{required:["api"]}]` on the `deployment` subschema. Because `z.toJSONSchema` drops a `superRefine`, the package generator must re-add this explicitly, following the existing `verificationSchema.not` precedent at `packages/evidence-schema/src/json-schema.ts:74`.
+
+An absent `deployment`, a `frontend`-only record, and an `api`-only record all remain valid. `deployment` itself is not required.
+
+### Accepted finding H1c — a remediation entry must offer a learning resource (Important)
+
+A remediation entry must provide **at least one resource across the union of `lessons` and `exercises`**. `retake` remains separately constrained by `.min(1)`. The canonical Task 8 entry schema is defective only in that it permits `lessons: []` together with `exercises: []`.
+
+Requiring **both** arrays to be nonempty is rejected. The plan's own canonical schema deliberately writes `lessons` and `exercises` without `.min(1)` while writing `retake` with an explicit minimum, and `docs/authoring/remediation.md:49-51` directs authors to require only what is needed to recover the failed criterion.
+
+The requirement follows from the Global Constraint "Remediation identifies the exact failed criterion, related competency, learning resources, and retake requirement", design `§13.4` ("Required competencies without remediation routes"), and `docs/authoring/remediation.md:36`, which establishes that a blocking failure is never covered by a generic recommendation.
+
+The generated schema must express the identical rule as an `anyOf` over `lessons` and `exercises` with `minItems: 1`, again re-added explicitly by the package generator because `z.toJSONSchema` drops the runtime refinement.
+
+### Remediation competency semantics — human ruling `HR0001` (authoritative)
+
+`HR0001` settles the Release 0 contract for competency semantics:
+
+- `rubric.criteria[].competency` is the competency **assessed by** the rubric criterion.
+- `remediation.entries[].competency` is the **primary related competency the learner should revisit**.
+- The two values **MAY differ**.
+- **No runtime or generated-schema equality invariant is authorized.**
+
+The recorded human rationale:
+
+- the approved design speaks of **related** competencies;
+- this canonical plan says **related competency**, not identical competency;
+- exact equality would incorrectly forbid remediation through a **prerequisite or foundational** competency;
+- a future mechanically validated relationship would require an explicit **curriculum-graph-aware contract**, not an equality shortcut.
+
+Four constraints remain in force. The remediation entry competency must:
+
+1. satisfy the canonical `CompetencyIdSchema`;
+2. be presented as the **primary remediation competency**;
+3. be accompanied by at least one concrete learning resource across the union of `lessons` and `exercises` — this is the same requirement stated above for H1c, not a second differing rule;
+4. **never** be described as an authenticated graph relationship unless such a relationship was actually validated.
+
+Constraint 4 is a **claim-integrity requirement**, not merely an implementation note. No code, generated schema, or documentation may assert or imply that the entry competency has been verified to stand in any graph relationship to the criterion competency, because Release 0 performs no such validation.
+
+This correction adds **no competency-equality requirement** and **no exact-cover requirement**. Both were considered and rejected: the first by human ruling `HR0001`, and the second by owner adjudication confirmed by the human. In particular, an otherwise valid catalog is **not** rejected merely because it contains an entry unused by the current rubric.
+
+### Accepted finding H3 — generated-schema consumer boundary (Moderate)
+
+One policy governs all three generated artifacts. Each Draft 2020-12 artifact is **structural prevalidation only**, and every supported ingestion path must be:
+
+```text
+JSON Schema structural prevalidation → canonical Zod runtime parser
+```
+
+The runtime parser is what enforces the cross-item invariants the JSON Schema cannot express. The plan previously mandated three generated artifacts while stating the consumer boundary for none of the rubric or evidence artifacts.
+
+The rubric and evidence generated schemas each require a root `$comment` naming their exact unexpressible invariant — cross-object uniqueness of `criteria[].id` and of `artifacts[].id` respectively — following the existing Task 8 precedent at `packages/assessment-core/src/json-schema.ts:15-16`.
+
+The boundary statement in `docs/authoring/remediation.md:42-47` must be generalized so it covers all three artifacts rather than the remediation catalog alone.
+
+`uniqueItems` is **forbidden** for this purpose. It compares whole array elements, so it accepts two objects that share an `id` but differ elsewhere. Using it would create false coverage while leaving the divergence in place.
+
+### Required verification and bounded commits for the future product correction
+
+The product-correction dispatch, when issued, owns exactly these paths:
+
+```text
+packages/evidence-schema/src/schema.ts
+packages/evidence-schema/src/json-schema.ts
+packages/evidence-schema/generated/evidence-manifest.schema.json
+packages/evidence-schema/test/evidence.test.ts
+packages/rubric-schema/src/json-schema.ts
+packages/rubric-schema/generated/rubric.schema.json
+packages/rubric-schema/test/rubric.test.ts
+packages/assessment-core/src/remediation.ts
+packages/assessment-core/src/json-schema.ts
+packages/assessment-core/generated/remediation-catalog.schema.json
+packages/assessment-core/test/assessment.test.ts
+docs/authoring/remediation.md
+```
+
+That dispatch must record:
+
+- genuine RED before implementation, with actual recorded command output rather than an asserted expectation;
+- exact negative tests for each accepted finding, at both the runtime and generated-schema boundaries;
+- a required **positive** test proving that a catalog entry whose competency differs from the rubric criterion's competency is **accepted**, locking `HR0001` in against future regression;
+- focused verification: the three package `check` and `test` commands, plus `pnpm schema:generate`, `pnpm schema:check`, and `pnpm --filter @roadmap/verify-exercise test -- cli.test.ts`;
+- the final gate, run once: `pnpm check`, `pnpm test`, `pnpm verify`;
+- one coherent commit per accepted correction, with no amend, no rebase, no history rewrite, no broad directory staging, no integration, and no remote mutation.
+
+No product code, fixture, generated output, package manifest, lockfile, or documentation implementation is changed by this amendment commit itself.
+
+---
+
 ## File map
 
 ```text
