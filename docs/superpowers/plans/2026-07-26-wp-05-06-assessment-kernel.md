@@ -465,6 +465,85 @@ No product code, fixture, generated output, package manifest, lockfile, or docum
 
 ---
 
+## WP06-WINDOWS-PORTABILITY-CORRECTION-2 — Windows path portability correction boundary
+
+### Identity, authority, and historical boundary
+
+This section records the correction whose identity is `WP06-WINDOWS-PORTABILITY-CORRECTION-2`. It governs the Win32 host-independence matrix completed in the `T0_PATH_POLICY_CANONICAL` block above. The phrase "authorized under this correction" at the end of that block refers to this correction — `WP06-WINDOWS-PORTABILITY-CORRECTION-2` — and not to `WP06-POST-AUDIT-CORRECTION`, whose separate and wider owned-path grant extends no authority to this round.
+
+It is not Task 9; `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in force, and the identity "Task 9" must not be used for this work in any file, commit message, or report.
+
+Its governing authority is the human scope ruling for this round together with the owner's independent finding adjudication and plan-amendment review. Task 8's historical acceptance at `191ff7458add6751d75a178208ddc0260552118f`, its acceptance evidence, `R0060`, and revision 106 remain immutable and are not reopened. Tasks 6, 7, and 8 remain historically accepted. The prior WP-06 closeout, its 36-file evidence manifest, the `WP06-POST-AUDIT-CORRECTION` amendment, and every prior `COW`, `CWO`, `HR`, `TERRA`, and `LUNA` record remain immutable and are preserved verbatim; nothing above is renumbered, rewritten, or deleted.
+
+This is one additional append-only correction round. It supersedes only the eventual terminal WP-06 branch identity. WP-06 integration and WP-07 remain unauthorized. This amendment is additive and documentary; it changes no product code, no test, no fixture, no generated output, no package manifest, no lockfile, and no documentation implementation. The amendment commit itself changes exactly one tracked path — this plan.
+
+### Required verification and bounded commits for the future product correction
+
+The product-correction dispatch for this correction, when issued, owns exactly these five paths:
+
+```text
+packages/exercise-contract/src/paths.ts
+packages/exercise-contract/test/paths.test.ts
+packages/evidence-schema/src/schema.ts
+packages/evidence-schema/generated/evidence-manifest.schema.json
+packages/evidence-schema/test/evidence.test.ts
+```
+
+`packages/evidence-schema/src/json-schema.ts` is **excluded for this correction**. The `owns exactly these paths` block in the `WP06-POST-AUDIT-CORRECTION` section (currently near plan line 442), which lists `packages/evidence-schema/src/json-schema.ts` among eleven paths, belongs to `WP06-POST-AUDIT-CORRECTION` and extends no authority to this round.
+
+The exclusion is a reasoned boundary, not a bare prohibition. The committed generated `pattern` for the evidence path is byte-identical to the pattern produced by in-memory generation, and the `artifacts[].path` subschema carries one direct `pattern` with no `allOf`. Extending the single existing runtime expression therefore propagates to the generated artifact without touching the generator. If a genuine frozen RED later proves the generator source must change to preserve runtime/generated equivalence, the Writer must **stop and escalate** and may not expand scope itself.
+
+No fixture, package manifest, lockfile, root configuration, curriculum, application, remediation, deployment, or WP-07 path is authorized for this correction.
+
+The product-correction dispatch must record **genuine RED before implementation**, with actual recorded command output rather than an asserted expectation, at three boundaries: the exercise-contract concrete and pattern validators, the evidence-schema runtime validator, and the generated evidence JSON Schema.
+
+The exercise concrete RED vectors — accepted today and which must come to be rejected — are:
+
+```text
+src/a|b.md   src/<draft>.md   src/"report".md   src/COM¹   src/com².txt   src/LPT³   src/lpt¹.json
+```
+
+`?` and `*` must **not** be claimed as new exercise concrete RED, because the current concrete validator already rejects them through its glob-operator guard. The evidence runtime and generated-schema RED vectors — accepted today and which must come to be rejected — are:
+
+```text
+evidence/report?.md   evidence/report*.md   evidence/a|b.md   evidence/<draft>.md   evidence/"report".md   evidence/COM¹   evidence/com².txt   evidence/LPT³   evidence/lpt¹.json
+```
+
+The invalid editable patterns that must come to be rejected are:
+
+```text
+src/<draft>.ts   src/a|b.ts   src/"report".ts   src/COM¹   src/COM².*   src/LPT³/**
+```
+
+The positive regression locks must pass both before and after the correction. Concrete: `src/compile.ts`, `src/lpt10.ts`, `src/question-mark-word.ts`. Evidence: `evidence/com10/notes.md`, `evidence/lpt0/notes.md`, `evidence/console.md`, `evidence/auxiliary.md`. Editable patterns: `src/*.ts`, `src/file?.ts`, `src/**`, `src/nested/**`. All pre-existing path and glob tests are preserved.
+
+Focused verification:
+
+```text
+pnpm --filter @roadmap/exercise-contract check
+pnpm --filter @roadmap/exercise-contract test
+pnpm --filter @roadmap/evidence-schema check
+pnpm --filter @roadmap/evidence-schema test
+pnpm schema:generate
+pnpm schema:check
+```
+
+The final gate, run once:
+
+```text
+pnpm check
+pnpm test
+pnpm verify
+```
+
+At least **377** total tests must pass, with per-package floors of at least **76** for `@roadmap/exercise-contract` and at least **24** for `@roadmap/evidence-schema`, and no test-count regression in any package. No test may be deleted, skipped, weakened, or converted to `.skip`, `.only`, or `.todo`. `pnpm schema:check` must produce an **empty diff**, proving the generated artifact was regenerated through the canonical generator and never hand-edited.
+
+Three implementation constraints are binding. Extend the single existing `RelativeEvidencePathPattern` rather than adding a second `.regex()` call, which would restructure the emitted schema into `allOf` and break the test that reads `.pattern` directly. Use flagless explicit character classes, because `z.toJSONSchema` silently discards a regex `i` flag and would emit a case-sensitive generated schema that diverges from runtime. Create no dependency from `evidence-schema` to `exercise-contract`.
+
+One coherent commit per accepted correction, with no amend, no rebase, no history rewrite, no broad directory staging, no integration, and no remote mutation. No product code, fixture, generated output, package manifest, lockfile, or documentation implementation is changed by this amendment commit itself.
+
+---
+
 ## File map
 
 ```text
