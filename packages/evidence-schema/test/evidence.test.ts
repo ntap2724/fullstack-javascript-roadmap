@@ -381,6 +381,30 @@ describe('EvidenceManifestSchema', () => {
     }
   });
 
+  it('rejects Win32-invalid characters and superscript device aliases in runtime and generated paths', () => {
+    const win32InvalidPaths = [
+      'evidence/report?.md',
+      'evidence/report*.md',
+      'evidence/a|b.md',
+      'evidence/<draft>.md',
+      'evidence/"report".md',
+      'evidence/COM¹',
+      'evidence/com².txt',
+      'evidence/LPT³',
+      'evidence/lpt¹.json',
+    ];
+
+    for (const path of win32InvalidPaths) {
+      expect(
+        EvidenceManifestSchema.safeParse({
+          ...valid,
+          artifacts: [{ ...valid.artifacts[0], path }],
+        }).success,
+      ).toBe(false);
+      expect(generatedEvidencePathRegex().test(path)).toBe(false);
+    }
+  });
+
   it('rejects a present deployment record that names neither frontend nor api', () => {
     expect(
       EvidenceManifestSchema.safeParse({

@@ -1,7 +1,7 @@
 import picomatch from 'picomatch';
 
-const RESERVED_DOS_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
-const RESERVED_DOS_PREFIX = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:$|[.?*])/i;
+const RESERVED_DOS_NAME = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?$/i;
+const RESERVED_DOS_PREFIX = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:$|[.?*])/i;
 const EXTGLOB_OPENER = /[!@+?*]\(/;
 
 function hasControlOrDelete(input: string): boolean {
@@ -50,6 +50,7 @@ function isReservedDosSegment(segment: string): boolean {
 
 function isSafeConcreteSegment(segment: string): boolean {
   if (/[. ]$/.test(segment) || isReservedDosSegment(segment)) return false;
+  if (containsAny(segment, '<>"|')) return false;
   if (containsAny(segment, '*?[]{}') || segment.startsWith('!') || EXTGLOB_OPENER.test(segment)) {
     return false;
   }
@@ -67,6 +68,7 @@ function isSafePatternSegment(segment: string): boolean {
   if (/[. ]$/.test(segment) || RESERVED_DOS_PREFIX.test(segment) || segment.startsWith('!')) {
     return false;
   }
+  if (containsAny(segment, '<>"|')) return false;
   if (containsAny(segment, '{}[]') || EXTGLOB_OPENER.test(segment)) return false;
   return true;
 }

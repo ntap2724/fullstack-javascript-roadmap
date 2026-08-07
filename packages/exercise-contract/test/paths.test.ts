@@ -125,4 +125,37 @@ describe('exercise path rules', () => {
       matchesEditablePath('src/counter.js', ['src/**', 42] as unknown as readonly string[]),
     ).toBe(false);
   });
+
+  it.each([
+    'src/a|b.md',
+    'src/<draft>.md',
+    'src/"report".md',
+    'src/COM¹',
+    'src/com².txt',
+    'src/LPT³',
+    'src/lpt¹.json',
+  ])('rejects concrete path with Win32-invalid characters: %s', (input) => {
+    expect(isSafeRelativePath(input)).toBe(false);
+  });
+
+  it.each([
+    ['src/<draft>.ts', 'src/<draft>.ts'],
+    ['src/a|b.ts', 'src/a|b.ts'],
+    ['src/"report".ts', 'src/"report".ts'],
+    ['src/COM¹', 'src/COM¹'],
+    ['src/COM².*', 'src/COM².foo'],
+    ['src/LPT³/**', 'src/LPT³/notes.ts'],
+  ])(
+    'rejects editable pattern with Win32-invalid literal or device: %s',
+    (pattern, matchingCandidate) => {
+      expect(matchesEditablePath(matchingCandidate, [pattern])).toBe(false);
+    },
+  );
+
+  it.each(['src/compile.ts', 'src/lpt10.ts', 'src/question-mark-word.ts'])(
+    'accepts legitimate concrete path that merely shares a reserved prefix: %s',
+    (input) => {
+      expect(isSafeRelativePath(input)).toBe(true);
+    },
+  );
 });

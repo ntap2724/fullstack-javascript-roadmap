@@ -24,9 +24,9 @@ const RelativeEvidencePathPattern = new RegExp(
   '^(?![\\s\\S]*' +
     EvidencePathControlCharacterClass +
     ')(?!\\.{1,2}(?:\\/|$))(?!.*\\/\\.{1,2}(?:\\/|$))' +
-    '(?!(?:[^/]*\\/)*(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\.[^/]*)?(?:\\/|$))' +
+    '(?!(?:[^/]*\\/)*(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][oO][mM][1-9\\u00b9\\u00b2\\u00b3]|[lL][pP][tT][1-9\\u00b9\\u00b2\\u00b3])(?:\\.[^/]*)?(?:\\/|$))' +
     '(?!(?:[^/]*\\/)*[^/]*[. ](?:\\/|$))' +
-    '[^/:\\\\]+(?:\\/[^/:\\\\]+)*$',
+    '[^/:\\\\<>"|?*]+(?:\\/[^/:\\\\<>"|?*]+)*$',
 );
 
 const RelativeEvidencePathSchema = z
