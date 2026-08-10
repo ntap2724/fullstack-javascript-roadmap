@@ -1,0 +1,26 @@
+{
+  "name": "@roadmap/template-builder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@roadmap/exercise-contract": "workspace:*",
+    "@roadmap/template-contract": "workspace:*",
+    "@roadmap/validation-core": "workspace:*",
+    "picomatch": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
