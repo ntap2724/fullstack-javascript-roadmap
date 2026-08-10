@@ -2347,3 +2347,123 @@ NO_PUSH_AUTHORIZED
 NO_PR_AUTHORIZED
 NO_WRITER_DISPATCHED_BY_THIS_CORRECTION
 ```
+
+## WP07-PROVENANCE-INVARIANT — governance amendment
+
+Append-only. No text above this heading is modified, deleted, or reinterpreted.
+This amendment supersedes the provenance guard specified at line 723 for all future
+work. It does not rewrite that line, which remains on the record as the text the
+WP-07 Writer faithfully transcribed.
+
+### 1. Why this amendment exists
+
+Independent semantic review and independent verification of frozen WP-07 head
+`e933ebd` both confirmed that the provenance guard specified by this plan validates
+only two of the three identity fields it carries. A generated repository can therefore
+ship `.roadmap/template-manifest.json` declaring a `curriculumVersion` that
+contradicts the template definition that produced it, and the WP-07 verification
+suite accepts that artifact as valid.
+
+The defect is encoded by this plan, not introduced by the Writer. That is precisely
+why it cannot be carried forward as a downstream precondition: WP-07's own
+verification machinery would knowingly certify an invalid provenance state. Owner
+acceptance of `e933ebd` is withheld until this invariant holds.
+
+This plan is additionally **internally inconsistent** on the point. Lines 229 and 1887
+both construct provenance as `curriculumVersion: definition.curriculum.release`,
+assuming an agreement that the guard at line 723 never verifies.
+
+### 2. The provenance invariant
+
+Materialization MUST reject any provenance whose identity fields disagree with the
+template definition being materialized. All three identity fields are subject to the
+invariant:
+
+| Field | Authoritative source | Comparison |
+|---|---|---|
+| `templateId` | `definition.id` | exact string equality |
+| `templateVersion` | `definition.version` | exact string equality |
+| `curriculumVersion` | `definition.curriculum.release` | exact string equality |
+
+The template definition is authoritative in every case. Provenance is a claim about a
+materialization and is never authoritative over the definition it claims to describe.
+
+`schemaVersion`, `sourceRepository`, `sourceCommit`, `generatedAt`, `toolchain`, and
+`contractVersions` are outside this invariant. They have no counterpart in the
+definition and remain governed solely by `TemplateProvenanceSchema`.
+
+### 3. Required failure behavior
+
+An incoherent artifact MUST fail closed:
+
+- Materialization returns a failed outcome. It MUST NOT return a successful outcome
+  carrying a mismatched manifest.
+- The failure surfaces `TEMPLATE_PROVENANCE_001`, consistent with the existing
+  behavior for `templateId` and `templateVersion` mismatches.
+- No output is written for the incoherent field's artifact — the failure precedes
+  manifest serialization, so a contradictory `.roadmap/template-manifest.json` is
+  never produced.
+
+The existing enforcement asymmetry is the defect: a `templateVersion` mismatch is
+caught today while a `curriculumVersion` mismatch is not. After this amendment, all
+three fields fail identically.
+
+### 4. Required evidence for any correction against this amendment
+
+- **Genuine RED first**, using a fixture whose `curriculumVersion` is deliberately
+  incoherent with `definition.curriculum.release`. The RED must show materialization
+  **succeeding** and shipping the contradictory manifest, captured with real output.
+- **Smallest correction** that establishes the invariant.
+- **GREEN** after correction, with actual exit codes.
+- **Mutation-test the corrected control**: independently mutate the
+  `curriculumVersion` comparison and demonstrate the test **fails**. A control that
+  cannot kill its own mutation does not satisfy this amendment.
+- The corrected test MUST fail for the intended reason. A test asserting only that
+  materialization failed is insufficient, because unrelated causes also produce
+  failure.
+
+### 5. Test-data coherence — mandatory ordering
+
+WP-07 test data at `packages/template-builder/test/materialize.test.ts` currently
+carries `curriculumVersion` disagreeing with the fixture definition. Aligning that
+value is REQUIRED, but ordering is load-bearing and MUST NOT be reversed:
+
+1. Establish the invariant in implementation.
+2. Add the negative test, keeping `curriculum.release` **distinct** from `version`.
+3. **Only then** align the test provenance value.
+
+Aligning the data first re-masks the defect: coherent-but-equal values restore exactly
+the condition under which a swapped or omitted comparison is undetectable. That
+condition concealed a separate transform defect through an entire review round. A
+green suite with a silently unguarded field is worse than a disclosed open defect.
+
+The fixture's `curriculum.release` MUST remain distinct from its `version`. That
+distinctness is now load-bearing for two controls and MUST NOT be reverted to equal
+values.
+
+### 6. Scope boundary
+
+This amendment defines an invariant. It does not authorize work. A correction against
+it requires separate explicit Owner authorization naming this amendment. It does not
+authorize Task 4, Task 7, WP-08, WP-09, or Task 9, and does not alter the authorized
+WP-07 task set, the forbidden-surface list, or the three-role independence
+requirement.
+
+```text
+WP07_PROVENANCE_INVARIANT_DEFINED
+THREE_IDENTITY_FIELDS_SUBJECT_TO_INVARIANT
+DEFINITION_IS_AUTHORITATIVE_PROVENANCE_IS_NOT
+INCOHERENT_ARTIFACT_MUST_FAIL_CLOSED_TEMPLATE_PROVENANCE_001
+PLAN_LINE_723_SUPERSEDED_NOT_REWRITTEN
+PLAN_INTERNAL_INCONSISTENCY_RECORDED_LINES_229_1887
+FIXTURE_VERSION_RELEASE_DISTINCTNESS_IS_LOAD_BEARING
+REMEDIATION_ORDER_IMPL_THEN_TEST_THEN_DATA
+E933EBD_ACCEPTANCE_WITHHELD
+NO_WRITER_DISPATCHED_BY_THIS_AMENDMENT
+WP08_NOT_AUTHORIZED
+WP09_NOT_AUTHORIZED
+TASK9_NOT_AUTHORIZED
+NO_INTEGRATION_AUTHORIZED
+NO_PUSH_AUTHORIZED
+NO_PR_AUTHORIZED
+```
