@@ -1,0 +1,9 @@
+{
+  "name": "verifier-fixture-monorepo-leak",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify:baseline": "node src/index.js"
+  }
+}

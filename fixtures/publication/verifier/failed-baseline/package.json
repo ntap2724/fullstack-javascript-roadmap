@@ -1,0 +1,9 @@
+{
+  "name": "verifier-fixture-failed-baseline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify:baseline": "node -e \"process.exit(23)\""
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "verifier-fixture-timeout",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify:baseline": "node -e \"setInterval(() => {}, 1000)\""
+  }
+}
