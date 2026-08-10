@@ -11,7 +11,7 @@ const provenance = {
   schemaVersion: 1 as const,
   templateId: 'template-minimal',
   templateVersion: '0.1.0',
-  curriculumVersion: '0.1.0',
+  curriculumVersion: '0.2.0',
   sourceRepository: 'fullstack-javascript-roadmap',
   sourceCommit: '0123456789abcdef0123456789abcdef01234567',
   generatedAt: '2026-07-26T12:00:00.000Z',
@@ -110,6 +110,65 @@ describe('materializeTemplate', () => {
       await readFile(path.join(output, '.roadmap', 'template-manifest.json'), 'utf8'),
     );
     expect(written).toEqual(provenance);
+  });
+
+  it('rejects provenance whose curriculumVersion contradicts the definition', async () => {
+    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-template-curriculum-'));
+    // The fixture declares curriculum.release 0.2.0 and version 0.1.0. Claiming 0.1.0
+    // as the curriculum version is coherent with nothing: it contradicts the only
+    // authoritative source for that field, the definition.
+    const result = await materializeTemplate(fixture, output, {
+      ...provenance,
+      curriculumVersion: '0.1.0',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0]?.observed).toContain('TEMPLATE_PROVENANCE_001');
+
+    // Fail-closed: the incoherent manifest must never be serialized, so the failure
+    // provably precedes manifest writing rather than being cleaned up afterwards.
+    await expect(
+      readFile(path.join(output, '.roadmap', 'template-manifest.json'), 'utf8'),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+
+    // Intended-reason control. The three assertions above are also satisfied by a
+    // sibling-field mismatch such as templateId, because all identity mismatches share
+    // TEMPLATE_PROVENANCE_001. Re-materializing with curriculumVersion as the ONLY
+    // corrected field, everything else untouched, must succeed. That flip can only be
+    // attributed to the curriculumVersion comparison: any unrelated cause would still
+    // be present and would still reject.
+    const controlOutput = await mkdtemp(path.join(tmpdir(), 'roadmap-template-curriculum-ok-'));
+    const control = await materializeTemplate(fixture, controlOutput, {
+      ...provenance,
+      curriculumVersion: '0.2.0',
+    });
+    expect(control.ok).toBe(true);
+  });
+
+  it('accepts the same provenance once only curriculumVersion is made coherent', async () => {
+    // Isolates the curriculumVersion comparison as the cause. Every other field is
+    // byte-identical to the rejected case above; only this one field changes, and the
+    // outcome flips from rejected to accepted.
+    const rejectedOutput = await mkdtemp(path.join(tmpdir(), 'roadmap-template-iso-bad-'));
+    const acceptedOutput = await mkdtemp(path.join(tmpdir(), 'roadmap-template-iso-ok-'));
+
+    const rejected = await materializeTemplate(fixture, rejectedOutput, {
+      ...provenance,
+      curriculumVersion: '0.1.0',
+    });
+    const accepted = await materializeTemplate(fixture, acceptedOutput, {
+      ...provenance,
+      curriculumVersion: '0.2.0',
+    });
+
+    expect(rejected.ok).toBe(false);
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+    const written: { curriculumVersion: string } = JSON.parse(
+      await readFile(path.join(acceptedOutput, '.roadmap', 'template-manifest.json'), 'utf8'),
+    ) as { curriculumVersion: string };
+    expect(written.curriculumVersion).toBe('0.2.0');
   });
 
   it('rejects provenance that disagrees with the template definition', async () => {

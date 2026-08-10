@@ -46,9 +46,13 @@ export async function materializeTemplate(
   try {
     const { root, definition } = await loadTemplateDefinition(sourceInput);
     const provenance = TemplateProvenanceSchema.parse(provenanceInput);
+    // The definition is authoritative over every identity field provenance claims.
+    // All three are compared by exact string equality, and the check precedes any
+    // output so an incoherent artifact never reaches manifest serialization.
     if (
       provenance.templateId !== definition.id ||
-      provenance.templateVersion !== definition.version
+      provenance.templateVersion !== definition.version ||
+      provenance.curriculumVersion !== definition.curriculum.release
     ) {
       throw new Error('TEMPLATE_PROVENANCE_001:definition and provenance versions differ');
     }
