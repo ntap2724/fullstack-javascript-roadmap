@@ -1,0 +1,27 @@
+{
+  "name": "@roadmap/publish-templates",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/pipeline.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@roadmap/publication-scanner": "workspace:*",
+    "@roadmap/template-builder": "workspace:*",
+    "@roadmap/template-contract": "workspace:*",
+    "@roadmap/template-verifier": "workspace:*",
+    "@roadmap/validation-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

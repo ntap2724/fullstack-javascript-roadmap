@@ -89,7 +89,15 @@ test('TypeScript base config is strict and emits no build artifacts', async () =
 test('root compiler entry point extends the base contract', async () => {
   const config = await readJson('tsconfig.json');
   assert.equal(config.extends, './tsconfig.base.json');
-  assert.deepEqual(config.include, ['vitest.config.ts', 'scripts/generate-json-schema.ts']);
+  // Exact deepEqual, deliberately: this is a LOCK on the root program's contents.
+  // It must fail if the include list changes unannounced, so relaxing it to a
+  // substring, length, or .includes() check is refused. scripts/verify-all-templates.ts
+  // was added under Owner ruling R5 so that pnpm typecheck genuinely covers it.
+  assert.deepEqual(config.include, [
+    'vitest.config.ts',
+    'scripts/generate-json-schema.ts',
+    'scripts/verify-all-templates.ts',
+  ]);
 });
 
 test('root scripts expose check and domain-aware tests', async () => {

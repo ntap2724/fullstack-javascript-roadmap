@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["vitest.config.ts", "scripts/generate-json-schema.ts"]
+  "include": [
+    "vitest.config.ts",
+    "scripts/generate-json-schema.ts",
+    "scripts/verify-all-templates.ts"
+  ]
 }
