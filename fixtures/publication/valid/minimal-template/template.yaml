@@ -3,7 +3,7 @@ id: template-minimal
 repositoryName: minimal-template
 version: 0.1.0
 curriculum:
-  release: 0.1.0
+  release: 0.2.0
   entryPoint: project-minimal-baseline
 runtime:
   nodeFamily: 24

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +25,14 @@ describe('materializeTemplate', () => {
     const result = await materializeTemplate(fixture, output, provenance);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(await readFile(path.join(output, 'README.md'), 'utf8')).toContain('0.1.0');
+    // Asserts the EXACT resolved line, not a substring. Both tokens must land in their
+    // own positions: the fixture deliberately gives version (0.1.0) and
+    // curriculum.release (0.2.0) different values, so swapping the two transform
+    // sources produces a different string and fails here. A toContain check cannot
+    // distinguish a string from a rearrangement of itself.
+    expect(await readFile(path.join(output, 'README.md'), 'utf8')).toContain(
+      'Template version 0.1.0 for curriculum release 0.2.0.',
+    );
     expect(result.value.files.some((file) => file.path.startsWith('files/'))).toBe(false);
   });
 
@@ -35,6 +42,64 @@ describe('materializeTemplate', () => {
     expect(result.ok).toBe(true);
     const readme = await readFile(path.join(output, 'README.md'), 'utf8');
     expect(readme).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+  });
+
+  it('rejects an undeclared token before any output is generated', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-template-undeclared-'));
+    const output = await mkdtemp(path.join(tmpdir(), 'roadmap-template-undeclared-out-'));
+    await mkdir(path.join(root, 'files'), { recursive: true });
+    await writeFile(
+      path.join(root, 'files', 'README.md'),
+      'Undeclared token {{NOT_DECLARED}} in this file.\n',
+      'utf8',
+    );
+    await writeFile(
+      path.join(root, 'template.yaml'),
+      [
+        'schemaVersion: 1',
+        'id: template-undeclared-token',
+        'repositoryName: undeclared-token',
+        'version: 0.1.0',
+        'curriculum:',
+        '  release: 0.2.0',
+        '  entryPoint: project-undeclared-token',
+        'runtime:',
+        '  nodeFamily: 24',
+        '  packageManager: pnpm',
+        'publication:',
+        '  include:',
+        '    - files/**',
+        '  exclude: []',
+        '  textTransforms:',
+        '    - token: "{{TEMPLATE_VERSION}}"',
+        '      valueFrom: template.version',
+        'verification:',
+        '  install:',
+        '    command: pnpm',
+        '    args: [install, --frozen-lockfile]',
+        '    cwd: .',
+        '    timeoutMs: 180000',
+        '  baseline:',
+        '    command: pnpm',
+        '    args: [verify:baseline]',
+        '    cwd: .',
+        '    timeoutMs: 180000',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await materializeTemplate(root, output, {
+      ...provenance,
+      templateId: 'template-undeclared-token',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // TEMPLATE_TRANSFORM_001 is thrown inside materialize and surfaced through the
+    // failure diagnostic. This assertion fails if transforms.ts silently passes an
+    // undeclared token through instead of rejecting the materialization.
+    expect(result.diagnostics[0]?.observed).toContain('TEMPLATE_TRANSFORM_001:{{NOT_DECLARED}}');
+    await rm(root, { recursive: true, force: true });
   });
 
   it('writes provenance to .roadmap/template-manifest.json', async () => {
