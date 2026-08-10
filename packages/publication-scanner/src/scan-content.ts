@@ -8,15 +8,20 @@ import { contentPolicies } from './policies.js';
 export const MAX_SCANNABLE_FILE_BYTES = 2 * 1024 * 1024;
 
 /**
- * Matches content policies against a file's bytes. Files containing a NUL byte are
- * treated as binary and skipped: decoding them as UTF-8 would produce replacement
- * characters and meaningless matches. `observed` deliberately records the pattern
- * that matched and never the matched text, so a real secret is not copied into
- * diagnostics, logs, or CI output.
+ * Matches content policies against a file's bytes.
+ *
+ * NUL bytes guard the DECODE step only, never detection (INV-F1, Owner ruling R11).
+ * The governed plan text read `if (bytes.includes(0)) return []`, which meant a single
+ * prepended NUL disabled all six content policies while every secret byte remained in
+ * the file — a bypass reproduced as OWNER-F1. NUL bytes are now removed before decoding,
+ * so binary input still cannot produce meaningless UTF-8 matches, but a secret embedded
+ * in a NUL-bearing file is still found.
+ *
+ * `observed` deliberately records the pattern that matched and never the matched text,
+ * so a real secret is not copied into diagnostics, logs, or CI output.
  */
 export function contentDiagnostics(relativePath: string, bytes: Uint8Array): readonly Diagnostic[] {
-  if (bytes.includes(0)) return [];
-  const text = Buffer.from(bytes).toString('utf8');
+  const text = Buffer.from(bytes.filter((byte) => byte !== 0)).toString('utf8');
   return contentPolicies.flatMap((policy) =>
     policy.pattern.test(text)
       ? [

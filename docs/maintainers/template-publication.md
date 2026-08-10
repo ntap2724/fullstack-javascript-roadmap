@@ -115,8 +115,10 @@ second line, not the first.
 
 ### Content policy matches patterns, not meaning
 
-Only UTF-8 text is inspected; files containing a NUL byte are treated as binary and
-skipped. A secret in an unrecognized format, a base64 blob, or an image passes.
+Content is inspected as UTF-8 text. NUL bytes are stripped before decoding rather than
+causing the file to be skipped, so a secret embedded in a file that also contains NUL
+bytes is still detected (INV-F1). A secret in an unrecognized format, a base64 blob, or
+an image passes.
 Files above 2 MiB are **rejected rather than scanned**, so an oversized payload
 cannot pass unexamined.
 

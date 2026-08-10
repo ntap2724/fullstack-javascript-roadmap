@@ -127,10 +127,57 @@ describe('selected source scanning', () => {
   });
 
   it('does not decode binary content as text', async () => {
-    // A NUL-bearing file must be skipped by content scanning, not misreported.
+    // A NUL-bearing file must not be misreported. NOTE: these bytes match no content
+    // policy, so this test passes whether they are skipped OR scanned and found
+    // clean. It is deliberately KEPT — it guards the real property that binary input
+    // must not crash or produce a false positive — but it is vacuous with respect to
+    // INV-F1 and cannot prove the NUL bypass is closed. See the test below, which can.
     const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-binary-'));
     await writeFile(path.join(root, 'image.bin'), Buffer.from([0x00, 0x01, 0x02, 0x00, 0xff]));
     const result = await scanPublicationTree(root);
     expect(result.ok).toBe(true);
+  });
+
+  it('detects policy-matching content even when the file contains NUL bytes', async () => {
+    // INV-F1 (OWNER-F1). A single prepended NUL byte previously disabled ALL six
+    // content policies via `if (bytes.includes(0)) return []`, so a file could carry
+    // a private key, an AWS key id, and a GitHub token in plain view and scan clean.
+    // The NUL may guard how bytes are DECODED; it may never disable DETECTION.
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-nul-'));
+    const payload = Buffer.concat([
+      Buffer.from([0x00]),
+      Buffer.from(
+        [
+          '-----BEGIN RSA PRIVATE KEY-----',
+          'AKIAIOSFODNN7EXAMPLE',
+          'ghp_0123456789abcdefghijklmnopqrstuvwx',
+          'ROADMAP_MAINTAINER_ONLY',
+        ].join('\n'),
+        'utf8',
+      ),
+      Buffer.from([0x00]),
+    ]);
+    await writeFile(path.join(root, 'leaky.bin'), payload);
+
+    const result = await scanPublicationTree(root);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    // Every policy the payload matches must fire. Asserting the exact set rather than
+    // `length > 0` keeps this from passing on a single lucky match.
+    const codes = [...new Set(result.diagnostics.map(({ code }) => code))].sort();
+    expect(codes).toEqual([
+      'PUBLICATION_CONTENT_001',
+      'PUBLICATION_SECRET_001',
+      'PUBLICATION_SECRET_002',
+      'PUBLICATION_SECRET_003',
+    ]);
+
+    // The MUST-NOT-MOVE guarantee still holds under the fix: `observed` carries the
+    // matching pattern, never the matched text, so no secret byte reaches a log.
+    for (const diagnostic of result.diagnostics) {
+      expect(String(diagnostic.observed)).not.toContain('AKIAIOSFODNN7EXAMPLE');
+      expect(String(diagnostic.observed)).not.toContain('ghp_0123456789');
+    }
   });
 });
