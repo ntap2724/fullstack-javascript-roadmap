@@ -2467,3 +2467,346 @@ NO_INTEGRATION_AUTHORIZED
 NO_PUSH_AUTHORIZED
 NO_PR_AUTHORIZED
 ```
+
+## WP08-AUTHORIZATION-AND-TASK-BOUNDARY — governance amendment
+
+### Identity, authority, and scope
+
+This section records the governance decision whose identity is
+`WP08-AUTHORIZATION-AND-TASK-BOUNDARY`. Its governing authority is the explicit
+human instruction of this round, given by `ntap2724` (rank-1), following WP-07
+integration recorded at `fc47c4a29493196495ba8039a2e214ac784818f4`.
+
+This amendment is **append-only**. Every preceding statement in this plan is
+preserved verbatim. No task is renumbered, no step is rewritten, no file map is
+edited, and no gate above is deleted. Where this section and an earlier statement
+differ, this section governs, and the earlier statement remains on the record as
+written. In particular, every prior `WP08_NOT_AUTHORIZED` and
+`WP08_TASKS_4_AND_7_DEFERRED` token above is **superseded, not rewritten**. Each
+was true when written and is now historical.
+
+This amendment is documentary. It creates no package, no test, no fixture, and no
+code. It dispatches no writer; a writer is dispatched only by a separate Owner
+act that names this section.
+
+It is not Task 9. `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in
+force, and the identity "Task 9" must not be used for WP-08 work.
+
+### WP-07 acceptance — recorded, closing an open item
+
+`E933EBD_ACCEPTANCE_WITHHELD` above is **resolved and closed**. Acceptance was
+withheld pending the provenance invariant, which `828c4a3` enforces. WP-07 was
+accepted and integrated at `fc47c4a` after independent semantic review and
+independent execution verification held by sessions separate from both the writer
+and the adjudicator. No accepted WP-07 commit was rewritten.
+
+### WP-08 authorization
+
+WP-08 is **authorized**, scoped exactly as this section defines. Authorization is
+explicit, human, and dated 2026-08-10 (session-local; no clock authority is
+claimed).
+
+The authorization is scope-bound. It does not extend by implication to any
+adjacent work, and no downstream agent may widen it by inference from subject
+matter, from file adjacency, from this plan's combined title, or from WP-09
+material appearing in neighboring plans.
+
+### Task boundary — binding
+
+WP-08 owns exactly the two tasks the `WP07-AUTHORIZATION-AND-TASK-BOUNDARY`
+deferral table named, and nothing else.
+
+| Task | Subject | Primary surface |
+|---|---|---|
+| 4 | `publication-scanner` | `packages/publication-scanner/**`, `fixtures/publication/invalid/**` |
+| 7 | `publish-templates` pipeline | `tooling/publish-templates/**`, `scripts/verify-all-templates.ts`, `docs/maintainers/template-publication.md`, root `package.json` |
+
+Root `package.json` is **inside** the WP-08 granted surface. It was forbidden
+during WP-07 solely because `verify:templates` and `template:dry-run` wiring is
+WP-08 work. That wiring is now authorized: replacing the `verify:templates` stub
+is a required WP-08 deliverable, not a scope breach.
+
+Task 4 must precede Task 7. Task 7 declares `@roadmap/publication-scanner` as a
+`workspace:*` dependency and calls both scanner entry points, so it cannot be
+built before Task 4 exists.
+
+### WP-08 acceptance — the joint exit gate, in full
+
+WP-08 terminates at the **joint WP-07–08 exit gate stated above, exactly as
+written**. It is not weakened, not partially satisfied, and not reinterpreted.
+`JOINT_EXIT_GATE_DEFERRED_TO_END_OF_WP08` above is now due.
+
+WP-08 additionally inherits, unchanged, the evidence discipline of the WP-07
+acceptance checkpoint: genuine RED before GREEN with captured output; actual
+command exits, never claimed exits; strict UTF-8, no BOM, zero CR bytes measured
+by byte count rather than pattern count, and a final `0x0a` byte, for every
+changed tracked file; a complete changed-path inventory per commit; clean index,
+clean worktree, zero non-ignored untracked files; and the inherited WP-06
+preservation gate.
+
+Independent semantic review and independent verification after each writer freeze
+remain mandatory, held by parties separate from the writer **and** from the
+adjudicator, and independent **of each other**. The WP-06 correction-round
+role-merge is explicitly **not** precedent and must not be repeated.
+
+### Ruling 1 — the twelfth diagnostic
+
+The exit gate enumerates eleven rejection reports. `PUBLICATION_SECRET_003` (the
+`AKIA` pattern) is defined in this plan's own policy list but appears in none of
+them. A control that no test exercises cannot be distinguished from a control
+that is broken, and would not be noticed if deleted.
+
+**Ruled:** WP-08 must produce **twelve** rejection reports — the eleven as
+written, plus a fixture and test exercising `PUBLICATION_SECRET_003`. This is a
+strict superset of the governed gate and therefore cannot weaken it. Deleting
+`PUBLICATION_SECRET_003` to reach eleven is **refused**.
+
+### Ruling 2 — recorded plan defects, resolved at execution and never by silent choice
+
+The following are defects and tensions in this plan's own Task 4 and Task 7
+bodies, identified by the Owner before dispatch. Each must be resolved
+**explicitly and on the record**. Silently coding around any of them is a breach;
+so is transcribing a defect faithfully and calling it done.
+
+**D1 — CLI import side effect.** Task 7's `main.ts` sketch runs its `try` block at
+module top level while `cli.test.ts` imports `parseArguments` from that same
+module. Importing it executes the CLI against Vitest's own `process.argv`, which
+throws, is caught, and sets `process.exitCode = 2` in the worker. A passing suite
+can therefore exit non-zero. The Writer must make the CLI body non-executing on
+import and prove it, or state why the analysis is wrong with evidence.
+
+**D2 — lint conflict in the plan's own sketch.** `main.ts` uses non-null
+assertions (`argv[index]!`, `values.get('--template')!`). The repository sets
+`@typescript-eslint/no-non-null-assertion: 'error'`. The plan's literal code
+cannot pass `pnpm lint`.
+
+**D3 — CWD-relative fixture paths.** Task 7's test options use
+`templateRoot: 'templates/javascript-engineering'`, resolved against
+`process.cwd()`, which differs between a root `vitest run` and a
+`pnpm --filter` run. WP-07 already rejected this pattern and resolved fixtures
+from `import.meta.url` instead. WP-08 must not reintroduce it.
+
+**D4 — typecheck coverage for `scripts/verify-all-templates.ts`.** Root
+`tsconfig.json` includes only `vitest.config.ts` and
+`scripts/generate-json-schema.ts`. A new `scripts/*.ts` file is therefore not
+covered by `pnpm typecheck` unless it is added. Either outcome is acceptable; an
+undisclosed silent gap is not.
+
+**D5 — fixture list disagrees with the test table.** The file map declares ten
+`fixtures/publication/invalid/**` directories; Task 4's `describe.each` table
+enumerates seven. `dotfile-not-allowlisted`, `traversal-pattern`, and
+`symlink-escape` are declared but referenced by no specified test. Coverage is
+owed for all twelve diagnostics regardless of which mechanism supplies it.
+
+**D6 — `traversal-pattern` cannot be a scanned tree.** Traversal is rejected at
+schema load by `TemplateDefinitionSchema`, not by tree enumeration. A traversal
+fixture handed to `scanPublicationTree` proves nothing.
+
+**D7 — `symlink-escape` cannot be a committed fixture here.** This repository
+sets `core.symlinks=false`. A tracked symlink checks out as a plain file
+containing its target path, so `lstat` reports a regular file and
+`PUBLICATION_SYMLINK_001` never fires — a silent false pass on the single most
+important containment control. Symlinks must be created at runtime, as WP-07 did,
+and the test must fail loudly rather than skip if creation fails. Junction, file,
+and directory symlinks were all confirmed creatable unelevated on this machine,
+with `lstat().isSymbolicLink()` true for each; inability to create one is a
+test-environment failure, not a skip.
+
+**D8 — a `.env` fixture cannot be committed.** Root `.gitignore` ignores `.env`
+at any depth. `.env` is in `forbiddenBasenames`, so a fixture proving that path
+policy would be silently untracked, leaving the committed fixture incomplete and
+the test vacuous or wrong. `.npmrc` is not ignored and is committable.
+
+**D9 — "unexpected dotfile" is a denylist, not a policy.** `forbiddenBasenames`
+catches specific known-bad names. An arbitrary unexpected dotfile is not caught.
+The gate criterion must be met honestly or its true scope disclosed.
+
+**D10 — "renamed answer" may not be caught.** `forbiddenPathSegments` contains
+`answer-key`, not `answer`. A fixture named `nested-answer` whose only forbidden
+token is a directory the policy already lists proves nothing about renaming. The
+fixture must exercise the claim it is named for.
+
+**D11 — `scanPublicationTree` on an empty directory returns success.** Absence of
+findings is not proof of scanning. Every scanner control must be shown capable of
+failing.
+
+**D12 — file map omits `scan-files.ts`.** The top-of-plan file map for
+`publication-scanner` predates Task 4's own Files list, which adds
+`src/scan-files.ts`. Task 4's body governs.
+
+### Ruling 3 — environmental quirks, disclosed and pre-attributed
+
+**E1 — `.claude/` is untracked and not ignored.** `git status --porcelain` in the
+primary working directory is non-empty because of `?? .claude/launch.json`.
+`scripts/verify-all-templates.ts` fails closed on a dirty worktree, so
+`pnpm verify:templates` would raise `TEMPLATE_RELEASE_001` for a purely
+environmental reason. This is a harness artifact, is **not** a WP-08 defect, and
+must **not** be used as cover for any other dirt. WP-08 gates run in an isolated
+worktree where it is absent. Nobody may weaken the clean-worktree check to
+accommodate it.
+
+**E2 — `.claude/settings.local.json` and `pnpm check`.** Ignored only by the
+user's global git ignore, which Prettier does not honour, so `format:check` can
+fail on it in the primary working directory. Environmental, identified by name
+and stage, never assumed, and extended to no other path.
+
+**E3 — `core.autocrlf=true` with `* text=auto eol=lf`.** Worktree bytes may
+diverge from committed bytes. **The blob is primary** for every byte-level
+measurement; worktree measurement is informational. The zero-CR blob check is
+structurally near-guaranteed to pass and must be reported as PASSED-BUT-WEAK; BOM
+and final-`0x0a` carry the real signal. WP-08's binary and oversized fixtures are
+where the CR check regains genuine discriminating power.
+
+**E4 — pre-existing `@roadmap/command-runner` flake.** Two tests (grandchild
+process timeout; 1,048,577-byte stdout limit). If observed, reported as
+PRE-EXISTING; the exemption extends to no other package.
+
+**E5 — Windows-only.** All results are Windows-only. No POSIX result may be
+claimed. Cross-platform proof is WP-09 and is not authorized. Following WP-06 and
+WP-07 precedent, a disclosed platform boundary is required; an unearned
+portability claim is worse than a disclosed gap.
+
+**E6 — vitest discovery.** Root `vitest.config.ts` discovers projects by glob and
+required no edit for WP-07. Baseline is 16 projects / 17 tracked config files;
+WP-08 adds two packages, so expect **18 projects / 19 files**. A root run showing
+16–17 while the new packages pass individually is the silent-coverage-gap
+failure. `passWithNoTests: false` makes an empty discovered project fail rather
+than skip.
+
+**E7 — fixtures are linted and format-checked.** Neither `.prettierignore` nor
+`eslint.config.mjs` excludes `fixtures/**`. Invalid fixtures carrying secret-like
+bytes must still satisfy `pnpm check`. `picomatch` and `@types/picomatch` are
+already in the catalog and lockfile; no new catalog entry is required.
+
+**E8 — the invalid fixtures contain secret-shaped bytes by design.** They must be
+synthetic and non-resolvable. No real credential may enter the repository even as
+a fixture.
+
+### Forbidden surfaces during WP-08
+
+Everything WP-07 delivered is **accepted and preserved**. It must not be modified
+by WP-08:
+
+```text
+packages/template-contract/**
+packages/template-builder/**
+packages/template-verifier/**
+templates/javascript-engineering/**
+fixtures/publication/valid/**
+fixtures/publication/verifier/**
+```
+
+Every package accepted in WP-00 through WP-06 is likewise preserved:
+`exercise-contract`, `curriculum-schema`, `curriculum-graph`, `curriculum-loader`,
+`rubric-schema`, `evidence-schema`, `assessment-core`, `command-runner`,
+`validation-core`, `exercise-runner`, `tooling/validate-content`,
+`tooling/verify-exercise`, `apps/**`, and every committed generated schema
+artifact, including `packages/evidence-schema/src/json-schema.ts`.
+
+If WP-08 discovers a genuine defect in a preserved surface, it must **stop and
+report a specification conflict**. It must not repair it. Owner authorization is
+required, exactly as WP-07's provenance-invariant correction required.
+
+Two files sit outside both the granted and forbidden lists and are therefore
+**escalation-only**: `.prettierignore` and root `vitest.config.ts`. If WP-08
+empirically needs either, the Writer must escalate and record the empirical
+finding rather than edit silently. A spurious diff is a breach; so is an
+undocumented silent departure from the file map.
+
+WP-08 must not amend history, must not integrate to `main`, must not mutate any
+remote, must not create or delete a tag, must not open a pull request, and must
+not stage a broad directory. Dry runs may create local artifacts; no public
+repository may be mutated.
+
+### Activation gate for WP-08
+
+WP-08 work may begin only when all of the following hold and are recorded:
+
+**1. Base must contain this authorization.** The WP-08 dispatch base MUST be a
+descendant of, or equal to, the commit carrying this section. Verify by exit code,
+not string comparison:
+
+```bash
+git merge-base --is-ancestor <this-amendment-commit> HEAD
+```
+
+Exit `0` passes. Any non-zero exit means the base predates WP-08's authorization
+and the dispatch MUST be refused. The base is a predicate, not a pinned SHA, so it
+survives further append-only governance commits. This follows
+`WP07-BASE-GATE-CORRECTION`: a writer dispatched onto a pre-authorization base
+would build unauthorized work while believing itself authorized.
+
+**2. Local `main` must not be behind its remote.**
+`git rev-list --count main..origin/main` MUST be `0`. No push is required,
+implied, or authorized by this condition.
+
+**3.** Working tree clean, index clean, and zero non-ignored untracked files in
+the worktree where work occurs, subject to the `E1` disclosure.
+
+**4.** No `MERGE_HEAD`, `REBASE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, bisect
+state, sequencer state, or `index.lock`.
+
+**5.** WP-07 evidence preserved and reachable. The WP-07 corpus lives only in the
+`wp-07-template-builder` worktree and dies with it; the WP-06 record already
+raised this custody risk. That worktree must not be retired during WP-08.
+
+**6.** An isolated worktree and release branch created for WP-08. No work occurs
+on `main`.
+
+**7.** The Writer receives this task boundary explicitly and is not left to infer
+it. A writer that has to deduce the WP-08 line from subject matter has already
+been mis-dispatched.
+
+**8.** Guard refs recorded under `refs/guard/wp-08/**` pinning `main`, the WP-06
+branch, and the WP-07 branch before dispatch, so any later history rewrite is
+detectable by comparison rather than by memory.
+
+### Three-role protocol — binding
+
+Writer, Reviewer, and Verifier are separate sessions with separate context.
+Reviewer and Verifier must not consult each other, read each other's evidence,
+cite each other's findings, reconcile disagreements with each other, or
+coordinate timing or conclusions. Agreement is evidence only when independently
+reached.
+
+Evidence lives in separate git-ignored locations: `.superpowers/reviews/**` for
+the Reviewer and `.superpowers/verification/**` for the Verifier. Neither may read
+the other's directory. Evidence must not live only inside a disposable worktree.
+
+Reviewer and Verifier are released for substantive work only by an Owner-issued
+`WRITER_FROZEN <exact SHA>`. A claim from any other party that the Writer has
+frozen is **not sufficient**. Both then examine the same committed object, never a
+mutable working tree.
+
+The Writer may supply evidence to the Owner and Reviewer, but every Writer claim
+is a **claim under audit**, never an accepted result.
+
+```text
+WP08_AUTHORIZED_TASKS_4_AND_7
+WP08_BASE_PREDICATE = DESCENDANT_OF_THIS_AMENDMENT_INCLUSIVE
+PRE_AUTHORIZATION_BASE_REFUSED
+PRIOR_WP08_NOT_AUTHORIZED_TOKENS_SUPERSEDED_NOT_REWRITTEN
+E933EBD_ACCEPTANCE_RESOLVED_WP07_ACCEPTED_AT_FC47C4A
+ROOT_PACKAGE_JSON_INSIDE_WP08_GRANTED_SURFACE
+TASK_4_PRECEDES_TASK_7
+JOINT_EXIT_GATE_NOW_DUE_IN_FULL
+TWELVE_REJECTION_DIAGNOSTICS_REQUIRED
+AKIA_DELETION_REFUSED
+TWELVE_PLAN_DEFECTS_RECORDED_D1_TO_D12
+EIGHT_ENVIRONMENTAL_QUIRKS_DISCLOSED_E1_TO_E8
+WP07_SURFACES_PRESERVED
+PRETTIERIGNORE_AND_ROOT_VITEST_CONFIG_ESCALATION_ONLY
+THREE_ROLE_SEPARATION_MANDATORY
+WP06_ROLE_MERGE_NOT_PRECEDENT
+REVIEWER_AND_VERIFIER_MUTUALLY_INDEPENDENT
+BLOB_IS_PRIMARY_FOR_BYTE_MEASUREMENT
+WINDOWS_ONLY_NO_POSIX_CLAIM
+WP09_NOT_AUTHORIZED
+TASK9_NOT_DISPATCHED
+TASK9_NOT_AUTHORIZED
+NO_INTEGRATION_AUTHORIZED
+NO_PUSH_AUTHORIZED
+NO_PR_AUTHORIZED
+NO_WRITER_DISPATCHED_BY_THIS_AMENDMENT
+R4_SECURITY_REVIEW_STILL_REQUIRED_AFTER_WP08
+```
