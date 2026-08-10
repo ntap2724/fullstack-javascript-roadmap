@@ -2274,3 +2274,76 @@ NO_PR_AUTHORIZED
 NO_WRITER_DISPATCHED_BY_THIS_AMENDMENT
 R4_SECURITY_REVIEW_STILL_REQUIRED_AFTER_WP08
 ```
+
+---
+
+## WP07-BASE-GATE-CORRECTION — activation base predicate
+
+### Identity, authority, and scope
+
+This section records the correction whose identity is `WP07-BASE-GATE-CORRECTION`. Its governing authority is the explicit human instruction of this round, given by `ntap2724` (rank-1).
+
+It is **append-only**. The `WP07-AUTHORIZATION-AND-TASK-BOUNDARY` section above, including its activation gate, is preserved verbatim. Nothing above is renumbered, rewritten, or deleted.
+
+It **authorizes nothing new**. It does not widen WP-07, does not authorize WP-08, Task 9, WP-09, integration, push, or a pull request, and dispatches no writer. It corrects one mechanical defect in an activation condition and does nothing else. It is not Task 9; `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in force.
+
+### Defect being corrected
+
+Activation gate conditions 1 and 2 above were written before the governance commit that carries WP-07's authorization existed. Both are now unsatisfiable as written, and satisfying either literally would be wrong.
+
+**Condition 1** named `07692eb9a605bcb933590dd5157926b9598699af` as the required local `main`. That commit is the *parent* of the authorization commit. A worktree branched from it would not contain WP-07's own authorization, so a writer dispatched there would be building unauthorized work while believing itself authorized. This is the exact failure the condition was meant to prevent.
+
+**Condition 2** required `origin/main` to equal local `main`, verified from the remote server. The governance commit is deliberately unpushed and push is unauthorized. Requiring equality would force an unauthorized push in order to open a gate — a governance boundary breach dressed as a precondition.
+
+Both conditions remain on the record above as written. This section governs where they differ.
+
+### Replacement conditions
+
+Activation gate conditions 1 and 2 are replaced by the following. Conditions 3, 4, 5, 6, and 7 above are unchanged and remain in force, including the mandatory condition 7.
+
+**1'. Base must contain the authorization.** The WP-07 dispatch base MUST be `0bce0663d7331ba7dfb9bbf04da5b8f9c13b7485` or a descendant of it. Verify by exit code, not by string comparison:
+
+```bash
+git merge-base --is-ancestor 0bce0663d7331ba7dfb9bbf04da5b8f9c13b7485 HEAD
+```
+
+Exit `0` passes. Any non-zero exit means the base predates WP-07's authorization and the dispatch MUST be refused. The base may be a later authenticated local `HEAD` that contains this commit; it is not pinned to one SHA.
+
+**2'. Local `main` must not be behind its remote.** Verify:
+
+```bash
+git rev-list --count main..origin/main
+```
+
+The result MUST be `0`. `origin/main` may legitimately trail local `main` by unpushed governance commits. **No push is required, implied, or authorized by this condition.**
+
+### Why a predicate rather than another exact SHA
+
+An exact-SHA base gate is stale the moment the next governance commit lands. This correction is itself an instance of that failure: the previous gate was written and committed in the same operation that invalidated it. The ancestor predicate in condition 1' is stable across any number of further append-only governance commits while still refusing every pre-authorization base, because containment of the authorization commit is the property that actually matters — not equality with a particular head.
+
+The commit named in condition 1' is the commit that carries WP-07's authorization into tracked history. It is referenced here as an ancestry anchor only. Naming it confers no additional authority and does not authorize pushing it.
+
+### Unchanged by this correction
+
+- WP-07 remains authorized for Tasks 1, 2, 3, 5, and 6 only
+- Tasks 4 and 7 remain deferred to WP-08 and unauthorized
+- The WP-07 acceptance checkpoint is unchanged and still replaces the joint gate for WP-07
+- The joint WP-07-08 exit gate remains deferred, in full, to the end of WP-08
+- The forbidden-surface list is unchanged
+- The three-role independence requirement is unchanged
+
+```text
+WP07_BASE_PREDICATE = DESCENDANT_OF_0BCE066_INCLUSIVE
+WP07_BASE_NOT_PINNED_TO_SINGLE_SHA
+PRE_AUTHORIZATION_BASE_REFUSED
+NO_PUSH_REQUIRED_BY_ACTIVATION_GATE
+WP07_AUTHORIZED_TASKS_UNCHANGED_1_2_3_5_6
+WP08_NOT_AUTHORIZED
+WP09_NOT_AUTHORIZED
+TASK9_NOT_DISPATCHED
+TASK9_NOT_AUTHORIZED
+NO_INTEGRATION_AUTHORIZED
+NO_PUSH_AUTHORIZED
+NO_PR_AUTHORIZED
+NO_WRITER_DISPATCHED_BY_THIS_CORRECTION
+```
