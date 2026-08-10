@@ -4,9 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { selectPublicationFiles } from '@roadmap/template-builder';
+import { contentPolicies } from '../src/policies.js';
 import { scanPublicationFiles, scanPublicationTree } from '../src/index.js';
 
 const fixture = new URL('../../../fixtures/publication/valid/minimal-template/', import.meta.url);
+
+const NUL = Buffer.from([0x00]);
 
 describe('selected source scanning', () => {
   it('scans only selected public files, not private fixture storage', async () => {
@@ -139,9 +142,9 @@ describe('selected source scanning', () => {
   });
 
   it('detects policy-matching content even when the file contains NUL bytes', async () => {
-    // INV-F1 (OWNER-F1). A single prepended NUL byte previously disabled ALL six
-    // content policies via `if (bytes.includes(0)) return []`, so a file could carry
-    // a private key, an AWS key id, and a GitHub token in plain view and scan clean.
+    // INV-F1 (OWNER-F1). A single NUL byte previously disabled ALL six content
+    // policies via `if (bytes.includes(0)) return []`, so a file could carry a private
+    // key, an AWS key id, and a GitHub token in plain view and scan clean.
     // The NUL may guard how bytes are DECODED; it may never disable DETECTION.
     const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-nul-'));
     const payload = Buffer.concat([
@@ -179,5 +182,88 @@ describe('selected source scanning', () => {
       expect(String(diagnostic.observed)).not.toContain('AKIAIOSFODNN7EXAMPLE');
       expect(String(diagnostic.observed)).not.toContain('ghp_0123456789');
     }
+  });
+
+  // INV-F1, restated binding form: NUL position and count must not affect WHETHER
+  // detection occurs. A leading-NUL-only fix passes a prepend test while leaving the
+  // bypass open one byte later, so every placement is exercised against every policy.
+  // Each carrier was verified to fire exactly its own policy and no other, so a
+  // failure here localizes to one policy rather than being ambiguous.
+  const carriers = [
+    ['PUBLICATION_CONTENT_001', 'ROADMAP_MAINTAINER_ONLY'],
+    ['PUBLICATION_INTERNAL_001', 'https://internal.example-corp.net/runbook'],
+    ['PUBLICATION_INTERNAL_002', '/home/maintainer/notes.txt'],
+    ['PUBLICATION_SECRET_001', '-----BEGIN RSA PRIVATE KEY-----'],
+    ['PUBLICATION_SECRET_002', 'ghp_0123456789abcdefghijklmnopqrstuvwx'],
+    ['PUBLICATION_SECRET_003', 'AKIAIOSFODNN7EXAMPLE'],
+  ] as const;
+
+  const placements = [
+    ['leading', (secret: string) => Buffer.concat([NUL, Buffer.from(secret, 'utf8')])],
+    ['trailing', (secret: string) => Buffer.concat([Buffer.from(secret, 'utf8'), NUL])],
+    [
+      'mid-string',
+      (secret: string) => {
+        const half = Math.floor(secret.length / 2);
+        return Buffer.concat([
+          Buffer.from(secret.slice(0, half), 'utf8'),
+          NUL,
+          Buffer.from(secret.slice(half), 'utf8'),
+        ]);
+      },
+    ],
+    [
+      'interleaved',
+      (secret: string) =>
+        // Interleave at BYTE level, not by code point: this is a byte-level property,
+        // and spreading a string yields code points, which would mishandle non-ASCII.
+        Buffer.concat([...Buffer.from(secret, 'utf8')].map((byte) => Buffer.from([0x00, byte]))),
+    ],
+    [
+      'multiple-runs',
+      (secret: string) =>
+        Buffer.concat([NUL, NUL, NUL, Buffer.from(secret, 'utf8'), NUL, NUL, NUL]),
+    ],
+  ] as const;
+
+  for (const [code, secret] of carriers) {
+    for (const [placement, build] of placements) {
+      it(`detects ${code} with ${placement} NUL bytes`, async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-nulpos-'));
+        await writeFile(path.join(root, 'payload.bin'), build(secret));
+
+        const result = await scanPublicationTree(root);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(code);
+
+        // A detection fix must not become a disclosure channel: `observed` records the
+        // matching pattern, never the matched text. Asserted as EXACT EQUALITY with the
+        // policy's pattern source rather than `not.toContain(secret)`. For a literal
+        // alternation like /ROADMAP_MAINTAINER_ONLY|BEGIN_PRIVATE_FIXTURE/ the carrier
+        // is necessarily a substring of the pattern itself, so a "does not contain"
+        // check cannot tell a recorded pattern from leaked text — it fails on correct
+        // behavior and would pass on a leak whose text happened not to match. Equality
+        // is decidable: only the pattern satisfies it.
+        for (const diagnostic of result.diagnostics) {
+          const policy = contentPolicies.find((entry) => entry.code === diagnostic.code);
+          expect(policy).toBeDefined();
+          expect(diagnostic.observed).toBe(policy?.pattern.source);
+        }
+      });
+    }
+  }
+
+  it('does not produce spurious diagnostics for genuine binary content', async () => {
+    // The other half of the invariant: stripping NULs must not make the scanner cry
+    // wolf on real binary. A scanner nobody trusts is a scanner nobody heeds. These
+    // bytes are a PNG header plus high-bit noise — no policy content anywhere.
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-realbin-'));
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const noise = Buffer.from(Array.from({ length: 512 }, (_, index) => (index * 7 + 0x80) % 256));
+    await writeFile(path.join(root, 'image.png'), Buffer.concat([png, NUL, noise, NUL]));
+
+    const result = await scanPublicationTree(root);
+    expect(result.ok).toBe(true);
   });
 });
