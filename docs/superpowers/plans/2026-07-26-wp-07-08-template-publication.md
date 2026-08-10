@@ -2141,3 +2141,136 @@ Acceptance evidence must include:
 ## Checkpoint
 
 Stop after the exit gate. Request R4 security review for allowlist containment, symlink behavior, secret-pattern limitations, provenance semantics, and command execution before enabling cross-platform release CI.
+
+---
+
+## WP07-AUTHORIZATION-AND-TASK-BOUNDARY — governance amendment
+
+### Identity, authority, and historical boundary
+
+This section records the governance decision whose identity is `WP07-AUTHORIZATION-AND-TASK-BOUNDARY`. Its governing authority is the explicit human instruction of this round, given by `ntap2724` (rank-1), following completed WP-06 integration at `07692eb9a605bcb933590dd5157926b9598699af` and the WP-06 exit-checkpoint closure recorded in the WP-05-06 plan.
+
+This amendment is **append-only**. Every preceding statement in this plan is preserved verbatim. No task is renumbered, no step is rewritten, no file map is edited, and no gate above is deleted. Where this section and an earlier statement differ, this section governs, and the earlier statement remains on the record as written.
+
+This amendment is documentary. It creates no package, no test, no fixture, and no code. No writer is dispatched by it.
+
+It is not Task 9. `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in force, and the identity "Task 9" must not be used for WP-07 work.
+
+### WP-07 authorization
+
+WP-07 is **authorized**, scoped exactly as this section defines. Authorization is explicit, human, and dated 2026-08-09 (session-local; no clock authority is claimed).
+
+The authorization is scope-bound. It does not extend by implication to any adjacent work, and no downstream agent may widen it by inference from subject matter, from file adjacency, from this plan's combined title, or from the presence of WP-08 material in the task bodies above.
+
+### Task boundary — binding
+
+This plan was authored as a combined WP-07-08 plan and states no task split. That split is defined here. It is a governance ruling, not an inference available to a writer.
+
+**WP-07 — authorized now**
+
+| Task | Subject | Primary surface |
+|---|---|---|
+| 1 | `template-contract` | `packages/template-contract/**` |
+| 2 | `template-builder` selection | `packages/template-builder/**`, `fixtures/publication/valid/minimal-template/**` |
+| 3 | `template-builder` materialization | `packages/template-builder/**` |
+| 5 | starter template source | `templates/javascript-engineering/**` |
+| 6 | `template-verifier` | `packages/template-verifier/**`, `fixtures/publication/verifier/**` |
+
+**WP-08 — deferred and NOT authorized**
+
+| Task | Subject | Primary surface |
+|---|---|---|
+| 4 | `publication-scanner` | `packages/publication-scanner/**`, `fixtures/publication/invalid/**` |
+| 7 | `publish-templates` pipeline | `tooling/publish-templates/**`, `scripts/verify-all-templates.ts`, `docs/maintainers/template-publication.md`, root `package.json` |
+
+### Task 4 — explicit ruling
+
+Task 4 (`publication-scanner`) is **deferred to WP-08 and is NOT authorized under WP-07**. This is ruled explicitly because the combined plan makes it the most contestable boundary.
+
+Grounds:
+
+1. `publication-scanner` is the leak-prevention package. The master plan work-package graph and the design specification both name WP-08 as leak and secret prevention. Task 4 is that package, and WP-08 is not authorized.
+2. The eleven rejection diagnostics in the joint exit gate — solution path, renamed answer, maintainer marker, internal URL, absolute local path, private key, GitHub token, unexpected dotfile, traversal, oversized file, symlink escape — are all Task 4 outputs. They are WP-08 acceptance material.
+3. WP-07's five tasks are dependency-closed without it. Every reference to `publication-scanner`, `scanPublicationFiles`, and `scanPublicationTree` in this plan falls inside Task 4's own body or Task 7's, and nowhere else. Tasks 1, 2, 3, 5, and 6 neither import it nor test against it.
+
+### Task 7 — explicit ruling and its consequence
+
+Task 7 (`publish-templates`) is **deferred to WP-08 and is NOT authorized under WP-07**, and its deferral is forced rather than chosen. Task 7 declares `@roadmap/publication-scanner` as a `workspace:*` dependency in its own package manifest, and its composition step calls both scanner entry points. It cannot be built before Task 4 exists. Deferring Task 4 therefore necessarily defers Task 7.
+
+The consequence must be stated plainly rather than worked around. **The joint WP-07-08 exit gate cannot run at the end of WP-07.** That gate requires `pnpm verify:templates`, which only Task 7 produces, and requires the eleven rejection reports, which only Task 4 produces. `pnpm verify:templates` will still resolve to the unavailable-command stub when WP-07 completes, and that is the correct and expected state.
+
+The joint exit gate stated above is **not weakened, not partially satisfied, and not reinterpreted**. It remains the gate for the end of WP-08, in full, exactly as written.
+
+### WP-07 acceptance checkpoint
+
+Because the joint exit gate is unavailable at the end of WP-07, WP-07 terminates at the acceptance checkpoint defined here. This checkpoint is a governance decision of this amendment, not a derivation from the plan text above, and it is deliberately weaker than and fully preserved by the joint exit gate.
+
+WP-07 is complete when all of the following are recorded with actual command exits:
+
+- `pnpm --filter @roadmap/template-contract check` and `test`
+- `pnpm --filter @roadmap/template-builder check` and `test`
+- `pnpm --filter @roadmap/template-verifier check` and `test`
+- root `pnpm check`, `pnpm test`, `pnpm lint`, `pnpm format:check`
+- `pnpm schema:check` with an empty dirty diff
+- the inherited preservation gate, unchanged from WP-06
+- genuine RED before GREEN for each task, with captured output
+- strict UTF-8, no BOM, zero CR bytes measured by byte count rather than pattern count, and a final `0x0a` byte, for every changed tracked file
+- a complete changed-path inventory per commit
+- clean index, clean worktree, zero non-ignored untracked files
+- independent semantic review and independent verification after each writer freeze, held by parties separate from both the writer **and** the adjudicator
+
+The last item restores the three-role separation used for WP-06 core Tasks 6-8. The role-merge deviation recorded for WP-06's correction rounds is **not** precedent and must not be repeated in WP-07.
+
+WP-07 must additionally record that `pnpm verify:templates` remains the stub, as positive evidence that WP-08 was not entered.
+
+### Forbidden surfaces during WP-07
+
+The following must not be created or modified during WP-07. Touching any of them is a scope breach, not an optimization.
+
+```text
+packages/publication-scanner/**
+fixtures/publication/invalid/**
+tooling/publish-templates/**
+scripts/verify-all-templates.ts
+docs/maintainers/template-publication.md
+package.json                      (root; verify:templates and template:dry-run wiring is WP-08)
+```
+
+Every package accepted in WP-00 through WP-06 is preserved and must not be modified by WP-07: `exercise-contract`, `curriculum-schema`, `rubric-schema`, `evidence-schema`, `assessment-core`, `command-runner`, and every committed generated schema artifact, including `packages/evidence-schema/src/json-schema.ts`, which an earlier amendment already placed outside the granted surface.
+
+WP-07 must not amend history, must not integrate to `main`, must not mutate any remote, must not create or delete a tag, must not open a pull request, and must not stage a broad directory.
+
+### Plan-internal inconsistency to resolve at execution, not by silent choice
+
+Tasks 1, 2, and 6 each list root `vitest.config.ts` under **Modify**. The committed root `vitest.config.ts` already discovers projects by glob, which appears to cover new `packages/*` entries without edit. The writer must verify empirically whether any edit is required and record the finding. If no edit is required, the file must be left untouched rather than modified to match the file map. A spurious diff is a breach; so is an undocumented silent departure from the file map.
+
+### Activation gate for WP-07
+
+WP-07 work may begin only when all of the following hold and are recorded:
+
+1. Local `main` is exactly `07692eb9a605bcb933590dd5157926b9598699af`
+2. `origin/main` is the same SHA, verified from the remote server rather than from a local tracking ref alone
+3. Working tree clean, index clean, zero non-ignored untracked files
+4. No `MERGE_HEAD`, `REBASE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, bisect state, sequencer state, or `index.lock`
+5. WP-06 evidence archive present and hash-verified at `2026-08-09-wp-06`
+6. An isolated worktree and release branch created for WP-07; no work occurs on `main`
+7. The writer receives the task boundary of this section explicitly, and is not left to infer it
+
+Condition 7 is mandatory. A writer that has to deduce the WP-07/WP-08 line from subject matter has already been mis-dispatched.
+
+### What remains unauthorized
+
+```text
+WP07_AUTHORIZED_TASKS_1_2_3_5_6
+WP08_NOT_AUTHORIZED
+WP08_TASKS_4_AND_7_DEFERRED
+WP09_NOT_AUTHORIZED
+TASK9_NOT_DISPATCHED
+TASK9_NOT_AUTHORIZED
+JOINT_EXIT_GATE_DEFERRED_TO_END_OF_WP08
+NO_INTEGRATION_AUTHORIZED
+NO_PUSH_AUTHORIZED
+NO_PR_AUTHORIZED
+NO_WRITER_DISPATCHED_BY_THIS_AMENDMENT
+R4_SECURITY_REVIEW_STILL_REQUIRED_AFTER_WP08
+```

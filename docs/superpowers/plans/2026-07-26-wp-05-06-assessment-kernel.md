@@ -3924,3 +3924,105 @@ Do not run or claim Tasks 6–8 from this gate. Their rubric, evidence, remediat
 ## WP-05 checkpoint
 
 Stop after the exit gate. Record only a deferred handoff to the later WP-06 owner for rubric and evidence-trust review after that owner receives explicit authorization; do not perform or request that substantive WP-06 review from the WP-05 checkpoint.
+
+---
+
+## WP06-INTEGRATION-AND-EXIT-CHECKPOINT-CLOSURE — governance closure amendment
+
+### Identity, authority, and historical boundary
+
+This section records the governance closure whose identity is `WP06-INTEGRATION-AND-EXIT-CHECKPOINT-CLOSURE`. Its governing authority is the explicit human instruction of this round, given by `ntap2724` (rank-1) after an independent authentication of the post-WP06 repository state.
+
+It is not Task 9. `TASK9_NOT_DISPATCHED` and `TASK9_NOT_AUTHORIZED` remain in force, and the identity "Task 9" must not be used for this work in any file, commit message, or report. Task 9 is neither dispatched nor authorized by this amendment, and no statement here confers any authority on it.
+
+This amendment is **append-only**. Every preceding statement in this plan, including the WP-05 execution boundary, the WP-05 exit gate, the WP-06 Phase-B Task-0 canonical amendment, the WP-06 exit checkpoint, `WP06-POST-AUDIT-CORRECTION`, and `WP06-WINDOWS-PORTABILITY-CORRECTION-2`, is preserved verbatim. Nothing above is renumbered, rewritten, or deleted. Task 8's historical acceptance at `191ff7458add6751d75a178208ddc0260552118f`, its acceptance evidence, `R0060`, and revision 106 remain immutable and are not reopened.
+
+This amendment is documentary. It changes no product code, no test, no fixture, no generated output, no package manifest, no lockfile, and no documentation implementation.
+
+### Superseded status wording
+
+Two earlier statements in this plan were true when written and have since been overtaken by events. They are **not** rewritten. Their status is corrected here, and this section governs where they differ.
+
+1. The sentence "No future task may amend, rewrite history, integrate to main, mutate a remote, publish, or stage a broad directory" (in the Task 6-8 dispatch constraints, currently near plan line 321) bound the WP-06 task writers. It did not and does not bind the human owner. It is superseded only as to integration and publication of the completed WP-06 branch, and remains in force for every future task writer.
+
+2. The sentence "WP-06 integration and WP-07 remain unauthorized" (in the `WP06-WINDOWS-PORTABILITY-CORRECTION-2` section, currently near plan line 478) described the authorization state as of 2026-08-07. Both clauses are superseded: WP-06 integration was subsequently authorized and completed, and WP-07 is authorized by the companion amendment in the WP-07-08 plan. Neither supersession is retroactive; both were accurate when written.
+
+### WP-06 integration and publication — completed
+
+WP-06 integration to `main` was authorized by the human after the correction rounds sealed, and has been completed and independently authenticated.
+
+| Field | Value |
+|---|---|
+| Pre-WP06 baseline | `45b686177070eba28170fcd7153417f38165d580` |
+| Integrated head | `07692eb9a605bcb933590dd5157926b9598699af` |
+| Integration method | fast-forward; zero merge commits in range |
+| Commits integrated | 14, all single-parent |
+| `origin/main` | `07692eb9a605bcb933590dd5157926b9598699af`, verified from the remote server |
+| Release branch remote ref | `c453ddb42fa7c83c9af5ff729e88a5c9c4060cbf` |
+| Tags created or deleted | none |
+| Other remote refs changed | none |
+
+The release branch remote ref legitimately trails `main` by the three commits of `WP06-WINDOWS-PORTABILITY-CORRECTION-2`, which were integrated from the local branch without a further branch push. Both historically published points, `191ff745` and `c453ddb4`, remain ancestors of `07692eb`, which proves the sealed chain was not rewritten.
+
+### WP-06 exit checkpoint — disposition
+
+The WP-06 exit checkpoint stated earlier in this plan required seven recorded items before WP-07 may consume any WP-06 interface. That checkpoint was not recorded before integration. It has now been recorded retroactively as git-ignored evidence at:
+
+```text
+.superpowers/integration/wp-06-rubric-evidence-kernel-2026-08-09/wp-06-exit-checkpoint-record.md
+```
+
+The record is a custody and coverage audit across all three phases that produced `07692eb`: core Tasks 0/6/7/8, `WP06-POST-AUDIT-CORRECTION`, and `WP06-WINDOWS-PORTABILITY-CORRECTION-2`. It re-ran nothing. WP-06 integration authentication was expressly **not** treated as equivalent to the exit checkpoint, and no item was marked satisfied on the strength of that authentication.
+
+| # | Required item | Disposition |
+|---|---|---|
+| 1 | focused Task 6-8 RED/GREEN evidence and exact invalid-fixture outcomes | satisfied |
+| 2 | package/root checks, `schema:check`, Task-8 inherited preservation gate, actual exits | satisfied |
+| 3 | inspection of the three committed generated-schema artifacts, fresh generator/dirty-diff evidence | satisfied |
+| 4 | strict UTF-8/no-BOM/zero-CR/final-LF and complete changed-path inventory | satisfied |
+| 5 | clean index, worktree, and non-ignored-untracked evidence | satisfied |
+| 6 | independent semantic review and independent verification after the writer freezes | satisfied as written, with a recorded deviation |
+| 7 | explicit known limitations, unverified claims, and platform boundaries | satisfied |
+
+No item is unevidenced. **No Owner waiver is issued**, because no requirement was found unmet.
+
+### Item 6 — recorded deviation
+
+For core Tasks 6-8 this item is satisfied at the strong standard: three sessions with distinct session identifiers held distinct roles — owner and adjudicator, independent semantic reviewer, and independent verification operator — and review and verification were dispatched only after the writer reached a frozen state.
+
+For the six commits in `191ff745..07692eb`, the requirement is satisfied **as written but not at that stronger standard**. The requirement's literal text specifies independence from the writer after the writer freezes. In both correction rounds the writer was a separate session, so that literal condition holds. However, the reviewing and verifying party in both rounds was the same session as the owner and adjudicator, so review was independent of the writer but not of the adjudicator.
+
+This deviation is recorded, not waived and not reinterpreted. The human ruling of this round is that item 6 is satisfied as written and that the deviation stands on the record. The affected commits are four plan-documentation edits and two lexical path-validation corrections, all independently authenticated at git level, with recorded terminal exits `checkExit 0`, `testExit 0`, `verifyExit 0`, `schemaCheckExit 0`, `lintExit 0`, `formatCheckExit 0`.
+
+Future work packages must not cite this deviation as precedent for merging the adjudicator and reviewer roles. The three-role separation used for core Tasks 6-8 remains the standard.
+
+### Known limitation carried forward
+
+WP-06 verification was executed on Windows only — Windows 11 Pro 10.0.26200, Node v24.18.0, pnpm 11.9.0. No Linux result is claimed for the correction rounds. The corrections are lexical and platform-independent by construction, but that property is evidenced on one platform. WP-09 owns cross-platform CI and is the correct place to close this, not WP-07.
+
+A pre-existing `@roadmap/command-runner` flake is disclosed on the record, affecting two tests, explicitly classified as not coupled to the corrections and not counted as a finding.
+
+### Evidence custody
+
+All WP-06 evidence was git-ignored and existed only inside the linked worktree `fullstack-javascript-roadmap-worktrees/wp-06-rubric-evidence-kernel`, mirrored nowhere. It has been archived to:
+
+```text
+D:\Programming\Repos\fullstack-javascript-roadmap-handoffs\2026-08-09-wp-06
+```
+
+553 files, 3,018,915 bytes, verified byte-for-byte by independent SHA-256 manifests computed on each side and compared; the comparison is proven nonempty at 553 hashed entries. Verification is recorded in `ARCHIVE-VERIFICATION.md` in that archive.
+
+### Boundary assertions
+
+```text
+WP06_INTEGRATED_AND_PUBLISHED_AT_07692EB
+WP06_EXIT_CHECKPOINT_RECORDED
+ITEM_6_SATISFIED_AS_WRITTEN_DEVIATION_RECORDED
+NO_OWNER_WAIVER_ISSUED
+NO_WP06_RETEST_PERFORMED
+WP06_EVIDENCE_ARCHIVED_AND_HASH_VERIFIED
+TASK9_NOT_DISPATCHED
+TASK9_NOT_AUTHORIZED
+WP08_NOT_AUTHORIZED
+WP09_NOT_AUTHORIZED
+```
