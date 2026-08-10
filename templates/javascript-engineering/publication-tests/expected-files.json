@@ -1,0 +1,17 @@
+[
+  ".env.example",
+  ".github/workflows/verify.yml",
+  ".gitignore",
+  ".node-version",
+  ".roadmap/.gitkeep",
+  ".roadmap/template-manifest.json",
+  "AGENTS.md",
+  "README.md",
+  "evidence/README.md",
+  "package.json",
+  "pnpm-lock.yaml",
+  "scripts/build.mjs",
+  "src/index.js",
+  "test/infrastructure.test.js",
+  "test/learner.test.js"
+]
