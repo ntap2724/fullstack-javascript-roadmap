@@ -1,0 +1,33 @@
+schemaVersion: 1
+id: template-javascript-engineering
+repositoryName: javascript-engineering-starter
+version: 0.1.0
+curriculum:
+  release: 0.1.0
+  entryPoint: project-javascript-engineering-baseline
+runtime:
+  nodeFamily: 24
+  packageManager: pnpm
+publication:
+  include:
+    - files/**
+  exclude:
+    - files/**/solution/**
+    - files/**/private-fixtures/**
+    - files/**/*.internal.*
+  textTransforms:
+    - token: '{{TEMPLATE_VERSION}}'
+      valueFrom: template.version
+    - token: '{{CURRICULUM_VERSION}}'
+      valueFrom: curriculum.release
+verification:
+  install:
+    command: pnpm
+    args: [install, --frozen-lockfile]
+    cwd: .
+    timeoutMs: 180000
+  baseline:
+    command: pnpm
+    args: [verify:baseline]
+    cwd: .
+    timeoutMs: 180000

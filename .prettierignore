@@ -2,3 +2,4 @@
 /pnpm-lock.yaml
 /.superpowers/
 /packages/curriculum-schema/generated/
+/templates/*/files/pnpm-lock.yaml
