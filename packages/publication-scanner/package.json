@@ -1,0 +1,23 @@
+{
+  "name": "@roadmap/publication-scanner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@roadmap/exercise-contract": "workspace:*",
+    "@roadmap/validation-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@roadmap/template-builder": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

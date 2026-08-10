@@ -1,0 +1,2 @@
+Set the publish token before running the release workflow.
+PUBLISH_TOKEN=github_pat_SYNTHETICFIXTUREONLY000000

@@ -1,0 +1,2 @@
+Sample deployment configuration for the release runbook.
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE

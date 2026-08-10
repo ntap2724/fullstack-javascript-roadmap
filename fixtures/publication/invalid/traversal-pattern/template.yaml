@@ -1,0 +1,26 @@
+schemaVersion: 1
+id: template-traversal-pattern
+repositoryName: traversal-pattern
+version: 0.1.0
+curriculum:
+  release: 0.2.0
+  entryPoint: project-traversal-pattern
+runtime:
+  nodeFamily: 24
+  packageManager: pnpm
+publication:
+  include:
+    - ../files/**
+  exclude: []
+  textTransforms: []
+verification:
+  install:
+    command: pnpm
+    args: [install, --frozen-lockfile]
+    cwd: .
+    timeoutMs: 180000
+  baseline:
+    command: pnpm
+    args: [verify:baseline]
+    cwd: .
+    timeoutMs: 180000
