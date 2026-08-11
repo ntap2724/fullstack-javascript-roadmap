@@ -67,6 +67,7 @@ broken template.
 | `PUBLICATION_SECRET_002`   | GitHub token pattern                                  |
 | `PUBLICATION_SECRET_003`   | AWS access key id pattern                             |
 | `PUBLICATION_SYMLINK_001`  | symbolic link in publication input or output          |
+| `PUBLICATION_SYMLINK_002`  | path resolves outside the root via an ancestor link   |
 | `PUBLICATION_INTERNAL_999` | scanner could not complete — fails closed             |
 | `TEMPLATE_FILESET_001`     | generated file set differs from the reviewed fixture  |
 | `TEMPLATE_PIPELINE_999`    | pipeline crashed — fails closed                       |

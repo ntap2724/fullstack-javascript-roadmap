@@ -43,6 +43,34 @@ async function scanOne(
     });
     return;
   }
+  // The checks above are lexical and cover the FINAL component only. Neither sees an
+  // ANCESTOR that is a symlink: `files/linkdir/benign.md` is a safe-looking relative
+  // path whose real bytes may live anywhere on disk. `realpath` resolves every
+  // component, and `root` is itself already realpath-resolved by the caller, so the
+  // two sides are compared in the same namespace.
+  const realAbsolute = await realpath(absolute);
+  const realRelationship = path.relative(root, realAbsolute);
+  if (
+    realRelationship === '..' ||
+    realRelationship.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(realRelationship)
+  ) {
+    diagnostics.push({
+      code: 'PUBLICATION_SYMLINK_002',
+      severity: 'error',
+      location: { file: relative },
+      // The real path is deliberately NOT recorded: it is an out-of-root filesystem
+      // location, and copying it into a published diagnostic would disclose exactly
+      // the internal layout this control exists to keep out of public output.
+      observed: relative,
+      expected: 'A path whose resolved location stays inside the publication root',
+      reason: 'An ancestor path component resolves outside the publication root',
+      remediation: 'Remove the linked directory and publish an explicit in-root file',
+      documentation: 'docs/maintainers/template-publication.md',
+    });
+    return;
+  }
+
   if (!metadata.isFile()) {
     throw new Error(`Selected publication entry is not a regular file: ${relative}`);
   }
