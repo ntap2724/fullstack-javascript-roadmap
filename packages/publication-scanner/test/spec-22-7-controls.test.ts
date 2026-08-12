@@ -118,6 +118,95 @@ describe('SPEC-22.7 submodule ban (S1)', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.ok).toBe(true);
   });
+
+  // S1 PLACEMENT. The production pipeline scans the SOURCE template root through
+  // `scanPublicationFiles` and the GENERATED tree through `scanPublicationTree`. A source
+  // template root lives inside a git repository and therefore HAS an index; a generated
+  // tree normally does not. Attaching index inspection only to the tree scan puts the
+  // check exclusively where metadata is absent, so the ruled index half never operates on
+  // real input. This case exercises the selected-files path directly.
+  it('rejects a source-root gitlink through the selected-files scan path', async () => {
+    const root = await makeTree({ 'README.md': '# public\n' });
+    execFileSync('git', ['init', '--quiet'], { cwd: root });
+    execFileSync(
+      'git',
+      ['update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},vendor`],
+      { cwd: root },
+    );
+
+    const result = await scanPublicationFiles(root, ['README.md']);
+
+    expect(codes(result)).toEqual(['PUBLICATION_SUBMODULE_001']);
+    expect(result.diagnostics[0]?.location.file).toBe('vendor');
+    expect(result.diagnostics[0]?.observed).toBe('index mode 160000 gitlink');
+  });
+
+  // SCOPING, positive half. The scanned root is a SUBDIRECTORY of the repository, which is
+  // the production shape: `templates/<name>` inside this monorepo. The index query must be
+  // scoped to the scanned root's subtree and its paths must be publication-relative, so a
+  // gitlink at `<scannedRoot>/vendor` is reported as exactly `vendor`.
+  it('scopes the index query to the scanned root and reports publication-relative paths', async () => {
+    const repository = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-repo-'));
+    execFileSync('git', ['init', '--quiet'], { cwd: repository });
+    await mkdir(path.join(repository, 'publication', 'nested'), { recursive: true });
+    await writeFile(path.join(repository, 'publication', 'README.md'), '# public\n');
+    execFileSync(
+      'git',
+      [
+        'update-index',
+        '--add',
+        '--cacheinfo',
+        `160000,${'1'.repeat(40)},publication/nested/vendor`,
+      ],
+      { cwd: repository },
+    );
+
+    const result = await scanPublicationFiles(path.join(repository, 'publication'), ['README.md']);
+
+    expect(codes(result)).toEqual(['PUBLICATION_SUBMODULE_001']);
+    // Publication-relative, never repository-relative: `publication/` must not appear.
+    expect(result.diagnostics[0]?.location.file).toBe('nested/vendor');
+  });
+
+  // SCOPING, negative half. Asserted separately so neither direction can stand in for the
+  // other. A repository-wide query returns this gitlink with a `../` path and attributes an
+  // unrelated monorepo submodule to the publication; a correctly scoped query cannot see it.
+  it('ignores a gitlink that lies outside the scanned root', async () => {
+    const repository = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-outside-repo-'));
+    execFileSync('git', ['init', '--quiet'], { cwd: repository });
+    await mkdir(path.join(repository, 'publication'), { recursive: true });
+    await mkdir(path.join(repository, 'elsewhere'), { recursive: true });
+    await writeFile(path.join(repository, 'publication', 'README.md'), '# public\n');
+    execFileSync(
+      'git',
+      ['update-index', '--add', '--cacheinfo', `160000,${'2'.repeat(40)},elsewhere/vendor`],
+      { cwd: repository },
+    );
+
+    const result = await scanPublicationFiles(path.join(repository, 'publication'), ['README.md']);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  // Exactly one diagnostic per gitlink. `scanPublicationTree` delegates to
+  // `scanPublicationFiles`, so a check present in both layers would emit twice for one
+  // gitlink and inflate every report that contains one.
+  it('emits exactly one diagnostic per gitlink on the tree scan path', async () => {
+    const root = await makeTree({ 'README.md': '# public\n' });
+    execFileSync('git', ['init', '--quiet'], { cwd: root });
+    execFileSync(
+      'git',
+      ['update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},vendor`],
+      { cwd: root },
+    );
+
+    const result = await scanPublicationTree(root);
+    const submoduleFindings = result.diagnostics.filter(
+      ({ code }) => code === 'PUBLICATION_SUBMODULE_001',
+    );
+    expect(submoduleFindings).toHaveLength(1);
+  });
 });
 
 describe('SPEC-22.7 bounded relative module graph (I1/I-C)', () => {

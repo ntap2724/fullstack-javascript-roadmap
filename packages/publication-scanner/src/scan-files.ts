@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { isSafeRelativePath, normalizeRelativePath } from '@roadmap/exercise-contract';
 import {
   failure,
@@ -14,6 +16,56 @@ import { importDiagnostics } from './scan-imports.js';
 
 export interface ScanPublicationOptions {
   readonly answerFingerprints?: readonly string[];
+}
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Reports gitlinks (index mode 160000) WHERE REPOSITORY METADATA IS AVAILABLE.
+ *
+ * A gitlink occupies an index entry, not a working-tree file, so no directory walk can
+ * observe it: the entry has no file to stat. It lives HERE, in the selected-files scan,
+ * rather than in the generated-tree scan, because that is where the surface actually
+ * exists. The production pipeline scans the SOURCE template root through
+ * `scanPublicationFiles` and the generated tree through `scanPublicationTree`; a source
+ * root sits inside a git repository and has an index, while a generated tree normally has
+ * no git metadata at all. Attached to the tree scan alone, the check ran only where there
+ * was nothing to find. `scanPublicationTree` delegates here, so both paths are covered by
+ * this one call site and one gitlink yields exactly one diagnostic.
+ *
+ * The pathspec is `.`, which scopes the query to the SCANNED ROOT'S SUBTREE and makes
+ * git's output relative to that root. `:(top)` would be wrong in both respects: it anchors
+ * to the REPOSITORY root, so an unrelated gitlink elsewhere in a containing monorepo would
+ * be reported against this publication, with a repository-relative `../` path. (A
+ * `:(top)`-anchored pathspec is the right tool for auditing a whole repository; it is the
+ * wrong tool for asking what a publication root contains.)
+ *
+ * An absent or unreadable index yields no finding, silently. That is not an all-clear for
+ * the submodule ban: `.gitmodules` is checked per file, independently, below.
+ */
+async function gitlinkDiagnostics(root: string): Promise<readonly Diagnostic[]> {
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync('git', ['-C', root, 'ls-files', '--stage', '--', '.'], {
+      windowsHide: true,
+    }));
+  } catch {
+    return [];
+  }
+
+  return stdout
+    .split('\n')
+    .filter((line) => line.startsWith('160000 '))
+    .map((line) => ({
+      code: 'PUBLICATION_SUBMODULE_001',
+      severity: 'error' as const,
+      location: { file: line.slice(line.indexOf('\t') + 1).trim() },
+      observed: 'index mode 160000 gitlink',
+      expected: 'No submodule metadata or gitlinks in Release 0 publication input',
+      reason: 'Release 0 bans all submodules',
+      remediation: 'Remove the gitlink and vendor reviewed public files directly',
+      documentation: 'docs/maintainers/template-publication.md',
+    }));
 }
 
 async function scanOne(
@@ -155,6 +207,7 @@ export async function scanPublicationFiles(
     for (const relative of [...selectedPaths].sort())
       await scanOne(root, relative, diagnostics, options, eligible);
     diagnostics.push(...(await importDiagnostics(root, eligible)));
+    diagnostics.push(...(await gitlinkDiagnostics(root)));
     return diagnostics.some(({ severity }) => severity === 'error')
       ? failure(diagnostics)
       : success(undefined, diagnostics);
