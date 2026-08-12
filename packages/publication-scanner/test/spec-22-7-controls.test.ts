@@ -250,6 +250,44 @@ describe('SPEC-22.7 bounded relative module graph (I1/I-C)', () => {
   // Created at RUNTIME, never committed: this repository sets core.symlinks=false, so a
   // committed link checks out as a regular file and the case would silently stop testing
   // anything (D7). Failure to create it must fail loudly rather than skip.
+  it('does not parse a selected final-component symlink rejected by containment', async () => {
+    const root = await makeTree({ 'files/clean.js': 'export const clean = true;\n' });
+    const outside = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-importer-outside-'));
+    const secretSpecifier = '../../F01_FINAL_COMPONENT_SECRET.js';
+    const target = path.join(outside, 'private-test.js');
+    await writeFile(target, `import '${secretSpecifier}';\n`);
+    await symlink(target, path.join(root, 'files', 'linked.js'), 'file');
+
+    const result = await scanPublicationFiles(root, ['files/clean.js', 'files/linked.js']);
+
+    expect(codes(result)).toContain('PUBLICATION_SYMLINK_001');
+    // This is the load-bearing assertion: frozen ba28fb3 dereferences linked.js in the
+    // graph stage and copies this out-of-root specifier into diagnostic.observed.
+    expect(result.diagnostics.map(({ observed }) => observed)).not.toContain(secretSpecifier);
+  });
+
+  it('does not parse a selected file reached through an escaping ancestor symlink', async () => {
+    const root = await makeTree({ 'files/clean.js': 'export const clean = true;\n' });
+    const outside = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-ancestor-outside-'));
+    const secretSpecifier = '../../F01_ANCESTOR_SECRET.js';
+    await writeFile(path.join(outside, 'private-test.js'), `require('${secretSpecifier}');\n`);
+    await symlink(
+      outside,
+      path.join(root, 'files', 'linked-directory'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await scanPublicationFiles(root, [
+      'files/clean.js',
+      'files/linked-directory/private-test.js',
+    ]);
+
+    expect(codes(result)).toContain('PUBLICATION_SYMLINK_002');
+    // A rejection code alone proves only scanOne rejected it. It does not prove the later
+    // graph stage refrained from reading it, so assert the private bytes never surface.
+    expect(result.diagnostics.map(({ observed }) => observed)).not.toContain(secretSpecifier);
+  });
+
   it('does not resolve a relative edge through a symlink to out-of-root bytes', async () => {
     const root = await makeTree({ 'files/entry.js': "import './linked.js';\n" });
     const outside = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-outside-'));

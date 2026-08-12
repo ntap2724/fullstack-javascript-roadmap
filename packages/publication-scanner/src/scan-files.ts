@@ -21,6 +21,7 @@ async function scanOne(
   relativeInput: string,
   diagnostics: Diagnostic[],
   options: ScanPublicationOptions,
+  eligible: string[],
 ): Promise<void> {
   const relative = normalizeRelativePath(relativeInput);
   if (!isSafeRelativePath(relative)) throw new Error(`Unsafe selected path: ${relativeInput}`);
@@ -81,6 +82,7 @@ async function scanOne(
   if (!metadata.isFile()) {
     throw new Error(`Selected publication entry is not a regular file: ${relative}`);
   }
+  eligible.push(relative);
 
   if (relative.split('/').some((segment) => segment.toLowerCase() === '.gitmodules')) {
     diagnostics.push({
@@ -142,9 +144,17 @@ export async function scanPublicationFiles(
   try {
     const root = await realpath(rootInput);
     const diagnostics: Diagnostic[] = [];
+    // Only paths that CLEARED containment and file-kind validation may be handed to the
+    // import graph. `scanOne` reports a rejected symlink or ancestor-escape and returns,
+    // but a rejection code does not stop a later stage from reading the same path: the
+    // graph resolves importers itself, so passing the raw selection would let it read and
+    // parse out-of-root bytes and copy their import specifiers into published diagnostics
+    // (F-01). Eligibility is recorded at the point of clearance rather than recomputed
+    // here, so the two stages cannot drift apart.
+    const eligible: string[] = [];
     for (const relative of [...selectedPaths].sort())
-      await scanOne(root, relative, diagnostics, options);
-    diagnostics.push(...(await importDiagnostics(root, selectedPaths)));
+      await scanOne(root, relative, diagnostics, options, eligible);
+    diagnostics.push(...(await importDiagnostics(root, eligible)));
     return diagnostics.some(({ severity }) => severity === 'error')
       ? failure(diagnostics)
       : success(undefined, diagnostics);
