@@ -56,22 +56,27 @@ broken template.
 
 ## Diagnostics
 
-| Code                       | Meaning                                               |
-| -------------------------- | ----------------------------------------------------- |
-| `PUBLICATION_PATH_001`     | forbidden path segment or file name                   |
-| `PUBLICATION_CONTENT_001`  | maintainer-only marker in published content           |
-| `PUBLICATION_CONTENT_002`  | file too large for the reviewed scanner limit (2 MiB) |
-| `PUBLICATION_INTERNAL_001` | internal or private repository URL                    |
-| `PUBLICATION_INTERNAL_002` | absolute local filesystem path                        |
-| `PUBLICATION_SECRET_001`   | private key block                                     |
-| `PUBLICATION_SECRET_002`   | GitHub token pattern                                  |
-| `PUBLICATION_SECRET_003`   | AWS access key id pattern                             |
-| `PUBLICATION_SYMLINK_001`  | symbolic link in publication input or output          |
-| `PUBLICATION_SYMLINK_002`  | path resolves outside the root via an ancestor link   |
-| `PUBLICATION_INTERNAL_999` | scanner could not complete — fails closed             |
-| `TEMPLATE_FILESET_001`     | generated file set differs from the reviewed fixture  |
-| `TEMPLATE_PIPELINE_999`    | pipeline crashed — fails closed                       |
-| `TEMPLATE_RELEASE_001`     | refused: source worktree is dirty                     |
+| Code                                | Meaning                                                      |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `PUBLICATION_PATH_001`              | forbidden path segment or file name                          |
+| `PUBLICATION_CONTENT_001`           | maintainer-only marker in published content                  |
+| `PUBLICATION_CONTENT_002`           | file too large for the reviewed scanner limit (2 MiB)        |
+| `PUBLICATION_INTERNAL_001`          | internal or private repository URL                           |
+| `PUBLICATION_INTERNAL_002`          | absolute local filesystem path                               |
+| `PUBLICATION_SECRET_001`            | private key block                                            |
+| `PUBLICATION_SECRET_002`            | GitHub token pattern                                         |
+| `PUBLICATION_SECRET_003`            | AWS access key id pattern                                    |
+| `PUBLICATION_SYMLINK_001`           | symbolic link in publication input or output                 |
+| `PUBLICATION_SYMLINK_002`           | path resolves outside the root via an ancestor link          |
+| `PUBLICATION_ANSWER_001`            | content exactly matches a supplied answer fingerprint        |
+| `PUBLICATION_SUBMODULE_001`         | `.gitmodules` metadata or an index-mode 160000 gitlink       |
+| `PUBLICATION_IMPORT_PRIVATE_001`    | relative import escaping the root or entering a private root |
+| `PUBLICATION_IMPORT_UNRESOLVED_001` | relative import that cannot be resolved                      |
+| `PUBLICATION_IMPORT_SELECTION_001`  | relative import resolving outside the selected set           |
+| `PUBLICATION_INTERNAL_999`          | scanner could not complete — fails closed                    |
+| `TEMPLATE_FILESET_001`              | generated file set differs from the reviewed fixture         |
+| `TEMPLATE_PIPELINE_999`             | pipeline crashed — fails closed                              |
+| `TEMPLATE_RELEASE_001`              | refused: source worktree is dirty                            |
 
 A scanner crash, a verifier crash, an unreadable expectation fixture, and missing
 evidence all **block** release. Nothing degrades to a warning.
@@ -125,6 +130,34 @@ cannot pass unexamined.
 
 Diagnostics record the **matching pattern**, never the matched text, so a real
 secret is not copied into diagnostics, logs, or CI output.
+
+### Exact answer fingerprints
+
+`scanPublicationFiles` accepts an explicit list of SHA-256 fingerprints through
+`answerFingerprints`. Matching is over the file's **exact bytes**: no whitespace,
+newline, encoding, or semantic normalization occurs, and there is no fuzzy fallback.
+Diagnostics disclose only that a fingerprint matched — never the answer bytes or the
+fingerprint value.
+
+The scanner tests use a synthetic private-answer corpus to prove this contract. Release 0
+does **not** provide a production answer corpus and the template dry-run does not yet wire
+one into the scanner. A passing production dry run therefore does not claim end-to-end
+hidden-answer protection; production caller wiring is an explicit deferred integration gap.
+
+### Submodules and relative module edges
+
+Release 0 bans all submodules. `.gitmodules` metadata is rejected as content in both selected
+and generated trees. Where a scanned tree has repository metadata, index entries with mode
+`160000` are also rejected. Generated trees normally have no `.git` directory, so there is no
+index surface to inspect there; absence of repository metadata is not evidence about a source
+repository's index and does not weaken the independent `.gitmodules` check.
+
+JavaScript and TypeScript files are parsed with TypeScript's parser-backed preprocessor. The
+bounded graph covers static imports, export-from declarations, literal dynamic imports, and
+`require()` calls; ignores bare package specifiers; and terminates safely on cycles. A relative
+edge fails if it enters a private root, escapes the publication root, resolves outside the
+selected file set, or cannot be resolved. These are distinct diagnostics so an unresolved edge
+cannot be mistaken for a proved private-root escape.
 
 ### Symlinks
 

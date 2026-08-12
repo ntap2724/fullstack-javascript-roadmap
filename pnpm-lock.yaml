@@ -338,6 +338,9 @@ importers:
       '@roadmap/validation-core':
         specifier: workspace:*
         version: link:../validation-core
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
     devDependencies:
       '@roadmap/template-builder':
         specifier: workspace:*
@@ -345,9 +348,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.2
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0))

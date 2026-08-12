@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "@roadmap/exercise-contract": "workspace:*",
-    "@roadmap/validation-core": "workspace:*"
+    "@roadmap/validation-core": "workspace:*",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@roadmap/template-builder": "workspace:*",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

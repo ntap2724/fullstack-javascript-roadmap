@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isSafeRelativePath, normalizeRelativePath } from '@roadmap/exercise-contract';
@@ -9,11 +10,17 @@ import {
 } from '@roadmap/validation-core';
 import { contentDiagnostics, MAX_SCANNABLE_FILE_BYTES } from './scan-content.js';
 import { pathDiagnostic } from './scan-path.js';
+import { importDiagnostics } from './scan-imports.js';
+
+export interface ScanPublicationOptions {
+  readonly answerFingerprints?: readonly string[];
+}
 
 async function scanOne(
   root: string,
   relativeInput: string,
   diagnostics: Diagnostic[],
+  options: ScanPublicationOptions,
 ): Promise<void> {
   const relative = normalizeRelativePath(relativeInput);
   if (!isSafeRelativePath(relative)) throw new Error(`Unsafe selected path: ${relativeInput}`);
@@ -75,6 +82,35 @@ async function scanOne(
     throw new Error(`Selected publication entry is not a regular file: ${relative}`);
   }
 
+  if (relative.split('/').some((segment) => segment.toLowerCase() === '.gitmodules')) {
+    diagnostics.push({
+      code: 'PUBLICATION_SUBMODULE_001',
+      severity: 'error',
+      location: { file: relative },
+      observed: '.gitmodules metadata',
+      expected: 'No submodule metadata or gitlinks in Release 0 publication input',
+      reason: 'Release 0 bans all submodules',
+      remediation: 'Vendor reviewed public files directly and remove the submodule metadata',
+      documentation: 'docs/maintainers/template-publication.md',
+    });
+  }
+
+  const bytes = await readFile(absolute);
+  const fingerprint = createHash('sha256').update(bytes).digest('hex');
+  if (options.answerFingerprints?.includes(fingerprint)) {
+    diagnostics.push({
+      code: 'PUBLICATION_ANSWER_001',
+      severity: 'error',
+      location: { file: relative },
+      observed: 'sha256 fingerprint match',
+      expected: 'Content whose exact bytes do not match a supplied private-answer fingerprint',
+      reason: 'Publication content exactly matches a private-answer fingerprint',
+      remediation:
+        'Remove the answer content from the public file; do not expose the private corpus',
+      documentation: 'docs/maintainers/template-publication.md',
+    });
+  }
+
   const pathIssue = pathDiagnostic(relative);
   if (pathIssue) diagnostics.push(pathIssue);
   if (metadata.size > MAX_SCANNABLE_FILE_BYTES) {
@@ -89,7 +125,7 @@ async function scanOne(
       documentation: 'docs/maintainers/template-publication.md',
     });
   } else {
-    diagnostics.push(...contentDiagnostics(relative, await readFile(absolute)));
+    diagnostics.push(...contentDiagnostics(relative, bytes));
   }
 }
 
@@ -101,11 +137,14 @@ async function scanOne(
 export async function scanPublicationFiles(
   rootInput: string | URL,
   selectedPaths: readonly string[],
+  options: ScanPublicationOptions = {},
 ): Promise<ValidationOutcome<void>> {
   try {
     const root = await realpath(rootInput);
     const diagnostics: Diagnostic[] = [];
-    for (const relative of [...selectedPaths].sort()) await scanOne(root, relative, diagnostics);
+    for (const relative of [...selectedPaths].sort())
+      await scanOne(root, relative, diagnostics, options);
+    diagnostics.push(...(await importDiagnostics(root, selectedPaths)));
     return diagnostics.some(({ severity }) => severity === 'error')
       ? failure(diagnostics)
       : success(undefined, diagnostics);
