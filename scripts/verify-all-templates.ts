@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runTemplateDryRun } from '../tooling/publish-templates/src/pipeline.js';
@@ -33,4 +33,27 @@ for (const templateRoot of templateRoots) {
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;
   }
+
+  const reportPath = path.join(
+    '.tmp',
+    'reports',
+    'templates',
+    `${path.basename(templateRoot)}.json`,
+  );
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(
+    reportPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        status: 'passed',
+        sourceCommit,
+        templateId: path.basename(templateRoot),
+        functionalSha256: report.artifact?.functionalSha256,
+        diagnostics: report.diagnostics,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }

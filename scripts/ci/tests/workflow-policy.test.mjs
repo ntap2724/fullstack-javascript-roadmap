@@ -68,3 +68,27 @@ test('main and scheduled workflows preserve provenance and finite execution', as
     'windows-2025',
   ]);
 });
+
+test('release verification aggregates two platforms and three browsers without publication authority', async () => {
+  const value = parse(await readFile('.github/workflows/verify-release.yml', 'utf8'));
+  assert.deepEqual(
+    value.jobs.platform.strategy.matrix.include.map((entry) => entry.id),
+    ['ubuntu-24.04', 'windows-2025'],
+  );
+  assert.ok(
+    value.jobs.browser.steps.some(
+      (step) => step.run === 'pnpm exec playwright install --with-deps chromium firefox webkit',
+    ),
+  );
+  assert.equal(
+    value.jobs.aggregate.steps.filter((step) => step.uses === 'actions/download-artifact@v8')
+      .length,
+    3,
+  );
+  assert.ok(value.jobs.aggregate.steps.some((step) => step.uses === 'actions/upload-artifact@v7'));
+  const text = JSON.stringify(value);
+  assert.doesNotMatch(
+    text,
+    /secrets\.|git push|gh release|npm publish|deploy|contents.{0,20}write|pages.{0,20}write|id-token.{0,20}write/i,
+  );
+});
