@@ -2,23 +2,13 @@
   {
     "id": "curriculum-schema",
     "command": "pnpm",
-    "args": [
-      "content:validate",
-      "fixtures/curriculum/invalid/schema-error",
-      "--format",
-      "json"
-    ],
+    "args": ["content:validate", "fixtures/curriculum/invalid/schema-error", "--format", "json"],
     "expectedDiagnostic": "CURRICULUM_SCHEMA_001"
   },
   {
     "id": "curriculum-duplicate-id",
     "command": "pnpm",
-    "args": [
-      "content:validate",
-      "fixtures/curriculum/invalid/duplicate-id",
-      "--format",
-      "json"
-    ],
+    "args": ["content:validate", "fixtures/curriculum/invalid/duplicate-id", "--format", "json"],
     "expectedDiagnostic": "CURRICULUM_ID_001"
   },
   {
