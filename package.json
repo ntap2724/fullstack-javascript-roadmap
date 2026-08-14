@@ -25,6 +25,7 @@
     "verify:wp-04": "node scripts/verify-wp-04.mjs",
     "verify": "node scripts/run-pipeline.mjs environment:verify check test content:validate:curriculum docs:build",
     "verify:templates": "tsx scripts/verify-all-templates.ts",
+    "verify:negative-fixtures": "node scripts/ci/run-negative-fixtures.mjs",
     "template:dry-run": "tsx tooling/publish-templates/src/main.ts",
     "verify:release": "node scripts/unavailable-command.mjs verify:release",
     "content:validate": "pnpm --filter @roadmap/validate-content start --",

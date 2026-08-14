@@ -1,0 +1,171 @@
+[
+  {
+    "id": "curriculum-schema",
+    "command": "pnpm",
+    "args": ["content:validate", "fixtures/curriculum/invalid/schema-error", "--format", "json"],
+    "expectedDiagnostic": "CURRICULUM_SCHEMA_001"
+  },
+  {
+    "id": "curriculum-duplicate-id",
+    "command": "pnpm",
+    "args": ["content:validate", "fixtures/curriculum/invalid/duplicate-id", "--format", "json"],
+    "expectedDiagnostic": "CURRICULUM_ID_001"
+  },
+  {
+    "id": "curriculum-missing-reference",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/missing-reference",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_REFERENCE_001"
+  },
+  {
+    "id": "curriculum-cycle",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/multi-node-cycle",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_GRAPH_003"
+  },
+  {
+    "id": "curriculum-publication",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/published-to-draft",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_PUBLICATION_001"
+  },
+  {
+    "id": "curriculum-orphan",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/orphan-competency",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_COMPLETENESS_001"
+  },
+  {
+    "id": "curriculum-assessment",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/missing-assessment",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_COMPLETENESS_002"
+  },
+  {
+    "id": "curriculum-remediation",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/missing-remediation",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_COMPLETENESS_003"
+  },
+  {
+    "id": "curriculum-milestone",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/unreachable-milestone",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_COMPLETENESS_004"
+  },
+  {
+    "id": "publication-solution",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/solution-path"
+    ],
+    "expectedDiagnostic": "PUBLICATION_PATH_001"
+  },
+  {
+    "id": "publication-marker",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/maintainer-marker"
+    ],
+    "expectedDiagnostic": "PUBLICATION_CONTENT_001"
+  },
+  {
+    "id": "publication-internal-url",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/internal-url"
+    ],
+    "expectedDiagnostic": "PUBLICATION_INTERNAL_001"
+  },
+  {
+    "id": "publication-local-path",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/absolute-local-path"
+    ],
+    "expectedDiagnostic": "PUBLICATION_INTERNAL_002"
+  },
+  {
+    "id": "publication-private-key",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/secret-private-key"
+    ],
+    "expectedDiagnostic": "PUBLICATION_SECRET_001"
+  },
+  {
+    "id": "publication-token",
+    "command": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/ci/scan-publication-fixture.ts",
+      "fixtures/publication/invalid/secret-github-token"
+    ],
+    "expectedDiagnostic": "PUBLICATION_SECRET_002"
+  },
+  {
+    "id": "exercise-incomplete",
+    "command": "pnpm",
+    "args": [
+      "exec",
+      "tsx",
+      "tooling/verify-exercise/src/main.ts",
+      "exercises/javascript/ex-js-closure-counter",
+      ".tmp/negative-exercise",
+      "learner",
+      "--json"
+    ],
+    "expectedDiagnostic": "EXERCISE_OUTPUT_003"
+  }
+]
