@@ -11,6 +11,11 @@ import { scanPublicationFiles } from './scan-files.js';
  * produces `PUBLICATION_SYMLINK_001`. Enumeration deliberately does NOT descend
  * into a link: dereferencing it would walk outside the publication root and could
  * pull private bytes into a public scan report.
+ *
+ * Index-mode 160000 gitlink detection is NOT repeated here. It belongs to
+ * `scanPublicationFiles`, which this function delegates to, so one gitlink produces
+ * exactly one diagnostic and the check also reaches the source template root the
+ * pipeline scans through that same entry point.
  */
 export async function scanPublicationTree(
   rootInput: string | URL,

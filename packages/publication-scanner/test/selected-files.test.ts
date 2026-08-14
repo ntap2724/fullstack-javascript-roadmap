@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +68,70 @@ describe('selected source scanning', () => {
     expect(result.diagnostics.some(({ location }) => location.file.startsWith('leak/'))).toBe(
       false,
     );
+  });
+
+  // INV-F2 (OWNER-F2). An ancestor symlink must not cause the scanner to read, scan,
+  // or publish a file whose real path lies outside the publication root. The existing
+  // lstat check inspects the FINAL component only, so `files/linkdir/benign.md` — a
+  // path that is lexically safe and whose final component is a genuine regular file —
+  // resolved through a linked directory and was scanned and ACCEPTED.
+  //
+  // THE PAYLOAD IS DELIBERATELY BENIGN and this is load-bearing. A payload carrying a
+  // secret would fail the scan through PUBLICATION_SECRET_001 (content detection) while
+  // the containment control never fired, which would certify this bypass as fixed on the
+  // strength of an unrelated control. Benign content isolates containment: before the
+  // fix this case returned ok with zero diagnostics.
+  it('blocks a benign out-of-root file reached through an ancestor symlink', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-ancestor-'));
+    const outside = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-outside-'));
+    const benign = '# notes\n\nordinary text that no publication policy matches\n';
+
+    // Non-vacuity guard: if the payload ever matched a content policy, this test would
+    // pass for the wrong reason and certify containment it never exercised.
+    expect(contentPolicies.filter((policy) => policy.pattern.test(benign))).toEqual([]);
+
+    await writeFile(path.join(outside, 'benign.md'), benign);
+    await mkdir(path.join(root, 'files'));
+
+    // Created at RUNTIME, never committed. core.symlinks=false here, and committing a
+    // link risks git dereferencing the junction and storing the pointed-at content as a
+    // regular file — publishing the very bytes this control exists to contain (D7).
+    // Failure to create it must fail loudly, never skip: a silent skip would turn the
+    // one test proving containment into a no-op.
+    await symlink(
+      outside,
+      path.join(root, 'files', 'linkdir'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await scanPublicationFiles(root, ['files/linkdir/benign.md']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.map(({ code }) => code)).toContain('PUBLICATION_SYMLINK_002');
+
+    // The diagnostic must not become the disclosure channel it exists to prevent: the
+    // out-of-root real path may never appear in published output.
+    for (const diagnostic of result.diagnostics) {
+      expect(String(diagnostic.observed)).not.toContain(outside);
+    }
+  });
+
+  it('still admits an in-root file whose ancestor link stays inside the root', async () => {
+    // The other half of the invariant: containment must reject paths that LEAVE the
+    // root, not every path that happens to traverse a link. Without this, replacing the
+    // check with an unconditional "reject any link anywhere" would also pass.
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-publication-inroot-link-'));
+    const real = path.join(root, 'real');
+    await mkdir(real);
+    await writeFile(path.join(real, 'page.md'), '# ordinary in-root content\n');
+    await symlink(
+      real,
+      path.join(root, 'alias'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await scanPublicationFiles(root, ['alias/page.md']);
+    expect(result.ok).toBe(true);
   });
 
   it('blocks forbidden dotfiles, oversized files, and tokens inside .env.example', async () => {
