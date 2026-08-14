@@ -45,3 +45,26 @@ test('pull requests use fixed runners, frozen install, and non-persistent checko
   assert.ok(steps.some((step) => step.run === 'pnpm install --frozen-lockfile'));
   assert.ok(steps.some((step) => step.run === 'pnpm verify'));
 });
+
+test('main and scheduled workflows preserve provenance and finite execution', async () => {
+  const main = parse(await readFile('.github/workflows/main.yml', 'utf8'));
+  const scheduled = parse(await readFile('.github/workflows/scheduled.yml', 'utf8'));
+  assert.equal(main.jobs.full['timeout-minutes'], 45);
+  assert.equal(scheduled.jobs['public-contract']['timeout-minutes'], 45);
+  assert.equal(
+    main.jobs.full.steps.find((step) => step.uses === 'actions/checkout@v6').with['fetch-depth'],
+    0,
+  );
+  assert.equal(
+    scheduled.jobs['public-contract'].steps.find((step) => step.uses === 'actions/checkout@v6')
+      .with['fetch-depth'],
+    0,
+  );
+  assert.ok(
+    main.jobs.full.steps.some((step) => step.run === 'pnpm docs:test:e2e -- --project=chromium'),
+  );
+  assert.deepEqual(scheduled.jobs['public-contract'].strategy.matrix.os, [
+    'ubuntu-24.04',
+    'windows-2025',
+  ]);
+});
