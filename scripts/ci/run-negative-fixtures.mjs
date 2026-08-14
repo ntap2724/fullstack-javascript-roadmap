@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -81,9 +81,48 @@ function diagnosticCodes(...outputs) {
   return codes;
 }
 
+function isSameOrWithin(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
+}
+
+function cleanupEscapeError(fixture) {
+  return new Error(`Negative fixture ${fixture.id} cleanup target escapes fixture root`);
+}
+
+async function nearestExistingCanonicalPath(target, root) {
+  let candidate = target;
+  while (true) {
+    try {
+      return await realpath(candidate);
+    } catch (error) {
+      if (error?.code !== 'ENOENT' || candidate === root) throw error;
+      candidate = path.dirname(candidate);
+    }
+  }
+}
+
+async function resolveCleanupTarget(fixture, root) {
+  if (path.isAbsolute(fixture.cleanup)) throw cleanupEscapeError(fixture);
+
+  const resolvedRoot = path.resolve(root);
+  const target = path.resolve(resolvedRoot, fixture.cleanup);
+  if (target === resolvedRoot || !isSameOrWithin(resolvedRoot, target)) {
+    throw cleanupEscapeError(fixture);
+  }
+
+  const canonicalRoot = await realpath(resolvedRoot);
+  const canonicalTarget = await nearestExistingCanonicalPath(target, resolvedRoot);
+  if (!isSameOrWithin(canonicalRoot, canonicalTarget)) throw cleanupEscapeError(fixture);
+  return target;
+}
+
 export async function runNegativeFixture(fixture, root) {
   if (fixture.cleanup) {
-    await rm(path.resolve(root, fixture.cleanup), {
+    await rm(await resolveCleanupTarget(fixture, root), {
       recursive: true,
       force: true,
     });
