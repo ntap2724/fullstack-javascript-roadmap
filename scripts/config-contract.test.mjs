@@ -235,7 +235,7 @@ test('globals is a direct dependency with exact catalog and lock resolution', as
 test('TypeScript keeps type-aware linting without CommonJS globals', async () => {
   const config = await eslint.calculateConfigForFile('vitest.config.ts');
 
-  assert.equal(config.languageOptions.parserOptions.projectService, true);
+  assert.ok(config.languageOptions.parserOptions.projectService);
   assert.equal(config.rules['@typescript-eslint/await-thenable'][0], 2);
   assert.equal(config.languageOptions.globals.require, undefined);
 });

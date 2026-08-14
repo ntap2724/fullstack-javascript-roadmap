@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -82,6 +82,12 @@ function diagnosticCodes(...outputs) {
 }
 
 export async function runNegativeFixture(fixture, root) {
+  if (fixture.cleanup) {
+    await rm(path.resolve(root, fixture.cleanup), {
+      recursive: true,
+      force: true,
+    });
+  }
   const invocation = invocationFor(fixture);
   try {
     await execFileAsync(invocation.command, invocation.args, {

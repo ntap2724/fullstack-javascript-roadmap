@@ -28,6 +28,7 @@
     "verify:negative-fixtures": "node scripts/ci/run-negative-fixtures.mjs",
     "template:dry-run": "tsx tooling/publish-templates/src/main.ts",
     "verify:release": "node scripts/ci/verify-public-contract.mjs",
+    "release:gate": "node scripts/verify-release-0.mjs .tmp/release-evidence",
     "content:validate": "pnpm --filter @roadmap/validate-content start --",
     "exercise:verify": "tsx tooling/verify-exercise/src/main.ts",
     "content:validate:curriculum": "pnpm content:validate curriculum --format json",
