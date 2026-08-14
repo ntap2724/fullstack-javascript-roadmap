@@ -103,7 +103,10 @@ test('root compiler entry point extends the base contract', async () => {
 test('root scripts expose check and domain-aware tests', async () => {
   const packageJson = await readJson('package.json');
   assert.equal(typeof packageJson.scripts.check, 'string');
-  assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
+  assert.equal(
+    packageJson.scripts['test:bootstrap'],
+    'node --test scripts/*.test.mjs scripts/ci/tests/*.test.mjs',
+  );
   assert.equal(
     packageJson.scripts['test:wp-00-01-gate'],
     'node --test scripts/wp-00-01-gate.integration.mjs',
