@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -392,5 +392,59 @@ describe('SPEC-22.7 bounded relative module graph (I1/I-C)', () => {
     for (const entry of result.diagnostics) {
       expect(String(entry.observed)).not.toContain(outside);
     }
+  });
+});
+
+describe('SPEC-22.7 canonical import ancestor containment (SPEC227-IC-01)', () => {
+  it('classifies an outside ancestor-link resolution candidate as exactly unresolved', async () => {
+    const root = await makeTree({
+      'files/entry.js': "import './linked-directory/secret.js';\n",
+    });
+    const outside = await mkdtemp(path.join(tmpdir(), 'roadmap-spec227-ic01-outside-'));
+    const outsideContent = 'SPEC227_IC01_OUTSIDE_CONTENT_BYTES';
+    await writeFile(
+      path.join(outside, 'secret.js'),
+      `export const secret = '${outsideContent}';\n`,
+    );
+    const link = path.join(root, 'files', 'linked-directory');
+    await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+
+    // Runtime attestation: this must be a genuine ancestor link to a regular final file,
+    // not a copied directory or final-component symlink that exercises an existing branch.
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(path.relative(await realpath(outside), await realpath(link))).toBe('');
+    const linkedFinal = await lstat(path.join(link, 'secret.js'));
+    expect(linkedFinal.isFile()).toBe(true);
+    expect(linkedFinal.isSymbolicLink()).toBe(false);
+
+    const result = await scanPublicationFiles(root, ['files/entry.js']);
+
+    expect(codes(result)).toEqual(['PUBLICATION_IMPORT_UNRESOLVED_001']);
+    const serializedDiagnostics = JSON.stringify(result.diagnostics).replaceAll('\\\\', '/');
+    expect(serializedDiagnostics).not.toContain(outside.replaceAll('\\', '/'));
+    expect(serializedDiagnostics).not.toContain(outsideContent);
+  });
+
+  it('accepts a safe in-root ancestor link through its selected lexical path', async () => {
+    const root = await makeTree({
+      'files/entry.js': "import './linked-directory/target.js';\n",
+      'files/actual/target.js': 'export const target = true;\n',
+    });
+    const actual = path.join(root, 'files', 'actual');
+    const link = path.join(root, 'files', 'linked-directory');
+    await symlink(actual, link, process.platform === 'win32' ? 'junction' : 'dir');
+
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(path.relative(await realpath(actual), await realpath(link))).toBe('');
+
+    const result = await scanPublicationFiles(root, [
+      'files/entry.js',
+      'files/linked-directory/target.js',
+    ]);
+
+    // Only the lexical linked path is selected. Returning the canonical `actual` path from
+    // import resolution, or rejecting every ancestor link, makes this contrast fail.
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 });

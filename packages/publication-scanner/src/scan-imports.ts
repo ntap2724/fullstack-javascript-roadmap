@@ -1,4 +1,4 @@
-import { access, lstat, readFile } from 'node:fs/promises';
+import { access, lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { Diagnostic } from '@roadmap/validation-core';
 import ts from 'typescript';
@@ -56,6 +56,13 @@ async function resolveRelative(
     if (!(await exists(candidate))) continue;
     const metadata = await lstat(candidate);
     if (!metadata.isFile() || metadata.isSymbolicLink()) continue;
+    const canonicalRelationship = path.relative(root, await realpath(candidate));
+    if (
+      canonicalRelationship === '..' ||
+      canonicalRelationship.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(canonicalRelationship)
+    )
+      continue;
     return path.relative(root, candidate).replaceAll('\\', '/');
   }
   return null;
