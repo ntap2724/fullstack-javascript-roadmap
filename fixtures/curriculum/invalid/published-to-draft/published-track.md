@@ -12,6 +12,8 @@ introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
 requiredCompetencies: []
 modules: []
+gates:
+  - gate-fixture-published-source
 ---
 
 Publication validation fixture.

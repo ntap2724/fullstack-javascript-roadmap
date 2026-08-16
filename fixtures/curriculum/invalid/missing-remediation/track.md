@@ -13,6 +13,8 @@ requiredCompetencies:
   - test.missing-remediation
 modules:
   - module-missing-remediation
+gates:
+  - gate-fixture-missing-remediation
 ---
 
 Wrong-kind remediation completeness fixture.

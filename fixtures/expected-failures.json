@@ -89,6 +89,28 @@
     "expectedDiagnostic": "CURRICULUM_COMPLETENESS_004"
   },
   {
+    "id": "curriculum-release-missing-exit-gate",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/release-missing-exit-gate",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_REFERENCE_001"
+  },
+  {
+    "id": "curriculum-release-experimental-claims",
+    "command": "pnpm",
+    "args": [
+      "content:validate",
+      "fixtures/curriculum/invalid/experimental-release-claims-complete",
+      "--format",
+      "json"
+    ],
+    "expectedDiagnostic": "CURRICULUM_RELEASE_001"
+  },
+  {
     "id": "publication-solution",
     "command": "node",
     "args": [

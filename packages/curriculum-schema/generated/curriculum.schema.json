@@ -66,6 +66,14 @@
             "type": "string",
             "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
           }
+        },
+        "gates": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
         }
       },
       "required": [
@@ -80,7 +88,8 @@
         "lastReviewedIn",
         "kind",
         "requiredCompetencies",
-        "modules"
+        "modules",
+        "gates"
       ],
       "additionalProperties": false
     },
@@ -563,6 +572,315 @@
         "project",
         "rubric",
         "evidence"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[/-][a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "published",
+            "deprecated",
+            "withdrawn"
+          ]
+        },
+        "prerequisites": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "introducedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "lastReviewedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "release"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "maturity": {
+          "type": "string",
+          "enum": [
+            "experimental",
+            "reviewed",
+            "validated",
+            "stable"
+          ]
+        },
+        "track": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "entryGate": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "exitGate": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "claims": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "nonClaims": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "slug",
+        "title",
+        "description",
+        "status",
+        "prerequisites",
+        "introducedIn",
+        "lastReviewedIn",
+        "kind",
+        "version",
+        "maturity",
+        "track",
+        "entryGate",
+        "exitGate",
+        "claims",
+        "nonClaims"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[/-][a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "published",
+            "deprecated",
+            "withdrawn"
+          ]
+        },
+        "prerequisites": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "introducedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "lastReviewedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "gate"
+        },
+        "competencies": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z0-9][a-z0-9-]*)+$"
+          }
+        },
+        "entryEvidence": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exitAssessment": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "criticalCriteria": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "remediation": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        },
+        "maturity": {
+          "type": "string",
+          "const": "experimental"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "slug",
+        "title",
+        "description",
+        "status",
+        "prerequisites",
+        "introducedIn",
+        "lastReviewedIn",
+        "kind",
+        "competencies",
+        "entryEvidence",
+        "exitAssessment",
+        "criticalCriteria",
+        "remediation",
+        "maturity"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^(?:track|gate|module|lesson|assessment|milestone|project|exercise|ex|lab|check|rubric|evidence|release|remediation|change-request|debugging)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[/-][a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "published",
+            "deprecated",
+            "withdrawn"
+          ]
+        },
+        "prerequisites": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "introducedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "lastReviewedIn": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "project"
+        },
+        "competencies": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z0-9][a-z0-9-]*)+$"
+          }
+        },
+        "contractPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "slug",
+        "title",
+        "description",
+        "status",
+        "prerequisites",
+        "introducedIn",
+        "lastReviewedIn",
+        "kind",
+        "competencies",
+        "contractPath"
       ],
       "additionalProperties": false
     }

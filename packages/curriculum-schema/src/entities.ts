@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod';
 import { ArtifactIdSchema, CompetencyIdSchema } from './ids.js';
 import { CommonArtifactFields, MasteryLevelSchema } from './common.js';
@@ -8,6 +9,7 @@ export const TrackSchema = z
     kind: z.literal('track'),
     requiredCompetencies: z.array(CompetencyIdSchema),
     modules: z.array(ArtifactIdSchema),
+    gates: z.array(ArtifactIdSchema).min(1),
   })
   .strict();
 
@@ -80,6 +82,53 @@ export const MilestoneSchema = z
   })
   .strict();
 
+const SafeRepositoryPathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      !path.posix.isAbsolute(value) &&
+      !path.win32.isAbsolute(value) &&
+      !value.split(/[\\/]/).includes('..'),
+    'Repository path must be relative and contained',
+  );
+
+export const ReleaseSchema = z
+  .object({
+    ...CommonArtifactFields,
+    kind: z.literal('release'),
+    version: z.string().regex(/^\d+\.\d+\.\d+$/),
+    maturity: z.enum(['experimental', 'reviewed', 'validated', 'stable']),
+    track: ArtifactIdSchema,
+    entryGate: ArtifactIdSchema,
+    exitGate: ArtifactIdSchema,
+    claims: z.array(z.string().min(1)).min(1),
+    nonClaims: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+export const GateSchema = z
+  .object({
+    ...CommonArtifactFields,
+    kind: z.literal('gate'),
+    competencies: z.array(CompetencyIdSchema).min(1),
+    entryEvidence: z.array(z.string().min(1)).min(1),
+    exitAssessment: ArtifactIdSchema,
+    criticalCriteria: z.array(z.string().min(1)).min(1),
+    remediation: z.array(ArtifactIdSchema).min(1),
+    maturity: z.literal('experimental'),
+  })
+  .strict();
+
+export const ProjectSchema = z
+  .object({
+    ...CommonArtifactFields,
+    kind: z.literal('project'),
+    competencies: z.array(CompetencyIdSchema).min(1),
+    contractPath: SafeRepositoryPathSchema,
+  })
+  .strict();
+
 export const CurriculumEntitySchema = z.discriminatedUnion('kind', [
   TrackSchema,
   CompetencySchema,
@@ -87,6 +136,9 @@ export const CurriculumEntitySchema = z.discriminatedUnion('kind', [
   LessonSchema,
   AssessmentSchema,
   MilestoneSchema,
+  ReleaseSchema,
+  GateSchema,
+  ProjectSchema,
 ]);
 
 export type CurriculumEntity = z.infer<typeof CurriculumEntitySchema>;

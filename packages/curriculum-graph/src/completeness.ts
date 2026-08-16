@@ -16,9 +16,17 @@ function documentsOfKind(
 }
 
 function publishedTrackReachability(graph: CurriculumGraph): ReadonlySet<string> | undefined {
-  const roots = documentsOfKind(graph, 'track')
+  const publishedTracks = documentsOfKind(graph, 'track')
     .filter((document) => document.data.status === 'published')
     .map((document) => document.data.id);
+
+  // Also include tracks referenced by releases as reachability roots,
+  // so experimental/review release paths are considered reachable
+  const releaseTrackIds = documentsOfKind(graph, 'release').map(
+    (document) => (document.data as Extract<CurriculumDocument['data'], { kind: 'release' }>).track,
+  );
+
+  const roots = [...new Set([...publishedTracks, ...releaseTrackIds])];
   if (roots.length === 0) return undefined;
 
   const adjacency = new Map<string, string[]>();
@@ -153,6 +161,30 @@ export function completenessDiagnostics(graph: CurriculumGraph): readonly Diagno
     for (const milestone of documentsOfKind(graph, 'milestone')) {
       if (!reachable.has(milestone.data.id)) {
         diagnostics.push(unreachableMilestoneDiagnostic(milestone));
+      }
+    }
+  }
+
+  // Check experimental releases for overreaching completion claims
+  for (const document of documentsOfKind(graph, 'release')) {
+    const data = document.data as Extract<CurriculumDocument['data'], { kind: 'release' }>;
+    if (data.maturity === 'experimental') {
+      const overreachingClaims = data.claims.filter((claim) =>
+        /junior fullstack readiness|complete self-study|stable curriculum/i.test(claim),
+      );
+      if (overreachingClaims.length > 0) {
+        diagnostics.push({
+          code: 'CURRICULUM_RELEASE_001',
+          severity: 'error',
+          location: { file: document.filePath, pointer: 'claims' },
+          observed: overreachingClaims,
+          expected:
+            'Experimental releases must not claim Junior Fullstack readiness, complete self-study path, or stable curriculum',
+          reason: `Experimental release "${data.id}" contains completion claims that exceed its maturity level`,
+          remediation:
+            'Move the overreaching claims to nonClaims or advance the release maturity before claiming completion',
+          documentation: 'docs/architecture/curriculum-graph.md#completeness',
+        });
       }
     }
   }

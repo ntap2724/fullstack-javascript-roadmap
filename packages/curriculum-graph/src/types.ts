@@ -7,6 +7,7 @@ export type DeclaredReferenceRelation =
   | 'prerequisites'
   | 'track.requiredCompetencies'
   | 'track.modules'
+  | 'track.gates'
   | 'module.competencies'
   | 'module.lessons'
   | 'module.milestone'
@@ -20,7 +21,14 @@ export type DeclaredReferenceRelation =
   | 'assessment.artifact'
   | 'milestone.competencies'
   | 'milestone.project'
-  | 'milestone.rubric';
+  | 'milestone.rubric'
+  | 'release.track'
+  | 'release.entryGate'
+  | 'release.exitGate'
+  | 'gate.competencies'
+  | 'gate.exitAssessment'
+  | 'gate.remediation'
+  | 'project.competencies';
 
 export interface DeclaredReference {
   declaringId: string;

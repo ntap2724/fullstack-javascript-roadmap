@@ -13,6 +13,8 @@ requiredCompetencies:
   - test.milestone
 modules:
   - module-unreachable-milestone
+gates:
+  - gate-fixture-unreachable-milestone
 ---
 
 Milestone reachability fixture.
