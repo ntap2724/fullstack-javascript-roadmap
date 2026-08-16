@@ -369,7 +369,13 @@ describe('verify-exercise CLI', () => {
         'stdout',
         'timedOut',
       ]);
-      expect(learner.stdout).not.toContain(path.resolve(parent));
+      expect(diagnosticCodes(learnerPayload)).toEqual(['EXERCISE_COMMAND_001']);
+      for (const step of learnerPayload.steps as readonly Record<string, unknown>[]) {
+        const cmd = step.command as Record<string, unknown>;
+        const inner = cmd.command as Record<string, unknown>;
+        const stdoutText = typeof inner.stdout === 'string' ? inner.stdout : '';
+        expect(stdoutText).not.toContain(path.resolve(parent));
+      }
       expect(await exists(path.join(workspace, '.roadmap', 'exercise-baseline.json'))).toBe(true);
       await copyFile(
         path.join(exerciseRoot, 'solution/src/counter.js'),
