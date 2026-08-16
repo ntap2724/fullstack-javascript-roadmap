@@ -92,3 +92,42 @@ test('release verification aggregates two platforms and three browsers without p
     /secrets\.|git push|gh release|npm publish|deploy|contents.{0,20}write|pages.{0,20}write|id-token.{0,20}write/i,
   );
 });
+
+test('Windows verification runs after canonical-root preparation', async () => {
+  const value = parse(await readFile('.github/workflows/pull-request.yml', 'utf8'));
+  const steps = value.jobs.verify.steps;
+  const prepareStep = steps.find((step) => step.run === 'node scripts/ci/prepare-runner-temp.mjs');
+  assert.ok(prepareStep, 'prepare-runner-temp step must exist');
+  const installStep = steps.find((step) => step.run === 'pnpm install --frozen-lockfile');
+  assert.ok(installStep, 'pnpm install step must exist');
+  const verifyStep = steps.find((step) => step.run === 'pnpm verify');
+  assert.ok(verifyStep, 'pnpm verify step must exist');
+  const prepareIndex = steps.indexOf(prepareStep);
+  const installIndex = steps.indexOf(installStep);
+  const verifyIndex = steps.indexOf(verifyStep);
+  assert.ok(prepareIndex < installIndex, 'prepare must come before install');
+  assert.ok(installIndex < verifyIndex, 'install must come before verify');
+});
+
+test('canonical-root preparation is not removed from workflows', async () => {
+  const names = ['pull-request.yml', 'scheduled.yml', 'verify-release.yml'];
+  for (const name of names) {
+    const value = parse(await readFile('.github/workflows/' + name, 'utf8'));
+    const text = JSON.stringify(value);
+    assert.ok(text.includes('prepare-runner-temp'), name + ' must include prepare-runner-temp');
+    assert.doesNotMatch(text, /continue-on-error.*prepare-runner-temp/i, name);
+    assert.doesNotMatch(text, /prepare-runner-temp.*continue-on-error/i, name);
+  }
+});
+
+test('verification executes after canonical root preparation', async () => {
+  const value = parse(await readFile('.github/workflows/pull-request.yml', 'utf8'));
+  const steps = value.jobs.verify.steps;
+  const prepareStep = steps.find((step) => step.run === 'node scripts/ci/prepare-runner-temp.mjs');
+  assert.ok(prepareStep, 'prepare-runner-temp step must exist');
+  const verifyStep = steps.find((step) => step.run === 'pnpm verify');
+  assert.ok(verifyStep, 'pnpm verify step must exist');
+  const prepareIndex = steps.indexOf(prepareStep);
+  const verifyIndex = steps.indexOf(verifyStep);
+  assert.ok(prepareIndex < verifyIndex, 'verification must run after canonical root preparation');
+});

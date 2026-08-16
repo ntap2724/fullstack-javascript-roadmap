@@ -34,5 +34,6 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+      - run: node scripts/ci/prepare-runner-temp.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
