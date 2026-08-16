@@ -108,3 +108,34 @@ The correction was verified as resolving the timeout without:
 | Fresh Reviewer | REVIEW_PASS       | Worktree (isolated) |
 | Fresh Verifier | VERIFICATION_PASS | Worktree (isolated) |
 | Owner Gate     | GATE_PASS         | Primary main        |
+
+## Final Main Merge Evidence
+
+### Merge History
+
+| Step  | SHA                                        | Description                          |
+| ----- | ------------------------------------------ | ------------------------------------ |
+| Base  | `d00c70abfbfda410a0b320319972c0ee4193153b` | Pre-correction main                  |
+| PR #4 | `f8e2e0f14fb98a25053e97e46e6ce741872942f6` | Timeout correction + evidence record |
+| PR #5 | `4dc3104c85cf8270c913b064e52fe36261acb906` | Prettier formatting fix for evidence |
+
+PR #5 was required because the evidence record committed in PR #4 had a Prettier formatting violation that blocked both platform jobs on the first merged-main Verify Release attempt.
+
+### Final Main Verify Release (run 31952015411)
+
+Dispatched via `workflow_dispatch` on branch `main` at SHA `4dc3104c85cf8270c913b064e52fe36261acb906`.
+
+| Job                     | Status    | Conclusion |
+| ----------------------- | --------- | ---------- |
+| platform (ubuntu-24.04) | completed | success    |
+| platform (windows-2025) | completed | success    |
+| browser                 | completed | success    |
+| aggregate               | completed | success    |
+
+Key step results:
+
+- All platform steps: success (including `pnpm verify:release`, `write-platform-report.mjs`)
+- Browser steps: success (including Playwright install, `docs:test:e2e`, `write-browser-report.mjs`)
+- Aggregate steps: success (`collect-release-evidence.mjs`, `verify-release-0.mjs .tmp/release-evidence`)
+
+The aggregate job's `verify-release-0.mjs` integrity gate confirms all release evidence records identify the same source commit, have status `passed`, and match their recorded byte counts and SHA-256 hashes.
