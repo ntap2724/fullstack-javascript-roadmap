@@ -77,7 +77,9 @@ test('release verification aggregates two platforms and three browsers without p
   );
   assert.ok(
     value.jobs.browser.steps.some(
-      (step) => step.run === 'pnpm exec playwright install --with-deps chromium firefox webkit',
+      (step) =>
+        step.run ===
+        'pnpm --filter @roadmap/docs exec playwright install --with-deps chromium firefox webkit',
     ),
   );
   assert.equal(
@@ -130,4 +132,21 @@ test('verification executes after canonical root preparation', async () => {
   const prepareIndex = steps.indexOf(prepareStep);
   const verifyIndex = steps.indexOf(verifyStep);
   assert.ok(prepareIndex < verifyIndex, 'verification must run after canonical root preparation');
+
+  test('Playwright install runs from @roadmap/docs workspace, not root', async () => {
+    const workflows = ['main.yml', 'verify-release.yml'];
+    for (const name of workflows) {
+      const value = parse(await readFile('.github/workflows/' + name, 'utf8'));
+      const text = JSON.stringify(value);
+      assert.ok(
+        text.includes('pnpm --filter @roadmap/docs exec playwright'),
+        name + ' must use --filter @roadmap/docs for playwright',
+      );
+      assert.doesNotMatch(
+        text,
+        /pnpm exec playwright(?!.*--filter)/,
+        name + ' must not use root pnpm exec playwright',
+      );
+    }
+  });
 });

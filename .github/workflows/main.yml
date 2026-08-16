@@ -29,5 +29,5 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:release
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @roadmap/docs exec playwright install --with-deps chromium
       - run: pnpm docs:test:e2e -- --project=chromium
