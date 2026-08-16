@@ -103,7 +103,10 @@ test('root compiler entry point extends the base contract', async () => {
 test('root scripts expose check and domain-aware tests', async () => {
   const packageJson = await readJson('package.json');
   assert.equal(typeof packageJson.scripts.check, 'string');
-  assert.equal(packageJson.scripts['test:bootstrap'], 'node --test scripts/*.test.mjs');
+  assert.equal(
+    packageJson.scripts['test:bootstrap'],
+    'node --test scripts/*.test.mjs scripts/ci/tests/*.test.mjs',
+  );
   assert.equal(
     packageJson.scripts['test:wp-00-01-gate'],
     'node --test scripts/wp-00-01-gate.integration.mjs',
@@ -232,7 +235,7 @@ test('globals is a direct dependency with exact catalog and lock resolution', as
 test('TypeScript keeps type-aware linting without CommonJS globals', async () => {
   const config = await eslint.calculateConfigForFile('vitest.config.ts');
 
-  assert.equal(config.languageOptions.parserOptions.projectService, true);
+  assert.ok(config.languageOptions.parserOptions.projectService);
   assert.equal(config.rules['@typescript-eslint/await-thenable'][0], 2);
   assert.equal(config.languageOptions.globals.require, undefined);
 });

@@ -1,0 +1,133 @@
+import { readFile, readdir } from 'node:fs/promises';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parse } from 'yaml';
+
+async function workflows() {
+  const directory = '.github/workflows';
+  const names = (await readdir(directory)).filter((name) => name.endsWith('.yml'));
+  return Promise.all(
+    names.map(async (name) => ({
+      name,
+      value: parse(await readFile(`${directory}/${name}`, 'utf8')),
+    })),
+  );
+}
+
+function serialized(value) {
+  return JSON.stringify(value);
+}
+
+test('all workflows are read-only and avoid unsafe triggers or commands', async () => {
+  for (const { name, value } of await workflows()) {
+    assert.equal(value.permissions?.contents, 'read', name);
+    assert.equal(value.on?.pull_request_target, undefined, name);
+    const text = serialized(value);
+    assert.doesNotMatch(text, /continue-on-error|(?<!p)npm install|pnpm add|curl[^\n]*\|/i, name);
+    assert.doesNotMatch(
+      text,
+      /contents.{0,20}write|pages.{0,20}write|id-token.{0,20}write|packages.{0,20}write/i,
+      name,
+    );
+    assert.doesNotMatch(text, /secrets\.|git push|gh release|npm publish/i, name);
+  }
+});
+
+test('pull requests use fixed runners, frozen install, and non-persistent checkout credentials', async () => {
+  const value = parse(await readFile('.github/workflows/pull-request.yml', 'utf8'));
+  assert.deepEqual(value.jobs.verify.strategy.matrix.os, ['ubuntu-24.04', 'windows-2025']);
+  assert.equal(value.jobs.verify['timeout-minutes'], 30);
+  const steps = value.jobs.verify.steps;
+  assert.equal(
+    steps.find((step) => step.uses === 'actions/checkout@v6').with['persist-credentials'],
+    false,
+  );
+  assert.ok(steps.some((step) => step.run === 'pnpm install --frozen-lockfile'));
+  assert.ok(steps.some((step) => step.run === 'pnpm verify'));
+});
+
+test('main and scheduled workflows preserve provenance and finite execution', async () => {
+  const main = parse(await readFile('.github/workflows/main.yml', 'utf8'));
+  const scheduled = parse(await readFile('.github/workflows/scheduled.yml', 'utf8'));
+  assert.equal(main.jobs.full['timeout-minutes'], 45);
+  assert.equal(scheduled.jobs['public-contract']['timeout-minutes'], 45);
+  assert.equal(
+    main.jobs.full.steps.find((step) => step.uses === 'actions/checkout@v6').with['fetch-depth'],
+    0,
+  );
+  assert.equal(
+    scheduled.jobs['public-contract'].steps.find((step) => step.uses === 'actions/checkout@v6')
+      .with['fetch-depth'],
+    0,
+  );
+  assert.ok(
+    main.jobs.full.steps.some((step) => step.run === 'pnpm docs:test:e2e -- --project=chromium'),
+  );
+  assert.deepEqual(scheduled.jobs['public-contract'].strategy.matrix.os, [
+    'ubuntu-24.04',
+    'windows-2025',
+  ]);
+});
+
+test('release verification aggregates two platforms and three browsers without publication authority', async () => {
+  const value = parse(await readFile('.github/workflows/verify-release.yml', 'utf8'));
+  assert.deepEqual(
+    value.jobs.platform.strategy.matrix.include.map((entry) => entry.id),
+    ['ubuntu-24.04', 'windows-2025'],
+  );
+  assert.ok(
+    value.jobs.browser.steps.some(
+      (step) => step.run === 'pnpm exec playwright install --with-deps chromium firefox webkit',
+    ),
+  );
+  assert.equal(
+    value.jobs.aggregate.steps.filter((step) => step.uses === 'actions/download-artifact@v8')
+      .length,
+    3,
+  );
+  assert.ok(value.jobs.aggregate.steps.some((step) => step.uses === 'actions/upload-artifact@v7'));
+  const text = JSON.stringify(value);
+  assert.doesNotMatch(
+    text,
+    /secrets\.|git push|gh release|npm publish|deploy|contents.{0,20}write|pages.{0,20}write|id-token.{0,20}write/i,
+  );
+});
+
+test('Windows verification runs after canonical-root preparation', async () => {
+  const value = parse(await readFile('.github/workflows/pull-request.yml', 'utf8'));
+  const steps = value.jobs.verify.steps;
+  const prepareStep = steps.find((step) => step.run === 'node scripts/ci/prepare-runner-temp.mjs');
+  assert.ok(prepareStep, 'prepare-runner-temp step must exist');
+  const installStep = steps.find((step) => step.run === 'pnpm install --frozen-lockfile');
+  assert.ok(installStep, 'pnpm install step must exist');
+  const verifyStep = steps.find((step) => step.run === 'pnpm verify');
+  assert.ok(verifyStep, 'pnpm verify step must exist');
+  const prepareIndex = steps.indexOf(prepareStep);
+  const installIndex = steps.indexOf(installStep);
+  const verifyIndex = steps.indexOf(verifyStep);
+  assert.ok(prepareIndex < installIndex, 'prepare must come before install');
+  assert.ok(installIndex < verifyIndex, 'install must come before verify');
+});
+
+test('canonical-root preparation is not removed from workflows', async () => {
+  const names = ['pull-request.yml', 'scheduled.yml', 'verify-release.yml'];
+  for (const name of names) {
+    const value = parse(await readFile('.github/workflows/' + name, 'utf8'));
+    const text = JSON.stringify(value);
+    assert.ok(text.includes('prepare-runner-temp'), name + ' must include prepare-runner-temp');
+    assert.doesNotMatch(text, /continue-on-error.*prepare-runner-temp/i, name);
+    assert.doesNotMatch(text, /prepare-runner-temp.*continue-on-error/i, name);
+  }
+});
+
+test('verification executes after canonical root preparation', async () => {
+  const value = parse(await readFile('.github/workflows/pull-request.yml', 'utf8'));
+  const steps = value.jobs.verify.steps;
+  const prepareStep = steps.find((step) => step.run === 'node scripts/ci/prepare-runner-temp.mjs');
+  assert.ok(prepareStep, 'prepare-runner-temp step must exist');
+  const verifyStep = steps.find((step) => step.run === 'pnpm verify');
+  assert.ok(verifyStep, 'pnpm verify step must exist');
+  const prepareIndex = steps.indexOf(prepareStep);
+  const verifyIndex = steps.indexOf(verifyStep);
+  assert.ok(prepareIndex < verifyIndex, 'verification must run after canonical root preparation');
+});

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runTemplateDryRun } from '../tooling/publish-templates/src/pipeline.js';
@@ -19,6 +19,14 @@ const pnpmVersion = (await readFile('.pnpm-version', 'utf8')).trim();
 const templateRoots = ['templates/javascript-engineering'];
 
 for (const templateRoot of templateRoots) {
+  const reportPath = path.join(
+    '.tmp',
+    'reports',
+    'templates',
+    `${path.basename(templateRoot)}.json`,
+  );
+  await rm(reportPath, { force: true });
+
   const outputRoot = await mkdtemp(path.join(tmpdir(), 'roadmap-template-'));
   const report = await runTemplateDryRun({
     templateRoot,
@@ -32,5 +40,23 @@ for (const templateRoot of templateRoots) {
   if (report.status !== 'passed') {
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;
+    continue;
   }
+
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(
+    reportPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        status: 'passed',
+        sourceCommit,
+        templateId: path.basename(templateRoot),
+        functionalSha256: report.artifact?.functionalSha256,
+        diagnostics: report.diagnostics,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }

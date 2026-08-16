@@ -21,7 +21,9 @@ export default tseslint.config(
         ...globals.nodeBuiltin,
       },
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['scripts/ci/scan-publication-fixture.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

@@ -1,0 +1,110 @@
+name: Verify Release 0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  platform:
+    name: platform (${{ matrix.id }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            id: ubuntu-24.04
+          - os: windows-2025
+            id: windows-2025
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: node scripts/ci/prepare-runner-temp.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:release
+      - run: node scripts/ci/write-platform-report.mjs ${{ matrix.id }} .tmp/reports/platform/${{ matrix.id }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-platform-${{ matrix.id }}
+          path: .tmp/reports
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: node scripts/ci/prepare-runner-temp.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm docs:test:e2e
+      - run: node scripts/ci/write-browser-report.mjs .tmp/reports/browser/all.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-browser
+          path: .tmp/reports/browser
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+  aggregate:
+    needs: [platform, browser]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-platform-ubuntu-24.04
+          path: .tmp/downloaded/ubuntu
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-platform-windows-2025
+          path: .tmp/downloaded/windows
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-browser
+          path: .tmp/downloaded/browser
+      - run: node scripts/ci/collect-release-evidence.mjs
+      - run: node scripts/verify-release-0.mjs .tmp/release-evidence
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-0-verification
+          path: .tmp/release-evidence
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 30
