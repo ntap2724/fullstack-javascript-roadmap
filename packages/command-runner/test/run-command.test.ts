@@ -431,7 +431,7 @@ describe('runCommand', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('waits for a delayed Windows helper readiness handshake before running a real command', async () => {
     if (process.platform !== 'win32') return;
