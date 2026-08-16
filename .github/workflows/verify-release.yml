@@ -64,7 +64,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: node scripts/ci/prepare-runner-temp.mjs
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm --filter @roadmap/docs exec playwright install --with-deps chromium firefox webkit
       - run: pnpm docs:test:e2e
       - run: node scripts/ci/write-browser-report.mjs .tmp/reports/browser/all.json
       - uses: actions/upload-artifact@v7
