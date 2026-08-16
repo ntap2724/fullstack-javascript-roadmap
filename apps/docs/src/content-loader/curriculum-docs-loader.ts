@@ -67,12 +67,13 @@ export function curriculumDocsLoader(options: CurriculumDocsLoaderOptions): Load
         fileURL: pathToFileURL(entry.filePath),
       });
       const digest = context.generateDigest({ data, body: entry.body });
+      const siteRoot = path.resolve(options.curriculumRoot, '..', 'apps', 'docs');
       context.store.set({
         id: entry.id,
         data,
         body: entry.body,
         rendered,
-        filePath: entry.filePath,
+        filePath: path.relative(siteRoot, entry.filePath).split(path.sep).join('/'),
         digest,
       });
     }

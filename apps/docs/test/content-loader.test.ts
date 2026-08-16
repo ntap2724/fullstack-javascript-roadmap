@@ -333,4 +333,18 @@ describe('curriculumDocsLoader', () => {
       await rm(invalidRoot, { force: true, recursive: true });
     }
   });
+  it('stores a site-root-relative filePath instead of an absolute path', async () => {
+    const loader = curriculumDocsLoader({ channel: 'production', curriculumRoot });
+    const context = createContextDouble();
+    await loader.load(context.context);
+
+    const storedPaths = context.set.mock.calls.map(
+      (call: [{ filePath: string }]) => call[0].filePath,
+    );
+    expect(storedPaths.length).toBeGreaterThan(0);
+    for (const filePath of storedPaths) {
+      expect(path.isAbsolute(filePath)).toBe(false);
+      expect(filePath).toMatch(/^(\.\.\/)+curriculum\//);
+    }
+  });
 });
