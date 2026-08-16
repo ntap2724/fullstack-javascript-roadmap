@@ -142,17 +142,17 @@ describe('curriculumDocsLoader', () => {
     await loader.load(context.context);
 
     expect(context.clear).toHaveBeenCalledOnce();
-    expect(context.parseData).toHaveBeenCalledTimes(8);
+    expect(context.parseData).toHaveBeenCalledTimes(9);
     const closureRenderCall = context.renderMarkdown.mock.calls.find(([body]) =>
       body.includes('RELEASE_ZERO_CLOSURE_BODY'),
     );
     expect(closureRenderCall).toBeDefined();
     expect(closureRenderCall?.[0]).toContain('RELEASE_ZERO_CLOSURE_BODY');
     expect(closureRenderCall?.[1]?.fileURL).toBeInstanceOf(URL);
-    expect(context.generateDigest).toHaveBeenCalledTimes(8);
+    expect(context.generateDigest).toHaveBeenCalledTimes(9);
     expect(calls).toEqual([
       'clear',
-      ...Array.from({ length: 8 }, () => [
+      ...Array.from({ length: 9 }, () => [
         'parseData',
         'renderMarkdown',
         'generateDigest',
@@ -219,11 +219,11 @@ describe('curriculumDocsLoader', () => {
     expect(maximumActiveReloads).toBe(1);
     releases.shift()?.();
     await vi.waitFor(() => {
-      expect(context.set).toHaveBeenCalledTimes(32);
+      expect(context.set).toHaveBeenCalledTimes(36);
     });
 
     expect(maximumActiveReloads).toBe(1);
-    expect(context.set).toHaveBeenCalledTimes(32);
+    expect(context.set).toHaveBeenCalledTimes(36);
   });
 
   it('detaches an old watcher and reloads through the latest context', async () => {
@@ -288,7 +288,7 @@ describe('curriculumDocsLoader', () => {
 
       await loader.load(context.context);
       expect(context.clear).toHaveBeenCalledOnce();
-      expect(context.set).toHaveBeenCalledTimes(8);
+      expect(context.set).toHaveBeenCalledTimes(9);
 
       const changedLesson = path.join(temporaryRoot, 'lessons', 'lesson-js-function-values.md');
       const originalSource = await readFile(changedLesson, 'utf8');
@@ -303,7 +303,7 @@ describe('curriculumDocsLoader', () => {
         );
       });
       expect(context.clear).toHaveBeenCalledOnce();
-      expect(context.set).toHaveBeenCalledTimes(8);
+      expect(context.set).toHaveBeenCalledTimes(9);
       expect(surfaced).toHaveLength(1);
       expect(() => {
         surfaced[0]?.();

@@ -17,6 +17,7 @@ const expectedProductionRouteIds = [
   'assessments/javascript/functions/function-values',
   'competencies/js/function-closure',
   'competencies/js/function-values',
+  'gates/release-zero-baseline',
   'lessons/javascript/functions/closure-private-state',
   'lessons/javascript/functions/function-values',
   'modules/javascript/functions',

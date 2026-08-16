@@ -1,0 +1,88 @@
+schemaVersion: 1
+id: contract-workshop-enrollment
+version: 0.1.0
+status: review
+criteria:
+  - id: web.public-workshop-list
+    verificationLayer: frontend
+    competency: react.server-state.lifecycle
+    evidence: browser-test-report
+    critical: false
+    description: Public users see the list of open workshops with title, date, and availability
+
+  - id: web.authentication-states
+    verificationLayer: frontend
+    competency: api.authentication.session-lifecycle
+    evidence: browser-test-report
+    critical: false
+    description: UI reflects authenticated and unauthenticated states correctly
+
+  - id: web.loading-empty-error
+    verificationLayer: frontend
+    competency: react.state.ownership
+    evidence: browser-test-report
+    critical: false
+    description: Loading, empty, and error states render with accessible roles and retry
+
+  - id: api.invalid-payload-400
+    verificationLayer: api
+    competency: api.validation.runtime-boundary
+    evidence: api-test-report
+    critical: true
+    description: Invalid enrollment payload returns 400 with schema-defined error body
+
+  - id: api.unauthenticated-401
+    verificationLayer: api
+    competency: api.authentication.session-lifecycle
+    evidence: api-test-report
+    critical: true
+    description: Unauthenticated enrollment request returns 401
+
+  - id: api.forbidden-resource-403
+    verificationLayer: api
+    competency: api.authorization.resource-ownership
+    evidence: api-test-report
+    critical: true
+    description: Learner accessing another learner's enrollment returns 403
+
+  - id: api.enroll-success-201
+    verificationLayer: api
+    competency: db.transaction.atomic-enrollment
+    evidence: api-test-report
+    critical: true
+    description: Valid authenticated enrollment returns 201 with enrollment payload
+
+  - id: api.duplicate-enrollment-409
+    verificationLayer: api
+    competency: db.model.relational-constraints
+    evidence: api-test-report
+    critical: true
+    description: Duplicate enrollment attempt returns 409 with idempotent outcome
+
+  - id: db.unique-user-workshop
+    verificationLayer: database
+    competency: db.model.relational-constraints
+    evidence: migration-test-report
+    critical: true
+    description: Composite primary key prevents duplicate user-workshop enrollment rows
+
+  - id: db.capacity-transaction
+    verificationLayer: database
+    competency: db.transaction.atomic-enrollment
+    evidence: transaction-test-report
+    critical: true
+    description: Enrollment within a transaction respects capacity under concurrent access
+
+  - id: fullstack.repeated-submit-idempotent-outcome
+    verificationLayer: fullstack
+    competency: fullstack.incident.duplicate-submission
+    evidence: integration-test-report
+    critical: true
+    description: Repeated form submission produces the same outcome as a single submission
+
+  - id: evidence.commit-pinned
+    verificationLayer: evidence
+    competency: career.evidence.technical-walkthrough
+    evidence: evidence-manifest
+    critical: false
+    description: Submitted evidence references a 40-hex commit with a passing CI run
