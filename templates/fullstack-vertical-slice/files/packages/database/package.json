@@ -1,0 +1,25 @@
+{
+  "name": "@workshop/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json --noEmit",
+    "build": "tsc --project tsconfig.build.json",
+    "test:infrastructure": "vitest run --config vitest.config.ts test/infrastructure.test.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@types/pg": "8.21.0",
+    "drizzle-kit": "0.31.10",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
