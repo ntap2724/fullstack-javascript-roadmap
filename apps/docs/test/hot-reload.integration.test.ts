@@ -11,26 +11,35 @@ import { describe, expect, it } from 'vitest';
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const authoritativeCurriculumRoot = path.join(repositoryRoot, 'curriculum');
 const HOT_RELOAD_HOST = '127.0.0.1';
-const HOT_RELOAD_PORT = 4322;
+// Deliberately far from Astro's 4321 and Vite's 5173 defaults. A developer's own
+// dev server, or a stray static server on 4321/4322, would otherwise answer this
+// test's requests and turn a real assertion into an unexplained timeout.
+const HOT_RELOAD_PORT = 18422;
 const HOT_RELOAD_BASE_URL = new URL(`http://${HOT_RELOAD_HOST}:${String(HOT_RELOAD_PORT)}/`);
 const HOT_RELOAD_PREFIX = 'wp04-hot-reload-';
 const DIAGNOSTIC_BUFFER_LIMIT = 16_384;
 
 async function assertHotReloadPortAvailable(): Promise<void> {
-  const probe = createServer();
-  await new Promise<void>((resolve, reject) => {
-    probe.once('error', reject);
-    probe.listen(HOT_RELOAD_PORT, HOT_RELOAD_HOST, resolve);
-  });
-  await new Promise<void>((resolve, reject) => {
-    probe.close((error) => {
-      if (error === undefined) {
-        resolve();
-      } else {
-        reject(error);
-      }
+  // Probe the loopback address the test polls AND the wildcard address. On Windows a
+  // server already bound to 0.0.0.0 does not prevent a later 127.0.0.1 bind, so
+  // probing only the loopback address can report the port as free while another
+  // process still serves the requests this test makes.
+  for (const host of [HOT_RELOAD_HOST, '0.0.0.0']) {
+    const probe = createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once('error', reject);
+      probe.listen(HOT_RELOAD_PORT, host, resolve);
     });
-  });
+    await new Promise<void>((resolve, reject) => {
+      probe.close((error) => {
+        if (error === undefined) {
+          resolve();
+        } else {
+          reject(error);
+        }
+      });
+    });
+  }
 }
 
 function createBoundedDiagnosticBuffer(limit = DIAGNOSTIC_BUFFER_LIMIT) {
