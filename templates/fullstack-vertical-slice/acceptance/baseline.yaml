@@ -1,0 +1,92 @@
+# Baseline acceptance contract for the Workshop Enrollment starter.
+#
+# Source-side material. The publication allowlist selects only `files/**`, so this
+# file is never published into a learner repository.
+#
+# Commands use the same argv-shaped command contract as `template.yaml`
+# (`command`, `args`, `cwd`, `timeoutMs`): one executable token, arguments passed
+# separately, never a shell string. The publication test asserts that
+# `publication.install` and `publication.baseline` below are byte-identical to
+# `template.yaml`'s `verification.install` and `verification.baseline`, so this
+# file cannot drift away from what publication actually runs.
+
+schemaVersion: 1
+templateId: template-fullstack-vertical-slice
+templateVersion: 0.1.0
+curriculumRelease: 0.1.0
+
+# Commands publication runs inside the materialized repository. Both must exit 0.
+publication:
+  install:
+    command: pnpm
+    args: [install, --frozen-lockfile]
+    cwd: .
+    timeoutMs: 180000
+  baseline:
+    command: pnpm
+    args: [verify:baseline]
+    cwd: .
+    timeoutMs: 180000
+
+# The learner contract probe. This is deliberately NOT the publication baseline:
+# it is expected to exit non-zero on an untouched starter. Publication must never
+# substitute this command for `publication.baseline`, because a green result here
+# would require shipping a completed solution.
+learnerProbe:
+  command: pnpm
+  args: [verify]
+  cwd: .
+  timeoutMs: 600000
+
+# What the untouched generated repository must do.
+expectations:
+  install:
+    exit: 0
+  baseline:
+    exit: 0
+    covers:
+      - frozen install from the starter's own committed lockfile
+      - check
+      - infrastructure tests
+      - build
+      - verify:baseline
+  learnerProbe:
+    exit: non-zero
+    requiredDiagnostics:
+      - LEARNER_API_ENROLLMENT_001
+      - LEARNER_WEB_ENROLLMENT_001
+    forbiddenDiagnostics:
+      - LEARNER_RUNNER_001
+      - LEARNER_RUNNER_002
+
+# The generated repository must satisfy all of these.
+mustSatisfy:
+  - Install with `pnpm install --frozen-lockfile` using only its own committed lockfile
+  - Pass `pnpm verify:baseline` on a fresh clone with no monorepo packages on disk
+  - Run every declared learner suite on one `pnpm test:learner` invocation
+  - Contain `.roadmap/template-manifest.json` recording the source commit and toolchain
+  - Contain no solution files, private fixtures, secrets, or internal references
+
+# The generated repository must not do any of these.
+mustNotSatisfy:
+  - Resolve any `@roadmap/*` workspace package
+  - Depend on any file outside its own root
+  - Pass `pnpm verify` before the learner implements enrollment
+  - Require a running PostgreSQL service for `verify:baseline`
+  - Require real authentication for `verify:baseline`
+  - Require a successful learner enrollment for `verify:baseline`
+
+# Baseline verification is deliberately free of these dependencies.
+baselineExcludes:
+  - PostgreSQL service
+  - real authentication
+  - successful learner enrollment
+  - network access beyond the package registry during install
+
+# Why `verify:baseline` and `verify` differ.
+#
+# `verify:baseline` is the publication gate: it proves the scaffolding is healthy
+# and must pass at generation time. `verify` adds the learner contract and must
+# fail until enrollment is implemented. Publication runs `verify:baseline` only.
+# Running `verify` as the publication gate would require shipping a completed
+# solution, which is exactly what the allowlist exists to prevent.

@@ -8,9 +8,11 @@
     "dev": "pnpm --parallel --filter @workshop/web --filter @workshop/api dev",
     "check": "pnpm --recursive --if-present check",
     "test:infrastructure": "pnpm --recursive --if-present test:infrastructure",
-    "test": "pnpm test:infrastructure",
+    "test:learner": "node scripts/verify-learner.mjs",
+    "test": "pnpm test:infrastructure && pnpm test:learner",
     "build": "pnpm --recursive --if-present build",
-    "verify:baseline": "pnpm check && pnpm test:infrastructure && pnpm build"
+    "verify:baseline": "pnpm check && pnpm test:infrastructure && pnpm build",
+    "verify": "pnpm verify:baseline && pnpm test:learner"
   },
   "engines": {
     "node": ">=24 <25"

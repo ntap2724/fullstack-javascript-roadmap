@@ -92,11 +92,14 @@ test('root compiler entry point extends the base contract', async () => {
   // Exact deepEqual, deliberately: this is a LOCK on the root program's contents.
   // It must fail if the include list changes unannounced, so relaxing it to a
   // substring, length, or .includes() check is refused. scripts/verify-all-templates.ts
-  // was added under Owner ruling R5 so that pnpm typecheck genuinely covers it.
+  // was added under Owner ruling R5 so that pnpm typecheck genuinely covers it, and
+  // scripts/verify-template-learner-contract.ts under the WP-10 Task 7 F3 ruling for
+  // the same reason.
   assert.deepEqual(config.include, [
     'vitest.config.ts',
     'scripts/generate-json-schema.ts',
     'scripts/verify-all-templates.ts',
+    'scripts/verify-template-learner-contract.ts',
   ]);
 });
 

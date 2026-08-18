@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "curriculumVersion": "{{CURRICULUM_VERSION}}",
+  "templateVersion": "{{TEMPLATE_VERSION}}",
+  "milestoneId": "milestone-fullstack-vertical-slice",
+  "repository": {
+    "url": "https://github.com/replace-me/workshop-enrollment",
+    "commit": "0000000000000000000000000000000000000000",
+    "attestations": ["self-reported"]
+  },
+  "deployment": {
+    "frontend": "https://replace-me.invalid",
+    "api": "https://api.replace-me.invalid",
+    "attestations": ["self-reported"]
+  },
+  "verification": {
+    "ciRun": "https://github.com/replace-me/workshop-enrollment/actions/runs/0",
+    "status": "failed",
+    "attestations": ["self-reported"]
+  },
+  "artifacts": [
+    {
+      "id": "evidence-replace-me-architecture-overview",
+      "path": "evidence/replace-me/architecture-overview.md",
+      "attestations": ["self-reported"]
+    }
+  ]
+}
