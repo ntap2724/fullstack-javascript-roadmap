@@ -24,6 +24,8 @@
 // suites from running.
 
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /** A real learner suite finishes in seconds; five minutes is a hang, not slowness. */
 const SUITE_TIMEOUT_MS = 300_000;
@@ -51,11 +53,16 @@ function runPnpm(args) {
 }
 
 /**
- * Confirms a declared suite exists as a workspace project.
+ * Confirms a declared suite exists as a workspace project AND declares the script
+ * this runner is about to call.
  *
- * `pnpm list --json` answers structurally — an array of matched projects — rather
- * than through a message this runner would have to parse, so the check does not
- * depend on pnpm's wording or locale.
+ * `pnpm list --json` answers structurally — an array of matched projects, each with
+ * its path — rather than through a message this runner would have to parse, so the
+ * check does not depend on pnpm's wording or locale.
+ *
+ * Both halves matter. A missing project and a missing script are runner problems,
+ * and reporting either as an unimplemented milestone would be a lie in the
+ * learner's favour.
  */
 function locateSuite(filter) {
   const listed = runPnpm(['--filter', filter, 'list', '--depth=-1', '--json']);
@@ -68,8 +75,20 @@ function locateSuite(filter) {
   } catch (error) {
     return `pnpm list did not return JSON (${error.message})`;
   }
-  if (!Array.isArray(parsed) || !parsed.some((entry) => entry?.name === filter)) {
-    return `no workspace project is named ${filter}`;
+  if (!Array.isArray(parsed)) return 'pnpm list did not return an array of projects';
+
+  const project = parsed.find((entry) => entry?.name === filter);
+  if (!project) return `no workspace project is named ${filter}`;
+  if (typeof project.path !== 'string') return `pnpm list reported no path for ${filter}`;
+
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(join(project.path, 'package.json'), 'utf8'));
+  } catch (error) {
+    return `cannot read the package manifest for ${filter} (${error.message})`;
+  }
+  if (typeof manifest.scripts?.['test:learner'] !== 'string') {
+    return `${filter} declares no test:learner script`;
   }
   return null;
 }

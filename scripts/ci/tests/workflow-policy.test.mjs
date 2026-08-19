@@ -165,11 +165,12 @@ test('the generated starter workflow cannot be downgraded into a false green', a
   );
 
   assert.deepEqual(value.permissions, { contents: 'read' });
-  // The triggers are pinned, not merely checked for `push`. Deleting
-  // `pull_request` would leave every declared control in place while the
-  // learner-contract job silently never ran, which is the "narrow its triggers"
-  // bypass the starter's own AGENTS.md names.
-  assert.deepEqual(Object.keys(value.on).sort(), ['pull_request', 'push', 'workflow_dispatch']);
+  // The whole trigger block is pinned, not just its keys. `pull_request:` with a
+  // `paths-ignore: ['**']` filter — or `branches: [does-not-exist]`, or `types: []`
+  // — keeps every key in place while the learner-contract job never runs for any
+  // pull request. That is the "narrow its triggers" bypass the starter's own
+  // AGENTS.md names, and key-only comparison does not see it.
+  assert.deepEqual(value.on, { push: null, pull_request: null, workflow_dispatch: null });
 
   const jobNames = Object.keys(value.jobs).sort();
   assert.deepEqual(jobNames, ['baseline', 'learner-contract']);

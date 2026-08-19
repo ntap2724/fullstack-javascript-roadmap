@@ -53,6 +53,17 @@ const AcceptanceContractSchema = z
       .object({ install: AcceptanceCommandSchema, baseline: AcceptanceCommandSchema })
       .strict(),
     learnerProbe: AcceptanceCommandSchema,
+    expectations: z
+      .object({
+        learnerProbe: z
+          .object({
+            requiredDiagnostics: z.array(z.string()),
+            requiredSuiteResults: z.array(z.string()),
+            forbiddenDiagnostics: z.array(z.string()),
+          })
+          .loose(),
+      })
+      .loose(),
     untouchedSeams: z
       .object({
         workshopList: z
@@ -167,6 +178,24 @@ async function assertBaselineCommandContract(): Promise<readonly string[]> {
     failures.push(
       `TEMPLATE_ACCEPTANCE_004: acceptance/baseline.yaml untouchedSeams ${JSON.stringify(acceptance.untouchedSeams)} does not match the seams this publication test proves ${JSON.stringify(expectedSeams)}`,
     );
+  }
+
+  // The acceptance document is what a reviewer reads instead of this script, so
+  // every list it publishes about the learner probe is compared with the list this
+  // script actually enforces. Otherwise the document could promise a check that no
+  // longer runs.
+  const declaredProbe = acceptance.expectations.learnerProbe;
+  const probeLists = [
+    ['requiredDiagnostics', declaredProbe.requiredDiagnostics, requiredLearnerDiagnostics],
+    ['requiredSuiteResults', declaredProbe.requiredSuiteResults, requiredSuiteResults],
+    ['forbiddenDiagnostics', declaredProbe.forbiddenDiagnostics, forbiddenRunnerDiagnostics],
+  ] as const;
+  for (const [field, declared, enforced] of probeLists) {
+    if (JSON.stringify(declared) !== JSON.stringify([...enforced])) {
+      failures.push(
+        `TEMPLATE_ACCEPTANCE_005: acceptance/baseline.yaml expectations.learnerProbe.${field} ${JSON.stringify(declared)} does not match what this publication test enforces ${JSON.stringify(enforced)}`,
+      );
+    }
   }
   return failures;
 }

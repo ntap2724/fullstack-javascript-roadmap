@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 /**
  * Contract tests for the verification controls the starter publishes.
@@ -44,11 +45,17 @@ afterEach(async () => {
  */
 const stubPnpmSource = [
   "const { appendFileSync, writeSync } = require('node:fs');",
+  "const { join } = require('node:path');",
   "const filter = process.argv[process.argv.indexOf('--filter') + 1];",
   "const listed = (name) => (process.env[name] ?? '').split(',').includes(filter);",
   '',
   "if (process.argv.includes('list')) {",
-  "  process.stdout.write(listed('STUB_MISSING') ? '[]' : JSON.stringify([{ name: filter }]));",
+  "  if (listed('STUB_MISSING')) {",
+  "    process.stdout.write('[]');",
+  '  } else {',
+  "    const directory = join(process.env.STUB_PROJECT_ROOT, filter.split('/').pop());",
+  '    process.stdout.write(JSON.stringify([{ name: filter, path: directory }]));',
+  '  }',
   '  process.exit(0);',
   '}',
   '',
@@ -62,6 +69,8 @@ const stubPnpmSource = [
   "process.exit(listed('STUB_FAIL') ? 1 : 0);",
   '',
 ].join('\n');
+
+const stubFilters = ['@workshop/api', '@workshop/web'] as const;
 
 function environmentWithoutExecPath(): Record<string, string> {
   const entries = Object.entries(process.env).filter(
@@ -82,18 +91,36 @@ async function runRunner(options: {
   fail?: readonly string[];
   flood?: readonly string[];
   missing?: readonly string[];
+  scriptless?: readonly string[];
   execPath?: 'stub' | 'absent';
 }): Promise<RunnerObservation> {
   const scratch = await mkdtemp(path.join(tmpdir(), 'roadmap-learner-runner-'));
   scratchRoots.push(scratch);
   const stubPath = path.join(scratch, 'stub-pnpm.cjs');
   const logPath = path.join(scratch, 'invocations.log');
+  const projectRoot = path.join(scratch, 'projects');
   await writeFile(stubPath, stubPnpmSource, 'utf8');
   await writeFile(logPath, '', 'utf8');
+
+  // Each stubbed project gets a real manifest, because the runner reads one to
+  // confirm the suite declares the script it is about to call.
+  for (const filter of stubFilters) {
+    const directory = path.join(projectRoot, filter.split('/')[1] ?? filter);
+    await mkdir(directory, { recursive: true });
+    const scripts = (options.scriptless ?? []).includes(filter)
+      ? {}
+      : { 'test:learner': 'vitest run' };
+    await writeFile(
+      path.join(directory, 'package.json'),
+      JSON.stringify({ name: filter, scripts }),
+      'utf8',
+    );
+  }
 
   const env: Record<string, string> = {
     ...environmentWithoutExecPath(),
     STUB_LOG: logPath,
+    STUB_PROJECT_ROOT: projectRoot,
     STUB_FAIL: (options.fail ?? []).join(','),
     STUB_FLOOD: (options.flood ?? []).join(','),
     STUB_MISSING: (options.missing ?? []).join(','),
@@ -216,6 +243,21 @@ describe('learner runner behaviour', () => {
   });
 
   /**
+   * A project can match the filter and still not declare the script the runner is
+   * about to call. `pnpm run` reports that as a non-zero exit, which is
+   * indistinguishable from a failing suite — so the runner checks the manifest and
+   * names the real problem instead.
+   */
+  it('reports a located suite with no test:learner script as a runner failure', async () => {
+    const observed = await runRunner({ scriptless: ['@workshop/web'] });
+
+    expect(observed.stderr).toContain('LEARNER_RUNNER_003');
+    expect(observed.stderr).toContain('declares no test:learner script');
+    expect(observed.status).toBe(1);
+    expect(observed.invoked).toEqual(['@workshop/api']);
+  });
+
+  /**
    * Proves the option object is genuinely in force rather than merely present in
    * the source: a suite that writes past `maxBuffer` is killed, and the runner
    * classifies that as its own failure instead of letting it pass for the expected
@@ -328,5 +370,22 @@ describe('generated starter verification scripts', () => {
     const command = scripts['test:learner'];
 
     expect(command).toBe(`vitest run --config vitest.config.ts ${suiteFile}`);
+  });
+
+  /**
+   * The learner suites are reached by package name, so the workspace globs decide
+   * whether they can be found at all. Narrowing them is the quietest way to make
+   * the runner unable to locate a suite, so the globs are pinned rather than merely
+   * documented as protected.
+   */
+  it('keeps the workspace globs that make the learner suites reachable', async () => {
+    const workspace: unknown = parse(
+      await readFile(path.join(starterRoot, 'pnpm-workspace.yaml'), 'utf8'),
+    );
+    if (typeof workspace !== 'object' || workspace === null || !('packages' in workspace)) {
+      throw new Error('the starter workspace must declare packages');
+    }
+
+    expect(workspace.packages).toEqual(['apps/*', 'packages/*']);
   });
 });

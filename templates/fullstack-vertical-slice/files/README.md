@@ -123,8 +123,14 @@ These are the seams the milestone asks you to close. They are declared, not acci
 The `501` response is a declared contract seam. It is what an untouched starter
 answers, not production behavior, and not an error to silence — `test/learner.test.ts`
 requires a `201` from that same endpoint once you have implemented it. The
-infrastructure suite deliberately does **not** pin either status, so completing the
-milestone keeps `verify:baseline` green.
+infrastructure suite does not pin either status, so implementing enrollment leaves
+`verify:baseline` green.
+
+Moving the workshop list onto PostgreSQL is the row that does need a baseline
+change, as described under
+[The two verification commands](#the-two-verification-commands): the suite asserts
+`GET /api/workshops` returns `200`, and a database-free baseline can only keep that
+true once `createApp()` accepts a workshop source and the test injects a fake one.
 
 ## What you may edit
 
