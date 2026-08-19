@@ -35,6 +35,30 @@ function hasNeverPublishedSegment(relativePath: string): boolean {
 }
 
 /**
+ * Environment variables that relocate Git's idea of the repository. With any of
+ * them set, `git -C <templateRoot>` answers about a repository the template root
+ * has nothing to do with, so publication input would be decided by ambient
+ * environment rather than by the template. That is refused rather than reconciled.
+ */
+const gitLocationOverrides = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'] as const;
+
+function activeGitLocationOverride(): string | null {
+  for (const name of gitLocationOverrides) {
+    const value = process.env[name];
+    if (typeof value === 'string' && value.length > 0) return name;
+  }
+  return null;
+}
+
+function isMissingPath(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const { code } = error;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  }
+  return false;
+}
+
+/**
  * Locates the `.git` entry governing `root`, walking upward the way Git itself
  * discovers a repository. A directory (normal clone) and a file (linked worktree)
  * both count.
@@ -43,6 +67,10 @@ function hasNeverPublishedSegment(relativePath: string): boolean {
  * error text: message wording is localized and version-dependent, so classifying
  * failures by string would silently turn a translated "dubious ownership" error
  * into "this template has no repository-owned files".
+ *
+ * Only a genuinely absent path continues the walk. Any other `lstat` failure —
+ * a permission problem on an ancestor, for instance — is reported, because
+ * treating it as absence is how a real repository would get mistaken for none.
  */
 async function discoverGitEntry(root: string): Promise<string | null> {
   let current = path.resolve(root);
@@ -51,7 +79,13 @@ async function discoverGitEntry(root: string): Promise<string | null> {
     try {
       await lstat(candidate);
       return candidate;
-    } catch {
+    } catch (error) {
+      if (!isMissingPath(error)) {
+        throw new Error(
+          `TEMPLATE_INPUT_001:${root}:cannot determine whether ${candidate} exists (${describeFailure(error)})`,
+          { cause: error },
+        );
+      }
       const parent = path.dirname(current);
       if (parent === current) return null;
       current = parent;
@@ -82,6 +116,12 @@ function describeFailure(error: unknown): string {
  * would publish whatever happens to be on disk while looking like a normal run.
  */
 export async function listRepositoryFiles(root: string): Promise<readonly string[] | null> {
+  const override = activeGitLocationOverride();
+  if (override !== null) {
+    throw new Error(
+      `TEMPLATE_INPUT_001:${root}:${override} is set, so Git would answer about a repository other than the template root`,
+    );
+  }
   if ((await discoverGitEntry(root)) === null) return null;
 
   let insideWorkTree: string;

@@ -8,6 +8,11 @@
 //   * Never invents a verdict: each suite's real stdout and stderr are printed
 //     verbatim, so the stable diagnostic codes come from the tests themselves
 //     rather than from this runner.
+//   * A suite that cannot be found has NOT passed. `pnpm --filter` exits 0 when
+//     no project matches, so a renamed package or a narrowed
+//     `pnpm-workspace.yaml` would otherwise report an unevaluated contract as
+//     satisfied and make an untouched starter read green. Each suite is located
+//     before it is run, and the run itself adds `--fail-if-no-match`.
 //
 // Execution model: pnpm is located through npm_execpath and invoked as an
 // argument to the current Node binary with shell: false. Nothing is passed
@@ -33,6 +38,42 @@ if (!pnpmExecPath) {
   process.exit(2);
 }
 
+/** Every pnpm invocation this runner makes shares one bounded, shell-free shape. */
+function runPnpm(args) {
+  return spawnSync(process.execPath, [pnpmExecPath, ...args], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: process.env,
+    shell: false,
+    timeout: SUITE_TIMEOUT_MS,
+    maxBuffer: SUITE_MAX_BUFFER_BYTES,
+  });
+}
+
+/**
+ * Confirms a declared suite exists as a workspace project.
+ *
+ * `pnpm list --json` answers structurally — an array of matched projects — rather
+ * than through a message this runner would have to parse, so the check does not
+ * depend on pnpm's wording or locale.
+ */
+function locateSuite(filter) {
+  const listed = runPnpm(['--filter', filter, 'list', '--depth=-1', '--json']);
+  if (listed.error) return listed.error.message;
+  if (listed.status !== 0) return `pnpm list exited ${listed.status}`;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(listed.stdout);
+  } catch (error) {
+    return `pnpm list did not return JSON (${error.message})`;
+  }
+  if (!Array.isArray(parsed) || !parsed.some((entry) => entry?.name === filter)) {
+    return `no workspace project is named ${filter}`;
+  }
+  return null;
+}
+
 /**
  * Each entry declares the diagnostic code its suite is expected to report while
  * the milestone is unimplemented. The codes are documented here for the reader;
@@ -56,18 +97,16 @@ let failed = false;
 for (const suite of suites) {
   console.log(`\n=== learner contract: ${suite.name} (${suite.declaredDiagnostic}) ===`);
 
-  const result = spawnSync(
-    process.execPath,
-    [pnpmExecPath, '--filter', suite.filter, 'test:learner'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-      env: process.env,
-      shell: false,
-      timeout: SUITE_TIMEOUT_MS,
-      maxBuffer: SUITE_MAX_BUFFER_BYTES,
-    },
-  );
+  const missing = locateSuite(suite.filter);
+  if (missing) {
+    console.error(
+      `LEARNER_RUNNER_003: ${suite.name}: ${missing}; the declared learner suite could not be located, so its contract was NOT evaluated`,
+    );
+    failed = true;
+    continue;
+  }
+
+  const result = runPnpm(['--fail-if-no-match', '--filter', suite.filter, 'test:learner']);
 
   // Print both streams for every suite before deciding anything, so a reader
   // never has to guess which suite produced which output.
@@ -77,6 +116,18 @@ for (const suite of suites) {
   if (result.error) {
     const signal = result.signal ? ` (signal ${result.signal})` : '';
     console.error(`LEARNER_RUNNER_002: ${suite.name}: ${result.error.message}${signal}`);
+    failed = true;
+    continue;
+  }
+
+  // No exit status means the process was terminated rather than finished. That is
+  // a runner problem, and reporting it as an unimplemented milestone would be a
+  // lie in the learner's favour.
+  if (result.status === null) {
+    const signal = result.signal ? ` (signal ${result.signal})` : '';
+    console.error(
+      `LEARNER_RUNNER_002: ${suite.name}: the suite was terminated without an exit status${signal}`,
+    );
     failed = true;
     continue;
   }

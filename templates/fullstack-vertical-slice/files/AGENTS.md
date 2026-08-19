@@ -45,9 +45,12 @@ freely; never weaken, skip, delete, or route around them.
 ```text
 apps/api/test/learner.test.ts     add cases; keep LEARNER_API_ENROLLMENT_001 intact
 apps/web/test/learner.test.tsx    add cases; keep LEARNER_WEB_ENROLLMENT_001 intact
+apps/*/package.json               the test:learner script each suite is reached through
 scripts/verify-learner.mjs        the aggregate learner-contract runner
 package.json                      the verification-script contract described below
+pnpm-workspace.yaml               the projects the learner suites are found in
 .github/workflows/verify.yml      the baseline and learner-contract jobs and their triggers
+packages/contracts/test/dependency-policy.ts   the dependency-boundary implementation
 evidence/**                       the evidence requirements in evidence/README.md
 .roadmap/**                       generated provenance for this template
 ```
@@ -58,8 +61,13 @@ In `package.json`: `verify:baseline` must keep running `check`,
 `&&` so a failing learner contract fails the command.
 
 Downgrading the `learner-contract` job to `pnpm verify:baseline`, narrowing its
-trigger so it never runs, or adding `continue-on-error` is the same offence as
+triggers so it never runs, or adding `continue-on-error` is the same offence as
 deleting the test. So is rewriting `verify` to stop at the baseline.
+
+Renaming a workspace package, or narrowing `pnpm-workspace.yaml`, so that a
+declared learner suite can no longer be found is the same offence again. The
+runner reports that as `LEARNER_RUNNER_003` rather than as a pass, but do not go
+looking for the next version of that trick.
 
 Acceptance contracts and rubric criteria are equally out of bounds. An assistant
 may argue that a criterion is wrong; it may not restate the criterion to match
@@ -87,8 +95,19 @@ They must not be:
   criterion is genuinely database-specific
 - rewritten to fit a failing implementation
 
-The last point is the one that matters. Updating an infrastructure test because
-the architecture moved is legitimate. Updating one because it went red is not.
+Two of these updates are expected rather than suspicious. When the workshop list
+starts reading from PostgreSQL, `apps/api/test/infrastructure.test.ts` can only
+keep asserting `200` in a database-free baseline if `createApp()` accepts a
+workshop source and the test injects a fake one; that assertion is about HTTP
+transport, not about the database, so a fake belongs there. Likewise, adding a
+required environment variable means adding it to the `loadConfig` expectations.
+Neither is a bypass. The database-specific invariants still need a real
+PostgreSQL server, in a suite that says so.
+
+What remains forbidden is changing an assertion to conceal a defect: relaxing a
+status, deleting a case, or widening a matcher because the implementation is
+wrong. Rewriting a test because the architecture moved is legitimate; rewriting
+one because it is telling you the truth is not.
 
 If a control seems wrong, say so and explain why. Do not edit around it.
 

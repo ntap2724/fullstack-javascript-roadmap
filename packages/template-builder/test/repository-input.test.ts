@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   listRepositoryFiles,
   listSourceFiles,
@@ -15,6 +15,7 @@ const run = promisify(execFile);
 const scratchRoots: string[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     scratchRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -249,4 +250,22 @@ describe('Git failure handling', () => {
     expect(files?.some((entry) => entry.includes('node_modules'))).toBe(false);
     expect(files?.some((entry) => entry.includes('dist'))).toBe(false);
   });
+
+  /**
+   * `GIT_DIR` and friends relocate Git's idea of the repository, so `git -C
+   * <templateRoot>` would answer about a different tree entirely. Neither branch is
+   * safe: trusting it publishes another repository's file list, and falling back to
+   * the walk publishes whatever is on disk. Refusing is the only honest answer.
+   */
+  it.each(['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'])(
+    'refuses to enumerate when %s relocates the repository',
+    async (variable) => {
+      const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });
+      const elsewhere = await createTemplate({ git: true });
+      vi.stubEnv(variable, path.join(elsewhere, '.git'));
+
+      await expect(listRepositoryFiles(root)).rejects.toThrow(/TEMPLATE_INPUT_001/);
+      await expect(selectPublicationFiles(root)).rejects.toThrow(new RegExp(variable));
+    },
+  );
 });

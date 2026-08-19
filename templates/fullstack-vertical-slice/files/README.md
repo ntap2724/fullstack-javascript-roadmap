@@ -48,10 +48,22 @@ clone.
 yet. **It is expected to fail until you implement enrollment.** A failing `pnpm verify` on day one
 is the correct starting state, not a problem to route around.
 
-`pnpm verify:baseline` stays green throughout. It asserts scaffolding — construction, routing,
-headers, wire schemas, package boundaries, configuration parsing — and never the unfinished
-behavior itself, so implementing the milestone turns `pnpm verify` green without turning the
-baseline red.
+The baseline does **not** pin the enrollment seam, so implementing enrollment turns `pnpm verify`
+green without turning the baseline red.
+
+Two baseline assertions in `apps/api/test/infrastructure.test.ts` will need your attention as you
+go further. Updating them is expected work, not a bypass:
+
+- It asserts `GET /api/workshops` returns `200`. Once that route reads from PostgreSQL, the
+  database-free baseline can only stay green if `createApp()` accepts a workshop source and this
+  test injects a fake one. The invariants that are genuinely about the database — the unique
+  enrollment constraint, the capacity transaction — belong in a separate suite that requires a
+  real server, not in the baseline.
+- It asserts `loadConfig` returns exactly today's five variables. When you add a required variable,
+  add it on both sides.
+
+Both are transport-level assertions about scaffolding, so substituting a fake source is legitimate
+there. See `AGENTS.md`.
 
 The failure you should see names two stable diagnostic codes:
 
@@ -61,8 +73,14 @@ LEARNER_WEB_ENROLLMENT_001   the web Enroll workflow does not exist yet
 ```
 
 Both appear on every run, because `pnpm test:learner` runs the API suite and the web suite even
-when the API suite fails first. If you instead see `LEARNER_RUNNER_001` or `LEARNER_RUNNER_002`,
-the runner itself could not execute — that is a setup problem, not the expected learner failure.
+when the API suite fails first. A `LEARNER_RUNNER_*` code instead means the runner itself could not
+do its job — a setup problem, not the expected learner failure:
+
+```text
+LEARNER_RUNNER_001   this command was not run through pnpm
+LEARNER_RUNNER_002   a suite hung, flooded its output, or was killed
+LEARNER_RUNNER_003   a declared suite could not be found, so it was never evaluated
+```
 
 ## Architecture map
 
@@ -120,26 +138,30 @@ evidence/**                  your own evidence records
 
 You may **add** cases to `apps/api/test/learner.test.ts` and `apps/web/test/learner.test.tsx`.
 
-The infrastructure tests are yours to maintain as the architecture moves — they
-assert scaffolding, not unfinished behavior, so implementing the milestone should
-not turn them red. Updating one because it no longer describes your architecture is
-normal work. Updating one because it went red is not. See `AGENTS.md`.
+The infrastructure tests are yours to maintain as the architecture moves. They assert scaffolding,
+not unfinished behavior, so implementing enrollment does not turn them red — but two of them do
+need updating when you move the workshop list onto PostgreSQL or add a required environment
+variable, as described above. Updating one because your architecture changed is normal work.
+Updating one to hide a defect in your code is not. See `AGENTS.md`.
 
 ## What you must not defeat
 
 ```text
-apps/api/test/learner.test.ts     the API enrollment contract
-apps/web/test/learner.test.tsx    the web enrollment contract
-scripts/verify-learner.mjs        the learner-contract runner
-package.json                      the verify:baseline / test:learner / verify contract
-.github/workflows/verify.yml      the baseline and learner-contract jobs
-.roadmap/                         generated provenance for this template
+apps/api/test/learner.test.ts        the API enrollment contract
+apps/web/test/learner.test.tsx       the web enrollment contract
+apps/*/package.json                  the test:learner script each suite is reached through
+scripts/verify-learner.mjs           the learner-contract runner
+package.json                         the verify:baseline / test:learner / verify contract
+pnpm-workspace.yaml                  the projects the learner suites are found in
+.github/workflows/verify.yml          the baseline and learner-contract jobs and their triggers
+packages/contracts/test/dependency-policy.ts   the dependency-boundary implementation
+.roadmap/                            generated provenance for this template
 ```
 
-Do not weaken the existing learner assertions to obtain a green run, and do not
-reach the same result indirectly — by pointing the `learner-contract` job at
-`pnpm verify:baseline`, by narrowing its trigger, or by rewriting `verify` to stop
-at the baseline. The commands exist to tell you the truth about your code.
+Do not weaken the existing learner assertions to obtain a green run, and do not reach the same
+result indirectly — by pointing the `learner-contract` job at `pnpm verify:baseline`, by narrowing
+its triggers, by rewriting `verify` to stop at the baseline, or by renaming a package so its suite
+can no longer be found. The commands exist to tell you the truth about your code.
 
 ## Continuous integration
 
@@ -198,12 +220,15 @@ Toàn bộ tài liệu và mã nguồn trong kho này dùng tiếng Anh, vì đ�
 liệu kỹ thuật thực tế. Một vài điểm cần nhớ:
 
 - `pnpm verify:baseline` phải chạy đúng ngay từ đầu. Nếu nó hỏng, đó là lỗi của starter.
-- `pnpm verify:baseline` cũng phải luôn xanh về sau: nó chỉ kiểm tra phần khung (scaffolding), nên
-  khi bạn hoàn thành enrollment nó vẫn xanh.
+- `pnpm verify:baseline` không kiểm tra phần enrollment còn thiếu, nên khi bạn hoàn thành enrollment
+  nó vẫn xanh. Riêng hai bài kiểm tra trong `apps/api/test/infrastructure.test.ts` (mã trạng thái
+  `200` của `GET /api/workshops`, và danh sách biến môi trường của `loadConfig`) sẽ cần bạn cập nhật
+  khi chuyển sang PostgreSQL hoặc khi thêm biến môi trường bắt buộc. Việc cập nhật đó là hợp lệ.
 - `pnpm verify` sẽ **thất bại** cho đến khi bạn hoàn thành phần enrollment. Đó là điều bình thường.
 - Hai mã `LEARNER_API_ENROLLMENT_001` và `LEARNER_WEB_ENROLLMENT_001` là phần việc của bạn.
-  Mã `LEARNER_RUNNER_001` hoặc `LEARNER_RUNNER_002` nghĩa là môi trường chạy sai, không phải bài học.
+  Các mã `LEARNER_RUNNER_001`, `LEARNER_RUNNER_002` hoặc `LEARNER_RUNNER_003` nghĩa là môi trường
+  chạy sai, không phải bài học.
 - Không được xóa hoặc làm yếu các bài kiểm tra learner, `scripts/verify-learner.mjs`,
-  `package.json`, hay `.github/workflows/verify.yml` để có kết quả xanh. Các bài kiểm tra
-  infrastructure thì được phép cập nhật khi kiến trúc thay đổi — xem `AGENTS.md`.
+  `package.json`, `pnpm-workspace.yaml`, hay `.github/workflows/verify.yml` để có kết quả xanh. Các
+  bài kiểm tra infrastructure thì được phép cập nhật khi kiến trúc thay đổi — xem `AGENTS.md`.
 - Kho này là bản xem trước kỹ thuật. Hoàn thành nó không có nghĩa là bạn đã sẵn sàng đi làm.

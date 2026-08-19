@@ -69,6 +69,7 @@ const AcceptanceContractSchema = z
             path: z.string().min(1),
             status: z.number().int().positive(),
             code: z.string().min(1),
+            message: z.string().min(1),
           })
           .strict(),
       })
@@ -114,6 +115,7 @@ const expectedSeams = {
     path: '/api/workshops/00000000-0000-4000-8000-000000000001/enrollments',
     status: 501,
     code: 'ENROLLMENT_NOT_IMPLEMENTED',
+    message: 'Complete the authenticated transactional enrollment workflow',
   },
 } as const;
 
@@ -236,7 +238,23 @@ const requiredLearnerDiagnostics = [
   'LEARNER_WEB_ENROLLMENT_001',
 ] as const;
 
-const forbiddenRunnerDiagnostics = ['LEARNER_RUNNER_001', 'LEARNER_RUNNER_002'] as const;
+/**
+ * Evidence that each declared suite actually ran and actually failed.
+ *
+ * The diagnostic codes alone are not that evidence: the runner prints them in its
+ * own per-suite header, so they appear even on a green run. These lines are emitted
+ * only after a suite has been located, executed, and observed to exit non-zero.
+ */
+const requiredSuiteResults = [
+  '--- api learner contract: NOT SATISFIED',
+  '--- web learner contract: NOT SATISFIED',
+] as const;
+
+const forbiddenRunnerDiagnostics = [
+  'LEARNER_RUNNER_001',
+  'LEARNER_RUNNER_002',
+  'LEARNER_RUNNER_003',
+] as const;
 
 /**
  * Markers that would mean the learner verification failed for the wrong reason.
@@ -337,7 +355,14 @@ function seamProbeSource(): string {
     "  it('answers the enrollment seam with the declared incomplete response', async () => {",
     `    const response = await request(createApp()).post(${JSON.stringify(enrollment.path)});`,
     `    expect(response.status).toBe(${String(enrollment.status)});`,
-    `    expect(ApiErrorSchema.parse(response.body).code).toBe(${JSON.stringify(enrollment.code)});`,
+    // The whole error body is asserted, not just the code: the message tells the
+    // learner what to build, and the echoed request ID is what makes a failure
+    // traceable. Both were covered before this proof moved out of the starter.
+    `    expect(ApiErrorSchema.parse(response.body)).toEqual({`,
+    `      code: ${JSON.stringify(enrollment.code)},`,
+    `      message: ${JSON.stringify(enrollment.message)},`,
+    `      requestId: response.headers['x-request-id'],`,
+    '    });',
     '  });',
     '});',
     '',
@@ -354,12 +379,15 @@ function seamProbeSource(): string {
 async function assertUntouchedSeamContract(artifactRoot: string): Promise<readonly string[]> {
   const probeRelativePath = 'test/__publication-seam-probe__.test.ts';
   const probePath = path.join(artifactRoot, 'apps', 'api', probeRelativePath);
-  await writeFile(probePath, seamProbeSource(), 'utf8');
   try {
+    // Inside the `try` so a starter without the expected test directory produces a
+    // diagnostic rather than an unhandled stack trace.
+    await writeFile(probePath, seamProbeSource(), 'utf8');
     const probe = await observe(
       'the untouched-seam probe',
       pnpmCommand(),
       [
+        '--fail-if-no-match',
         '--filter',
         '@workshop/api',
         'exec',
@@ -380,6 +408,9 @@ async function assertUntouchedSeamContract(artifactRoot: string): Promise<readon
       ];
     }
     return [];
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown failure';
+    return [`TEMPLATE_SEAM_001: the untouched-seam probe could not be installed (${detail})`];
   } finally {
     await rm(probePath, { force: true });
   }
@@ -444,7 +475,14 @@ async function assertGeneratedStarterContract(artifactRoot: string): Promise<Sta
   for (const code of requiredLearnerDiagnostics) {
     if (!output.includes(code)) {
       failures.push(
-        `TEMPLATE_LEARNER_003: pnpm verify output does not contain ${code}; the corresponding learner suite did not run or did not report its contract`,
+        `TEMPLATE_LEARNER_003: pnpm verify output does not contain ${code}; the declared learner diagnostic was never reported`,
+      );
+    }
+  }
+  for (const marker of requiredSuiteResults) {
+    if (!output.includes(marker)) {
+      failures.push(
+        `TEMPLATE_LEARNER_008: pnpm verify output does not contain "${marker}"; that suite was not observed to run and fail, so its contract is unproven`,
       );
     }
   }

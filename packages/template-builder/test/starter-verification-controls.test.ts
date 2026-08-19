@@ -35,14 +35,24 @@ afterEach(async () => {
 /**
  * Stands in for pnpm. The runner locates pnpm through `npm_execpath` and runs it
  * as an argument to the current Node binary, so a plain script is a faithful
- * substitute: it records the suite it was asked to run and then behaves as the
- * case under test requires.
+ * substitute.
+ *
+ * It models the two invocations the runner makes and, critically, pnpm's real
+ * no-match semantics: `pnpm --filter <unmatched>` succeeds and `pnpm list` returns
+ * an empty array, which is exactly how an unevaluated suite could be mistaken for
+ * a passing one.
  */
 const stubPnpmSource = [
   "const { appendFileSync, writeSync } = require('node:fs');",
   "const filter = process.argv[process.argv.indexOf('--filter') + 1];",
-  "appendFileSync(process.env.STUB_LOG, filter + '\\n');",
   "const listed = (name) => (process.env[name] ?? '').split(',').includes(filter);",
+  '',
+  "if (process.argv.includes('list')) {",
+  "  process.stdout.write(listed('STUB_MISSING') ? '[]' : JSON.stringify([{ name: filter }]));",
+  '  process.exit(0);',
+  '}',
+  '',
+  "appendFileSync(process.env.STUB_LOG, filter + '\\n');",
   "if (listed('STUB_FLOOD')) {",
   "  const chunk = 'x'.repeat(1024 * 1024);",
   '  for (let index = 0; index < 17; index += 1) writeSync(1, chunk);',
@@ -71,6 +81,7 @@ interface RunnerObservation {
 async function runRunner(options: {
   fail?: readonly string[];
   flood?: readonly string[];
+  missing?: readonly string[];
   execPath?: 'stub' | 'absent';
 }): Promise<RunnerObservation> {
   const scratch = await mkdtemp(path.join(tmpdir(), 'roadmap-learner-runner-'));
@@ -85,6 +96,7 @@ async function runRunner(options: {
     STUB_LOG: logPath,
     STUB_FAIL: (options.fail ?? []).join(','),
     STUB_FLOOD: (options.flood ?? []).join(','),
+    STUB_MISSING: (options.missing ?? []).join(','),
   };
   if (options.execPath !== 'absent') env.npm_execpath = stubPath;
 
@@ -141,7 +153,18 @@ describe('learner runner subprocess limits', () => {
 
     expect(call).toContain('shell: false,');
     expect(call).toContain('process.execPath,');
-    expect(call).toContain("[pnpmExecPath, '--filter', suite.filter, 'test:learner'],");
+    expect(call).toContain('[pnpmExecPath, ...args],');
+  });
+
+  it('locates each suite and refuses to let pnpm succeed on no match', async () => {
+    const source = await readFile(runnerPath, 'utf8');
+
+    // `pnpm --filter <unmatched>` exits 0, so the runner must not infer success
+    // from an exit status alone. It asks pnpm which projects matched, and it also
+    // passes --fail-if-no-match so the run itself cannot come back green empty.
+    expect(source).toContain("['--filter', filter, 'list', '--depth=-1', '--json']");
+    expect(source).toContain("['--fail-if-no-match', '--filter', suite.filter, 'test:learner']");
+    expect(source).toContain('LEARNER_RUNNER_003');
   });
 });
 
@@ -166,6 +189,30 @@ describe('learner runner behaviour', () => {
     expect(observed.status).toBe(2);
     expect(observed.stderr).toContain('LEARNER_RUNNER_001');
     expect(observed.invoked).toEqual([]);
+  });
+
+  /**
+   * The false-green regression. `pnpm --filter <unmatched> test:learner` exits 0,
+   * so renaming a workspace package — or narrowing `pnpm-workspace.yaml` — used to
+   * make the runner report an unevaluated contract as satisfied and hand back a
+   * green `pnpm verify` on an untouched starter.
+   */
+  it('reports a declared suite that cannot be found as a runner failure', async () => {
+    const observed = await runRunner({ missing: ['@workshop/api'], fail: ['@workshop/web'] });
+
+    expect(observed.stderr).toContain('LEARNER_RUNNER_003');
+    expect(observed.stderr).toContain('@workshop/api');
+    expect(observed.status).toBe(1);
+    // The missing suite was never executed, and the remaining suite still was.
+    expect(observed.invoked).toEqual(['@workshop/web']);
+  });
+
+  it('never reports a suite it could not find as satisfied', async () => {
+    const observed = await runRunner({ missing: ['@workshop/api', '@workshop/web'] });
+
+    expect(observed.status).toBe(1);
+    expect(observed.invoked).toEqual([]);
+    expect(observed.stderr).not.toContain('learner contract: satisfied');
   });
 
   /**
@@ -237,15 +284,18 @@ describe('generated starter verification scripts', () => {
     expect(verify).toContain('test:learner');
     expect(verify.indexOf('verify:baseline')).toBeLessThan(verify.indexOf('test:learner'));
     // `&&` is what makes the learner result decide the command's exit status.
-    // `||` or `;` would let a red learner contract read as success.
+    // Strip the legitimate `&&` operators and nothing shell-significant may remain:
+    // `||`, `;`, a pipe into another process, or a single `&` would each let a red
+    // learner contract read as success.
     expect(verify).toContain('&&');
-    expect(verify).not.toContain('||');
-    expect(verify).not.toContain(';');
+    expect(verify.replaceAll('&&', '')).not.toMatch(/[|;&]/);
   });
 
   it('never tolerates a non-zero exit in any declared script', async () => {
     for (const [name, command] of Object.entries(await starterScripts())) {
-      expect(command, name).not.toMatch(/\|\|\s*true|\|\|\s*exit\s+0|continue-on-error|set \+e/);
+      expect(command, name).not.toMatch(
+        /\|\|\s*(true|:|exit\s+0)|continue-on-error|set \+e|exit\s+0\s*$/,
+      );
     }
   });
 
@@ -254,5 +304,29 @@ describe('generated starter verification scripts', () => {
 
     expect(test).toContain('test:infrastructure');
     expect(test).toContain('test:learner');
+  });
+
+  /**
+   * The root `test:learner` is only as strong as the per-app scripts it fans out
+   * to. Repointing `apps/web`'s at the infrastructure suite would silently delete
+   * half the learner contract while every root-level check still passed.
+   */
+  it.each([
+    ['apps/api', 'test/learner.test.ts'],
+    ['apps/web', 'test/learner.test.tsx'],
+  ])('routes %s test:learner at its own learner suite', async (packageDirectory, suiteFile) => {
+    const parsed: unknown = JSON.parse(
+      await readFile(path.join(starterRoot, packageDirectory, 'package.json'), 'utf8'),
+    );
+    if (typeof parsed !== 'object' || parsed === null || !('scripts' in parsed)) {
+      throw new Error(`${packageDirectory} must declare a scripts block`);
+    }
+    const { scripts } = parsed;
+    if (typeof scripts !== 'object' || scripts === null || !('test:learner' in scripts)) {
+      throw new Error(`${packageDirectory} must declare a test:learner script`);
+    }
+    const command = scripts['test:learner'];
+
+    expect(command).toBe(`vitest run --config vitest.config.ts ${suiteFile}`);
   });
 });
