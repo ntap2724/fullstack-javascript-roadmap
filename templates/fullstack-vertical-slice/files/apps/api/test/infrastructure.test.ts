@@ -1,5 +1,18 @@
+// Permanent infrastructure suite.
+//
+// Everything asserted here must hold on an untouched starter AND on a finished
+// one. `pnpm verify:baseline` runs this suite, and `pnpm verify` runs
+// `verify:baseline` before the learner contract, so an assertion that pinned
+// unimplemented behaviour would make a completed milestone unverifiable: the
+// baseline would go red at the exact moment the learner succeeded.
+//
+// The initial seams — an empty workshop list and a 501 enrollment response —
+// therefore belong to the learner contract and to the repository-owned
+// publication test, not here. This suite proves the scaffolding: construction,
+// routing, headers, wire schemas, and configuration parsing.
+
 import { Server } from 'node:http';
-import { ApiErrorSchema, WorkshopListResponseSchema } from '@workshop/contracts';
+import { WorkshopListResponseSchema } from '@workshop/contracts';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -35,12 +48,16 @@ describe('API application construction', () => {
     expect(response.body).toEqual({ status: 'ok' });
   });
 
-  it('returns a schema-valid empty workshop list', async () => {
+  it('returns a schema-valid workshop list', async () => {
     const { createApp } = await import('../src/app.js');
     const response = await request(createApp()).get('/api/workshops');
 
     expect(response.status).toBe(200);
-    expect(WorkshopListResponseSchema.parse(response.body)).toEqual({ items: [] });
+    // The payload must satisfy the shared wire contract exactly: the schema is
+    // strict, so an unknown key still fails here. The number of workshops is
+    // deliberately NOT pinned — an untouched starter serves an empty list and a
+    // finished one serves real rows, and both are valid scaffolding states.
+    expect(WorkshopListResponseSchema.parse(response.body).items).toBeInstanceOf(Array);
   });
 
   it('disables the x-powered-by response header', async () => {
@@ -57,18 +74,22 @@ describe('API application construction', () => {
     expect(z.uuid().safeParse(response.headers['x-request-id']).success).toBe(true);
   });
 
-  it('returns the schema-valid incomplete enrollment seam', async () => {
+  it('mounts the enrollment route behind the shared middleware', async () => {
     const { createApp } = await import('../src/app.js');
     const response = await request(createApp()).post(
       '/api/workshops/00000000-0000-4000-8000-000000000001/enrollments',
     );
 
-    expect(response.status).toBe(501);
-    expect(ApiErrorSchema.parse(response.body)).toEqual({
-      code: 'ENROLLMENT_NOT_IMPLEMENTED',
-      message: 'Complete the authenticated transactional enrollment workflow',
-      requestId: response.headers['x-request-id'],
-    });
+    // Stable scaffolding properties: the state-changing enrollment path is
+    // mounted, and the request-ID middleware covers it too.
+    //
+    // The response STATUS is intentionally absent from this suite. It is 501 on an
+    // untouched starter and 201 once enrollment exists; `test/learner.test.ts`
+    // owns that transition, and the repository-owned publication test owns the
+    // initial 501. Asserting a status here — or accepting either one — would
+    // either break a finished milestone or assert nothing at all.
+    expect(response.status).not.toBe(404);
+    expect(z.uuid().safeParse(response.headers['x-request-id']).success).toBe(true);
   });
 });
 

@@ -189,3 +189,64 @@ describe('listRepositoryFiles capability detection', () => {
     ]);
   });
 });
+
+/**
+ * A repository that exists but cannot be read is the dangerous case: unsafe
+ * ownership, malformed configuration, or an unrunnable `git`. Falling back to the
+ * filesystem walk there would publish whatever is on disk — including artifacts
+ * Git was supposed to exclude — while the run still looked normal.
+ *
+ * Malformed `.git/config` is the portable stand-in for that whole class: `git`
+ * refuses every command in the repository, exactly as it does for dubious
+ * ownership, and the repository is unmistakably present.
+ */
+describe('Git failure handling', () => {
+  async function breakGitConfiguration(root: string): Promise<void> {
+    await writeFile(path.join(root, '.git', 'config'), 'this is not = valid config [[\n', 'utf8');
+  }
+
+  it('fails closed instead of falling back when Git cannot read the repository', async () => {
+    const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });
+    await breakGitConfiguration(root);
+
+    await expect(listRepositoryFiles(root)).rejects.toThrow(/TEMPLATE_INPUT_001/);
+  });
+
+  it('does not silently enumerate the filesystem when Git fails', async () => {
+    const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });
+    await addGeneratedArtifacts(root);
+    await breakGitConfiguration(root);
+
+    // The decisive assertion: selection must abort rather than return the walked
+    // file set. A silent fallback would resolve here, and it would carry the
+    // generated artifacts Git had been excluding.
+    await expect(selectPublicationFiles(root)).rejects.toThrow(/TEMPLATE_INPUT_001/);
+  });
+
+  it('reports the underlying Git failure in the diagnostic', async () => {
+    const root = await createTemplate({ git: true });
+    await breakGitConfiguration(root);
+
+    await expect(listRepositoryFiles(root)).rejects.toThrow(/bad config/i);
+  });
+
+  it('still rejects a repository-owned symlink once Git configuration is healthy', async () => {
+    const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });
+    const outsideSecret = path.join(root, 'outside.txt');
+    await writeFile(outsideSecret, 'must never be published\n', 'utf8');
+    await symlink(outsideSecret, path.join(root, 'files', 'escape.txt'), 'file');
+
+    await expect(listSourceFiles(root)).rejects.toThrow(/TEMPLATE_SYMLINK_001/);
+  });
+
+  it('still excludes ignored generated trees once Git configuration is healthy', async () => {
+    const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });
+    await addGeneratedArtifacts(root);
+
+    const files = await listRepositoryFiles(root);
+
+    expect(files).not.toBeNull();
+    expect(files?.some((entry) => entry.includes('node_modules'))).toBe(false);
+    expect(files?.some((entry) => entry.includes('dist'))).toBe(false);
+  });
+});

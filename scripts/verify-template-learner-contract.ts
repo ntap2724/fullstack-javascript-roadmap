@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'yaml';
@@ -53,6 +53,26 @@ const AcceptanceContractSchema = z
       .object({ install: AcceptanceCommandSchema, baseline: AcceptanceCommandSchema })
       .strict(),
     learnerProbe: AcceptanceCommandSchema,
+    untouchedSeams: z
+      .object({
+        workshopList: z
+          .object({
+            method: z.literal('GET'),
+            path: z.string().min(1),
+            status: z.number().int().positive(),
+            body: z.object({ items: z.array(z.unknown()) }).strict(),
+          })
+          .strict(),
+        enrollment: z
+          .object({
+            method: z.literal('POST'),
+            path: z.string().min(1),
+            status: z.number().int().positive(),
+            code: z.string().min(1),
+          })
+          .strict(),
+      })
+      .strict(),
   })
   .loose();
 
@@ -76,6 +96,26 @@ function sameCommand(left: CommandContract, right: CommandContract): boolean {
     left.args.every((value, index) => value === right.args[index])
   );
 }
+
+/**
+ * The seams a freshly generated starter must present.
+ *
+ * These values live here, on the publication side, and never inside the generated
+ * repository. A test shipped to a learner that pinned them would go red the moment
+ * the learner implemented the milestone — the baseline would punish success — so
+ * the learner's permanent suite asserts scaffolding and this asserts the starting
+ * point. `acceptance/baseline.yaml` declares the same values for reviewers and is
+ * checked against these constants, so the two cannot drift apart.
+ */
+const expectedSeams = {
+  workshopList: { method: 'GET', path: '/api/workshops', status: 200, body: { items: [] } },
+  enrollment: {
+    method: 'POST',
+    path: '/api/workshops/00000000-0000-4000-8000-000000000001/enrollments',
+    status: 501,
+    code: 'ENROLLMENT_NOT_IMPLEMENTED',
+  },
+} as const;
 
 /**
  * Asserts that the declared source-side baseline contract and the command
@@ -119,6 +159,11 @@ async function assertBaselineCommandContract(): Promise<readonly string[]> {
   if (baselineArgs.length !== 1 || baselineArgs[0] !== 'verify:baseline') {
     failures.push(
       `TEMPLATE_ACCEPTANCE_003: publication baseline args must be exactly ["verify:baseline"], found ${JSON.stringify(baselineArgs)}`,
+    );
+  }
+  if (JSON.stringify(acceptance.untouchedSeams) !== JSON.stringify(expectedSeams)) {
+    failures.push(
+      `TEMPLATE_ACCEPTANCE_004: acceptance/baseline.yaml untouchedSeams ${JSON.stringify(acceptance.untouchedSeams)} does not match the seams this publication test proves ${JSON.stringify(expectedSeams)}`,
     );
   }
   return failures;
@@ -219,12 +264,13 @@ const infrastructureFailureMarkers: readonly { label: string; pattern: RegExp }[
 
 async function observe(
   label: string,
+  command: string,
   args: readonly string[],
   cwd: string,
   timeoutMs: number,
 ): Promise<{ result: CommandResult } | { failure: string }> {
   try {
-    return { result: await runCommand({ command: pnpmCommand(), args, cwd, timeoutMs }) };
+    return { result: await runCommand({ command, args, cwd, timeoutMs }) };
   } catch (error) {
     const detail =
       error instanceof CommandRunnerError
@@ -236,37 +282,154 @@ async function observe(
   }
 }
 
-async function assertGeneratedStarterContract(artifactRoot: string): Promise<readonly string[]> {
+/**
+ * The published verification controls must reach a learner unchanged.
+ *
+ * `packages/template-builder/test/starter-verification-controls.test.ts` pins the
+ * contract these two files express, and it reads the template source. This closes
+ * the remaining gap by proving the source is what materialization actually
+ * delivers, so the contract cannot be asserted against one set of bytes while a
+ * different set ships.
+ */
+async function assertVerificationControlsShipVerbatim(
+  artifactRoot: string,
+): Promise<readonly string[]> {
+  const failures: string[] = [];
+  for (const relativePath of ['package.json', '.github/workflows/verify.yml']) {
+    const source = await readFile(path.join(templateRoot, 'files', relativePath), 'utf8');
+    let generated: string;
+    try {
+      generated = await readFile(path.join(artifactRoot, relativePath), 'utf8');
+    } catch {
+      failures.push(`TEMPLATE_CONTROL_001: generated starter is missing ${relativePath}`);
+      continue;
+    }
+    if (generated !== source) {
+      failures.push(
+        `TEMPLATE_CONTROL_001: generated ${relativePath} differs from the reviewed template source, so its pinned contract does not describe what ships`,
+      );
+    }
+  }
+  return failures;
+}
+
+/**
+ * Builds the seam probe injected into a materialized starter.
+ *
+ * Every value interpolated into the emitted source goes through `JSON.stringify`,
+ * so a seam constant cannot become syntax.
+ */
+function seamProbeSource(): string {
+  const { workshopList, enrollment } = expectedSeams;
+  return [
+    "import { ApiErrorSchema, WorkshopListResponseSchema } from '@workshop/contracts';",
+    "import request from 'supertest';",
+    "import { describe, expect, it } from 'vitest';",
+    "import { createApp } from '../src/app.js';",
+    '',
+    "describe('untouched starter seams', () => {",
+    "  it('serves the declared initial workshop list', async () => {",
+    `    const response = await request(createApp()).get(${JSON.stringify(workshopList.path)});`,
+    `    expect(response.status).toBe(${String(workshopList.status)});`,
+    `    expect(WorkshopListResponseSchema.parse(response.body)).toEqual(${JSON.stringify(workshopList.body)});`,
+    '  });',
+    '',
+    "  it('answers the enrollment seam with the declared incomplete response', async () => {",
+    `    const response = await request(createApp()).post(${JSON.stringify(enrollment.path)});`,
+    `    expect(response.status).toBe(${String(enrollment.status)});`,
+    `    expect(ApiErrorSchema.parse(response.body).code).toBe(${JSON.stringify(enrollment.code)});`,
+    '  });',
+    '});',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Proves the untouched generated starter really does present the declared seams.
+ *
+ * The probe is written into the materialized copy, executed, and deleted. It is
+ * never part of the published file set, so it pins the starting point without ever
+ * constraining a learner who moves past it.
+ */
+async function assertUntouchedSeamContract(artifactRoot: string): Promise<readonly string[]> {
+  const probeRelativePath = 'test/__publication-seam-probe__.test.ts';
+  const probePath = path.join(artifactRoot, 'apps', 'api', probeRelativePath);
+  await writeFile(probePath, seamProbeSource(), 'utf8');
+  try {
+    const probe = await observe(
+      'the untouched-seam probe',
+      pnpmCommand(),
+      [
+        '--filter',
+        '@workshop/api',
+        'exec',
+        'vitest',
+        'run',
+        '--config',
+        'vitest.config.ts',
+        probeRelativePath,
+      ],
+      artifactRoot,
+      300_000,
+    );
+    if ('failure' in probe)
+      return [probe.failure.replace('TEMPLATE_LEARNER_001', 'TEMPLATE_SEAM_001')];
+    if (probe.result.exitCode !== 0) {
+      return [
+        `TEMPLATE_SEAM_002: the untouched starter does not present the declared initial seams (exit ${String(probe.result.exitCode)}): ${`${probe.result.stdout}\n${probe.result.stderr}`.slice(-2000)}`,
+      ];
+    }
+    return [];
+  } finally {
+    await rm(probePath, { force: true });
+  }
+}
+
+interface StarterObservation {
+  failures: readonly string[];
+  /** True once a frozen install succeeded, so further probes can run. */
+  installed: boolean;
+}
+
+async function assertGeneratedStarterContract(artifactRoot: string): Promise<StarterObservation> {
   const failures: string[] = [];
 
   const install = await observe(
     'pnpm install --frozen-lockfile',
+    pnpmCommand(),
     ['install', '--frozen-lockfile'],
     artifactRoot,
     600_000,
   );
-  if ('failure' in install) return [install.failure];
+  if ('failure' in install) return { failures: [install.failure], installed: false };
   if (install.result.exitCode !== 0) {
-    return [
-      `TEMPLATE_LEARNER_006: frozen install failed inside the generated starter (exit ${String(install.result.exitCode)}): ${install.result.stderr.slice(-2000)}`,
-    ];
+    return {
+      failures: [
+        `TEMPLATE_LEARNER_006: frozen install failed inside the generated starter (exit ${String(install.result.exitCode)}): ${install.result.stderr.slice(-2000)}`,
+      ],
+      installed: false,
+    };
   }
 
   const baseline = await observe(
     'pnpm verify:baseline',
+    pnpmCommand(),
     ['verify:baseline'],
     artifactRoot,
     900_000,
   );
-  if ('failure' in baseline) return [baseline.failure];
+  if ('failure' in baseline) return { failures: [baseline.failure], installed: true };
   if (baseline.result.exitCode !== 0) {
-    return [
-      `TEMPLATE_LEARNER_007: verify:baseline must pass on an untouched starter (exit ${String(baseline.result.exitCode)}): ${baseline.result.stderr.slice(-2000)}`,
-    ];
+    return {
+      failures: [
+        `TEMPLATE_LEARNER_007: verify:baseline must pass on an untouched starter (exit ${String(baseline.result.exitCode)}): ${baseline.result.stderr.slice(-2000)}`,
+      ],
+      installed: true,
+    };
   }
 
-  const probe = await observe('pnpm verify', ['verify'], artifactRoot, 900_000);
-  if ('failure' in probe) return [probe.failure];
+  const probe = await observe('pnpm verify', pnpmCommand(), ['verify'], artifactRoot, 900_000);
+  if ('failure' in probe) return { failures: [probe.failure], installed: true };
   if (probe.result.timedOut) {
     failures.push('TEMPLATE_LEARNER_001: pnpm verify timed out inside the generated starter');
   }
@@ -300,7 +463,7 @@ async function assertGeneratedStarterContract(artifactRoot: string): Promise<rea
     }
   }
 
-  return failures;
+  return { failures, installed: true };
 }
 
 async function main(): Promise<void> {
@@ -333,7 +496,17 @@ async function main(): Promise<void> {
     }
 
     failures.push(...(await assertEvidenceExampleIsNotEvidence(built.value)));
-    failures.push(...(await assertGeneratedStarterContract(built.value.root)));
+    failures.push(...(await assertVerificationControlsShipVerbatim(built.value.root)));
+
+    const starter = await assertGeneratedStarterContract(built.value.root);
+    failures.push(...starter.failures);
+    // The seam probe needs a resolved dependency tree. Running it against a
+    // starter that never installed would report a missing module as a missing
+    // seam, so it is skipped only when install itself failed — and that failure is
+    // already recorded above.
+    if (starter.installed) {
+      failures.push(...(await assertUntouchedSeamContract(built.value.root)));
+    }
 
     if (failures.length > 0) {
       console.error(JSON.stringify({ templateId: definition.id, failures }, null, 2));

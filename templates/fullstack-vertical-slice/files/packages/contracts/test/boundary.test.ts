@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { z } from 'zod';
 // Go up 4 levels: test -> contracts -> packages -> files
 const filesRoot = path.join(fileURLToPath(import.meta.url), '..', '..', '..', '..');
 const packagesDir = path.join(filesRoot, 'packages');
+const sourceModuleExtension = /\.[cm]?[jt]sx?$/;
 
 const PackageManifestSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional().default({}),
@@ -21,16 +22,29 @@ async function packageDependencies(packageName: 'contracts' | 'database'): Promi
   return new Set([...Object.keys(manifest.dependencies), ...Object.keys(manifest.devDependencies)]);
 }
 
+async function sourceModules(directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const candidate = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await sourceModules(candidate)));
+    } else if (entry.isFile() && sourceModuleExtension.test(entry.name)) {
+      files.push(candidate);
+    }
+  }
+  return files.sort();
+}
+
+/**
+ * Reads the package's whole source tree, not a fixed list of files. A boundary
+ * that only inspected today's modules would be silent about the module a learner
+ * adds tomorrow — which is exactly where a database type would leak into the
+ * shared wire contracts.
+ */
 async function packageSource(packageName: 'contracts' | 'database'): Promise<string> {
-  const sourceFiles =
-    packageName === 'contracts' ? ['index.ts', 'workshop.ts'] : ['index.ts', 'schema.ts'];
-  return (
-    await Promise.all(
-      sourceFiles.map((fileName) =>
-        readFile(path.join(packagesDir, packageName, 'src', fileName), 'utf8'),
-      ),
-    )
-  ).join('\n');
+  const files = await sourceModules(path.join(packagesDir, packageName, 'src'));
+  expect(files.length, `${packageName} must expose source modules to scan`).toBeGreaterThan(0);
+  return (await Promise.all(files.map((file) => readFile(file, 'utf8')))).join('\n');
 }
 
 describe('dependency boundary policy', () => {

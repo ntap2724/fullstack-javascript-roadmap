@@ -50,6 +50,13 @@ expectations:
       - infrastructure tests
       - build
       - verify:baseline
+    # Deliberately absent from baseline coverage: the initial seam values. The
+    # baseline must stay green after the learner implements the milestone, so it
+    # asserts scaffolding only and never the unfinished behaviour. The seam values
+    # are proven by `untouchedSeams` below instead.
+    excludesByDesign:
+      - the enrollment response status
+      - the number of workshops in the list response
   learnerProbe:
     exit: non-zero
     requiredDiagnostics:
@@ -58,6 +65,27 @@ expectations:
     forbiddenDiagnostics:
       - LEARNER_RUNNER_001
       - LEARNER_RUNNER_002
+
+# Source-owned proof that a freshly generated starter really does ship the declared
+# incomplete seams.
+#
+# This lives on the publication side on purpose. A test shipped inside the learner
+# repository that pinned these values would go red the moment the learner
+# implemented the milestone, which is exactly the trap this section replaces. The
+# publication test asserts these values against a materialized starter and then
+# discards its probe.
+untouchedSeams:
+  workshopList:
+    method: GET
+    path: /api/workshops
+    status: 200
+    body:
+      items: []
+  enrollment:
+    method: POST
+    path: /api/workshops/00000000-0000-4000-8000-000000000001/enrollments
+    status: 501
+    code: ENROLLMENT_NOT_IMPLEMENTED
 
 # The generated repository must satisfy all of these.
 mustSatisfy:

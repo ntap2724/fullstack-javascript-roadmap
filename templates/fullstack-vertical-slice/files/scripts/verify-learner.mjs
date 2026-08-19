@@ -12,8 +12,18 @@
 // Execution model: pnpm is located through npm_execpath and invoked as an
 // argument to the current Node binary with shell: false. Nothing is passed
 // through a shell, so no argument can be reinterpreted as shell syntax.
+//
+// Each suite is bounded in time and in output. A suite that hangs or floods
+// stdout is a RUNNER failure and is reported as one; it is never allowed to
+// masquerade as the expected learner failure, and it never stops the remaining
+// suites from running.
 
 import { spawnSync } from 'node:child_process';
+
+/** A real learner suite finishes in seconds; five minutes is a hang, not slowness. */
+const SUITE_TIMEOUT_MS = 300_000;
+/** Generous for verbose test output, bounded so a runaway suite cannot exhaust memory. */
+const SUITE_MAX_BUFFER_BYTES = 16_777_216;
 
 const pnpmExecPath = process.env.npm_execpath;
 if (!pnpmExecPath) {
@@ -54,6 +64,8 @@ for (const suite of suites) {
       encoding: 'utf8',
       env: process.env,
       shell: false,
+      timeout: SUITE_TIMEOUT_MS,
+      maxBuffer: SUITE_MAX_BUFFER_BYTES,
     },
   );
 
@@ -63,7 +75,8 @@ for (const suite of suites) {
   process.stderr.write(result.stderr ?? '');
 
   if (result.error) {
-    console.error(`LEARNER_RUNNER_002: ${suite.name}: ${result.error.message}`);
+    const signal = result.signal ? ` (signal ${result.signal})` : '';
+    console.error(`LEARNER_RUNNER_002: ${suite.name}: ${result.error.message}${signal}`);
     failed = true;
     continue;
   }

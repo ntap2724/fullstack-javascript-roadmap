@@ -150,3 +150,62 @@ test('verification executes after canonical root preparation', async () => {
     }
   });
 });
+
+/**
+ * The workflow published into a learner repository is itself a verification
+ * control, so it is pinned here alongside this repository's own workflows.
+ *
+ * The bypass this guards against is cheap and quiet: swap the learner-contract
+ * job's `pnpm verify` for `pnpm verify:baseline`, or widen its `if` so the job
+ * never runs, and the repository reads green while the milestone is untouched.
+ */
+test('the generated starter workflow cannot be downgraded into a false green', async () => {
+  const value = parse(
+    await readFile('templates/fullstack-vertical-slice/files/.github/workflows/verify.yml', 'utf8'),
+  );
+
+  assert.deepEqual(value.permissions, { contents: 'read' });
+  assert.ok(value.on && 'push' in value.on, 'the workflow must run on push');
+
+  const jobNames = Object.keys(value.jobs).sort();
+  assert.deepEqual(jobNames, ['baseline', 'learner-contract']);
+  const commands = (job) => value.jobs[job].steps.map((step) => step.run).filter(Boolean);
+
+  // The baseline job proves the scaffolding, so it runs unconditionally and a
+  // freshly generated repository is green on its first push.
+  assert.equal(value.jobs.baseline.if, undefined, 'the baseline job must not be skippable');
+  assert.ok(commands('baseline').includes('pnpm install --frozen-lockfile'));
+  assert.ok(commands('baseline').includes('pnpm verify:baseline'));
+  assert.ok(
+    !commands('baseline').includes('pnpm verify'),
+    'the baseline job must not require a completed milestone',
+  );
+
+  // The learner-contract job proves the milestone, so it runs FULL verification.
+  assert.ok(commands('learner-contract').includes('pnpm verify'));
+  assert.ok(
+    !commands('learner-contract').includes('pnpm verify:baseline'),
+    'the learner-contract job must not be downgraded to the baseline command',
+  );
+  assert.equal(value.jobs['learner-contract'].if, "github.event_name != 'push'");
+
+  for (const job of jobNames) {
+    assert.equal(value.jobs[job]['runs-on'], 'ubuntu-24.04', job);
+    assert.equal(value.jobs[job]['timeout-minutes'], 20, job);
+    assert.equal(
+      value.jobs[job].steps.find((step) => step.uses === 'actions/checkout@v6').with[
+        'persist-credentials'
+      ],
+      false,
+      job,
+    );
+  }
+
+  const text = JSON.stringify(value);
+  assert.doesNotMatch(text, /continue-on-error/i);
+  assert.doesNotMatch(text, /\|\|\s*true|\|\|\s*exit\s+0|set \+e/i);
+  assert.doesNotMatch(
+    text,
+    /secrets\.|contents.{0,20}write|id-token.{0,20}write|packages.{0,20}write/i,
+  );
+});

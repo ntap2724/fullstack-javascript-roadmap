@@ -35,27 +35,78 @@ function hasNeverPublishedSegment(relativePath: string): boolean {
 }
 
 /**
- * Lists the files Git considers part of the repository at `root`: tracked files
- * plus intentional new files that are not ignored. Returns `null` when `root` is
- * not inside a Git work tree, which is a capability answer rather than a failure —
- * the builder's own unit fixtures are plain scratch directories.
+ * Locates the `.git` entry governing `root`, walking upward the way Git itself
+ * discovers a repository. A directory (normal clone) and a file (linked worktree)
+ * both count.
  *
- * A failure *after* Git has confirmed a work tree is a real error and propagates,
- * so a broken Git invocation can never be mistaken for "this template has no
- * repository-owned files".
+ * This is a *structural* capability answer, deliberately not a reading of Git's
+ * error text: message wording is localized and version-dependent, so classifying
+ * failures by string would silently turn a translated "dubious ownership" error
+ * into "this template has no repository-owned files".
+ */
+async function discoverGitEntry(root: string): Promise<string | null> {
+  let current = path.resolve(root);
+  for (;;) {
+    const candidate = path.join(current, '.git');
+    try {
+      await lstat(candidate);
+      return candidate;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+  }
+}
+
+function describeFailure(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'stderr' in error) {
+    const { stderr } = error;
+    if (typeof stderr === 'string' && stderr.trim().length > 0) return stderr.trim();
+  }
+  return error instanceof Error ? error.message : 'unknown failure';
+}
+
+/**
+ * Lists the files Git considers part of the repository at `root`: tracked files
+ * plus intentional new files that are not ignored.
+ *
+ * Returns `null` only when no `.git` entry governs `root` at all. That is a
+ * capability answer rather than a failure — the builder's own unit fixtures are
+ * plain scratch directories — and it is the single documented path to the raw
+ * filesystem walk.
+ *
+ * When a repository *is* present, Git must succeed. Dubious ownership, malformed
+ * configuration, a missing or unrunnable `git`, and permission failures all raise
+ * TEMPLATE_INPUT_001 instead of degrading to the walk, because a fallback there
+ * would publish whatever happens to be on disk while looking like a normal run.
  */
 export async function listRepositoryFiles(root: string): Promise<readonly string[] | null> {
+  if ((await discoverGitEntry(root)) === null) return null;
+
+  let insideWorkTree: string;
   try {
-    await run('git', ['-C', root, 'rev-parse', '--is-inside-work-tree']);
-  } catch {
-    return null;
+    const probe = await run('git', ['-C', root, 'rev-parse', '--is-inside-work-tree']);
+    insideWorkTree = probe.stdout.trim();
+  } catch (error) {
+    throw new Error(`TEMPLATE_INPUT_001:${root}:${describeFailure(error)}`, { cause: error });
   }
-  const { stdout } = await run(
-    'git',
-    ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    { maxBuffer: 32 * 1024 * 1024 },
-  );
-  return stdout.split('\0').filter((entry) => entry.length > 0);
+  if (insideWorkTree !== 'true') {
+    throw new Error(
+      `TEMPLATE_INPUT_001:${root}:a .git entry is present but the path is not inside a work tree (rev-parse reported "${insideWorkTree}")`,
+    );
+  }
+
+  try {
+    const { stdout } = await run(
+      'git',
+      ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      { maxBuffer: 32 * 1024 * 1024 },
+    );
+    return stdout.split('\0').filter((entry) => entry.length > 0);
+  } catch (error) {
+    throw new Error(`TEMPLATE_INPUT_001:${root}:${describeFailure(error)}`, { cause: error });
+  }
 }
 
 async function walk(root: string, current: string): Promise<string[]> {

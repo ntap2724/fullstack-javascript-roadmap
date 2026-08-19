@@ -48,6 +48,11 @@ clone.
 yet. **It is expected to fail until you implement enrollment.** A failing `pnpm verify` on day one
 is the correct starting state, not a problem to route around.
 
+`pnpm verify:baseline` stays green throughout. It asserts scaffolding — construction, routing,
+headers, wire schemas, package boundaries, configuration parsing — and never the unfinished
+behavior itself, so implementing the milestone turns `pnpm verify` green without turning the
+baseline red.
+
 The failure you should see names two stable diagnostic codes:
 
 ```text
@@ -72,9 +77,17 @@ evidence            Your milestone evidence. See evidence/README.md.
 
 Local development ports: web `5173`, API `3000`, PostgreSQL `5432`.
 
-Dependency direction is enforced, not merely documented: `apps/web` must not resolve
-`@workshop/database`, and `packages/contracts` must not export database row types. An
-infrastructure test fails if that boundary is crossed.
+Dependency direction is enforced, not merely documented:
+
+- `apps/web` may resolve `@workshop/contracts` and nothing else under `@workshop/`.
+  `packages/contracts/test/dependency-policy.test.ts` parses `apps/web/package.json` and every
+  module under `apps/web/src/**` — including type-only imports, `export … from`, literal dynamic
+  imports, and `import = require` — and fails if any of them reaches another internal package.
+- `packages/contracts` must not depend on the database package, Drizzle, `pg`, or React, and its
+  source must not name them. `packages/contracts/test/boundary.test.ts` reads both manifests and
+  every module under `packages/contracts/src/**` and `packages/database/src/**`.
+
+Both run inside `pnpm verify:baseline`, so crossing the boundary fails the health check.
 
 ## What is deliberately incomplete
 
@@ -89,8 +102,11 @@ These are the seams the milestone asks you to close. They are declared, not acci
 | CSRF                                          | absent                                               | synchronizer token plus `Origin` validation for state-changing requests |
 | migrations                                    | absent                                               | initial Drizzle migration                                               |
 
-The `501` response is a declared contract seam that the learner test targets. It is not production
-behavior, and it is not an error you should silence.
+The `501` response is a declared contract seam. It is what an untouched starter
+answers, not production behavior, and not an error to silence — `test/learner.test.ts`
+requires a `201` from that same endpoint once you have implemented it. The
+infrastructure suite deliberately does **not** pin either status, so completing the
+milestone keeps `verify:baseline` green.
 
 ## What you may edit
 
@@ -104,19 +120,26 @@ evidence/**                  your own evidence records
 
 You may **add** cases to `apps/api/test/learner.test.ts` and `apps/web/test/learner.test.tsx`.
 
-## What you must not edit
+The infrastructure tests are yours to maintain as the architecture moves — they
+assert scaffolding, not unfinished behavior, so implementing the milestone should
+not turn them red. Updating one because it no longer describes your architecture is
+normal work. Updating one because it went red is not. See `AGENTS.md`.
+
+## What you must not defeat
 
 ```text
-apps/api/test/infrastructure.test.ts       proves the API scaffolding works
-apps/web/test/infrastructure.test.tsx      proves the web scaffolding works
-packages/*/test/infrastructure.test.ts     proves contracts and schema boundaries hold
-packages/contracts/test/dependency-policy*  proves the dependency direction
-scripts/verify-learner.mjs                 the learner-contract runner
-.roadmap/                                  generated provenance for this template
+apps/api/test/learner.test.ts     the API enrollment contract
+apps/web/test/learner.test.tsx    the web enrollment contract
+scripts/verify-learner.mjs        the learner-contract runner
+package.json                      the verify:baseline / test:learner / verify contract
+.github/workflows/verify.yml      the baseline and learner-contract jobs
+.roadmap/                         generated provenance for this template
 ```
 
-Do not delete or weaken the existing learner assertions to obtain a green run. The commands exist
-to tell you the truth about your code.
+Do not weaken the existing learner assertions to obtain a green run, and do not
+reach the same result indirectly — by pointing the `learner-contract` job at
+`pnpm verify:baseline`, by narrowing its trigger, or by rewriting `verify` to stop
+at the baseline. The commands exist to tell you the truth about your code.
 
 ## Continuous integration
 
@@ -175,8 +198,12 @@ Toàn bộ tài liệu và mã nguồn trong kho này dùng tiếng Anh, vì đ�
 liệu kỹ thuật thực tế. Một vài điểm cần nhớ:
 
 - `pnpm verify:baseline` phải chạy đúng ngay từ đầu. Nếu nó hỏng, đó là lỗi của starter.
+- `pnpm verify:baseline` cũng phải luôn xanh về sau: nó chỉ kiểm tra phần khung (scaffolding), nên
+  khi bạn hoàn thành enrollment nó vẫn xanh.
 - `pnpm verify` sẽ **thất bại** cho đến khi bạn hoàn thành phần enrollment. Đó là điều bình thường.
 - Hai mã `LEARNER_API_ENROLLMENT_001` và `LEARNER_WEB_ENROLLMENT_001` là phần việc của bạn.
   Mã `LEARNER_RUNNER_001` hoặc `LEARNER_RUNNER_002` nghĩa là môi trường chạy sai, không phải bài học.
-- Không được xóa hoặc làm yếu bài kiểm tra để có kết quả xanh. Hãy sửa mã nguồn, đừng sửa bài kiểm tra.
+- Không được xóa hoặc làm yếu các bài kiểm tra learner, `scripts/verify-learner.mjs`,
+  `package.json`, hay `.github/workflows/verify.yml` để có kết quả xanh. Các bài kiểm tra
+  infrastructure thì được phép cập nhật khi kiến trúc thay đổi — xem `AGENTS.md`.
 - Kho này là bản xem trước kỹ thuật. Hoàn thành nó không có nghĩa là bạn đã sẵn sàng đi làm.
