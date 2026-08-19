@@ -35,12 +35,19 @@ function hasNeverPublishedSegment(relativePath: string): boolean {
 }
 
 /**
- * Environment variables that relocate Git's idea of the repository. With any of
- * them set, `git -C <templateRoot>` answers about a repository the template root
- * has nothing to do with, so publication input would be decided by ambient
- * environment rather than by the template. That is refused rather than reconciled.
+ * Environment variables that relocate Git's idea of the repository or its index.
+ * With any of them set, `git -C <templateRoot>` answers about a repository — or an
+ * index — the template root has nothing to do with, so publication input would be
+ * decided by ambient environment rather than by the template. That is refused
+ * rather than reconciled: trusting the answer publishes another tree's file list,
+ * and falling back to the walk publishes whatever is on disk.
  */
-const gitLocationOverrides = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'] as const;
+const gitLocationOverrides = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+] as const;
 
 function activeGitLocationOverride(): string | null {
   for (const name of gitLocationOverrides) {

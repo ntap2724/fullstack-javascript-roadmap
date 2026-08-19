@@ -24,7 +24,7 @@
 // suites from running.
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** A real learner suite finishes in seconds; five minutes is a hang, not slowness. */
@@ -53,19 +53,22 @@ function runPnpm(args) {
 }
 
 /**
- * Confirms a declared suite exists as a workspace project AND declares the script
- * this runner is about to call.
+ * Confirms a declared suite exists as a workspace project, declares the script
+ * this runner is about to call, and still contains the suite file that carries its
+ * contract.
  *
  * `pnpm list --json` answers structurally — an array of matched projects, each with
  * its path — rather than through a message this runner would have to parse, so the
  * check does not depend on pnpm's wording or locale.
  *
- * Both halves matter. A missing project and a missing script are runner problems,
- * and reporting either as an unimplemented milestone would be a lie in the
- * learner's favour.
+ * All three halves matter. A missing project, a missing script, and a deleted suite
+ * file are runner problems, and reporting any of them as an unimplemented milestone
+ * would be a lie in the learner's favour. A deleted suite file is the sharpest of
+ * the three: paired with `passWithNoTests`, a test runner reports "no tests" as
+ * success.
  */
-function locateSuite(filter) {
-  const listed = runPnpm(['--filter', filter, 'list', '--depth=-1', '--json']);
+function locateSuite(suite) {
+  const listed = runPnpm(['--filter', suite.filter, 'list', '--depth=-1', '--json']);
   if (listed.error) return listed.error.message;
   if (listed.status !== 0) return `pnpm list exited ${listed.status}`;
 
@@ -77,18 +80,21 @@ function locateSuite(filter) {
   }
   if (!Array.isArray(parsed)) return 'pnpm list did not return an array of projects';
 
-  const project = parsed.find((entry) => entry?.name === filter);
-  if (!project) return `no workspace project is named ${filter}`;
-  if (typeof project.path !== 'string') return `pnpm list reported no path for ${filter}`;
+  const project = parsed.find((entry) => entry?.name === suite.filter);
+  if (!project) return `no workspace project is named ${suite.filter}`;
+  if (typeof project.path !== 'string') return `pnpm list reported no path for ${suite.filter}`;
 
   let manifest;
   try {
     manifest = JSON.parse(readFileSync(join(project.path, 'package.json'), 'utf8'));
   } catch (error) {
-    return `cannot read the package manifest for ${filter} (${error.message})`;
+    return `cannot read the package manifest for ${suite.filter} (${error.message})`;
   }
   if (typeof manifest.scripts?.['test:learner'] !== 'string') {
-    return `${filter} declares no test:learner script`;
+    return `${suite.filter} declares no test:learner script`;
+  }
+  if (!existsSync(join(project.path, suite.suiteFile))) {
+    return `${suite.filter} no longer contains ${suite.suiteFile}`;
   }
   return null;
 }
@@ -102,11 +108,13 @@ const suites = [
   {
     name: 'api',
     filter: '@workshop/api',
+    suiteFile: 'test/learner.test.ts',
     declaredDiagnostic: 'LEARNER_API_ENROLLMENT_001',
   },
   {
     name: 'web',
     filter: '@workshop/web',
+    suiteFile: 'test/learner.test.tsx',
     declaredDiagnostic: 'LEARNER_WEB_ENROLLMENT_001',
   },
 ];
@@ -116,7 +124,7 @@ let failed = false;
 for (const suite of suites) {
   console.log(`\n=== learner contract: ${suite.name} (${suite.declaredDiagnostic}) ===`);
 
-  const missing = locateSuite(suite.filter);
+  const missing = locateSuite(suite);
   if (missing) {
     console.error(
       `LEARNER_RUNNER_003: ${suite.name}: ${missing}; the declared learner suite could not be located, so its contract was NOT evaluated`,

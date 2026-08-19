@@ -155,9 +155,12 @@ test('verification executes after canonical root preparation', async () => {
  * The workflow published into a learner repository is itself a verification
  * control, so it is pinned here alongside this repository's own workflows.
  *
- * The bypass this guards against is cheap and quiet: swap the learner-contract
- * job's `pnpm verify` for `pnpm verify:baseline`, or widen its `if` so the job
- * never runs, and the repository reads green while the milestone is untouched.
+ * The bypass this guards against is cheap and quiet, and it has several depths:
+ * swap the learner-contract job's `pnpm verify` for `pnpm verify:baseline`, widen
+ * its job-level `if`, filter its trigger so no pull request matches, skip the step
+ * that runs it, or give the job an empty matrix. Each leaves the repository reading
+ * green while the milestone is untouched, so the artifact is pinned whole rather
+ * than checked bypass by bypass.
  */
 test('the generated starter workflow cannot be downgraded into a false green', async () => {
   const value = parse(
@@ -204,6 +207,18 @@ test('the generated starter workflow cannot be downgraded into a false green', a
       false,
       job,
     );
+    // A step that never runs does not fail its job, so a step-level `if` is the
+    // quiet version of widening the job-level one. An empty `strategy` matrix
+    // produces zero jobs and reports success the same way.
+    assert.equal(value.jobs[job].strategy, undefined, job);
+    for (const [index, step] of value.jobs[job].steps.entries()) {
+      assert.equal(step.if, undefined, `${job} step ${String(index)} must not be conditional`);
+      assert.equal(
+        step['continue-on-error'],
+        undefined,
+        `${job} step ${String(index)} must not tolerate failure`,
+      );
+    }
   }
 
   const text = JSON.stringify(value);
@@ -213,4 +228,42 @@ test('the generated starter workflow cannot be downgraded into a false green', a
     text,
     /secrets\.|contents.{0,20}write|id-token.{0,20}write|packages.{0,20}write/i,
   );
+
+  // Backstop. Every assertion above names a bypass someone actually tried; this one
+  // closes the class by declaring the whole artifact. GitHub Actions offers many
+  // ways to make a step or job not decide the result — `if`, `strategy`, `needs`,
+  // `continue-on-error`, a filtered trigger — and enumerating them has now been
+  // insufficient twice. Any intentional change to the starter workflow must be
+  // restated here.
+  const toolchainSteps = [
+    { uses: 'actions/checkout@v6', with: { 'persist-credentials': false } },
+    { uses: 'pnpm/action-setup@v6', with: { run_install: false } },
+    {
+      uses: 'actions/setup-node@v6',
+      with: {
+        'node-version-file': '.node-version',
+        cache: 'pnpm',
+        'cache-dependency-path': 'pnpm-lock.yaml',
+      },
+    },
+    { run: 'pnpm install --frozen-lockfile' },
+  ];
+  assert.deepEqual(value, {
+    name: 'Verify',
+    on: { push: null, pull_request: null, workflow_dispatch: null },
+    permissions: { contents: 'read' },
+    jobs: {
+      baseline: {
+        'runs-on': 'ubuntu-24.04',
+        'timeout-minutes': 20,
+        steps: [...toolchainSteps, { run: 'pnpm verify:baseline' }],
+      },
+      'learner-contract': {
+        if: "github.event_name != 'push'",
+        'runs-on': 'ubuntu-24.04',
+        'timeout-minutes': 20,
+        steps: [...toolchainSteps, { run: 'pnpm verify' }],
+      },
+    },
+  });
 });

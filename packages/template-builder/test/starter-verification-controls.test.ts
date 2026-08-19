@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +16,10 @@ import { parse } from 'yaml';
  * inside `pnpm verify:templates`, which does not.
  *
  * The subject is the template source. Materialization copies `files/**` verbatim,
- * and the publication test asserts that these two files reach the generated
- * repository byte-for-byte, so asserting the contract once here is enough.
+ * and `assertVerificationControlsShipVerbatim` in
+ * scripts/verify-template-learner-contract.ts proves that the runner, the root
+ * manifest, and the workflow reach the generated repository byte-for-byte, so
+ * asserting the contract once here is enough.
  */
 
 const starterRoot = fileURLToPath(
@@ -70,7 +72,10 @@ const stubPnpmSource = [
   '',
 ].join('\n');
 
-const stubFilters = ['@workshop/api', '@workshop/web'] as const;
+const stubFilters = [
+  { filter: '@workshop/api', suiteFile: 'test/learner.test.ts' },
+  { filter: '@workshop/web', suiteFile: 'test/learner.test.tsx' },
+] as const;
 
 function environmentWithoutExecPath(): Record<string, string> {
   const entries = Object.entries(process.env).filter(
@@ -83,6 +88,7 @@ function environmentWithoutExecPath(): Record<string, string> {
 interface RunnerObservation {
   status: number | null;
   signal: NodeJS.Signals | null;
+  stdout: string;
   stderr: string;
   invoked: readonly string[];
 }
@@ -92,6 +98,7 @@ async function runRunner(options: {
   flood?: readonly string[];
   missing?: readonly string[];
   scriptless?: readonly string[];
+  suiteless?: readonly string[];
   execPath?: 'stub' | 'absent';
 }): Promise<RunnerObservation> {
   const scratch = await mkdtemp(path.join(tmpdir(), 'roadmap-learner-runner-'));
@@ -102,11 +109,12 @@ async function runRunner(options: {
   await writeFile(stubPath, stubPnpmSource, 'utf8');
   await writeFile(logPath, '', 'utf8');
 
-  // Each stubbed project gets a real manifest, because the runner reads one to
-  // confirm the suite declares the script it is about to call.
-  for (const filter of stubFilters) {
+  // Each stubbed project gets a real manifest and a real suite file, because the
+  // runner reads the manifest for the script it is about to call and checks that the
+  // suite carrying the contract still exists.
+  for (const { filter, suiteFile } of stubFilters) {
     const directory = path.join(projectRoot, filter.split('/')[1] ?? filter);
-    await mkdir(directory, { recursive: true });
+    await mkdir(path.join(directory, path.dirname(suiteFile)), { recursive: true });
     const scripts = (options.scriptless ?? []).includes(filter)
       ? {}
       : { 'test:learner': 'vitest run' };
@@ -115,6 +123,9 @@ async function runRunner(options: {
       JSON.stringify({ name: filter, scripts }),
       'utf8',
     );
+    if (!(options.suiteless ?? []).includes(filter)) {
+      await writeFile(path.join(directory, suiteFile), '// stub learner suite\n', 'utf8');
+    }
   }
 
   const env: Record<string, string> = {
@@ -127,21 +138,30 @@ async function runRunner(options: {
   };
   if (options.execPath !== 'absent') env.npm_execpath = stubPath;
 
-  const result = spawnSync(process.execPath, [runnerPath], {
-    cwd: scratch,
-    encoding: 'utf8',
-    env,
-    shell: false,
-    // The overflow case deliberately produces more than 16 MiB, which the runner
-    // faithfully re-emits. Discarding its stdout keeps that out of the report
-    // without changing anything the assertions depend on.
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
+  const outputPath = path.join(scratch, 'runner-stdout.log');
+  const stdoutFile = await open(outputPath, 'w');
+  let result;
+  try {
+    result = spawnSync(process.execPath, [runnerPath], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env,
+      shell: false,
+      // The overflow case deliberately produces more than 16 MiB, which the runner
+      // faithfully re-emits. Sending its stdout to a file keeps that out of the
+      // report while still capturing it: the runner writes its per-suite verdicts
+      // with console.log, so assertions about those need the real stream.
+      stdio: ['ignore', stdoutFile.fd, 'pipe'],
+    });
+  } finally {
+    await stdoutFile.close();
+  }
 
   const log = await readFile(logPath, 'utf8');
   return {
     status: result.status,
     signal: result.signal,
+    stdout: await readFile(outputPath, 'utf8'),
     stderr: result.stderr,
     invoked: log.split('\n').filter((line) => line.length > 0),
   };
@@ -187,10 +207,13 @@ describe('learner runner subprocess limits', () => {
     const source = await readFile(runnerPath, 'utf8');
 
     // `pnpm --filter <unmatched>` exits 0, so the runner must not infer success
-    // from an exit status alone. It asks pnpm which projects matched, and it also
-    // passes --fail-if-no-match so the run itself cannot come back green empty.
-    expect(source).toContain("['--filter', filter, 'list', '--depth=-1', '--json']");
+    // from an exit status alone. It asks pnpm which projects matched, checks the
+    // matched project still declares the script and still contains the suite file,
+    // and passes --fail-if-no-match so the run itself cannot come back green empty.
+    expect(source).toContain("['--filter', suite.filter, 'list', '--depth=-1', '--json']");
     expect(source).toContain("['--fail-if-no-match', '--filter', suite.filter, 'test:learner']");
+    expect(source).toContain('declares no test:learner script');
+    expect(source).toContain('no longer contains');
     expect(source).toContain('LEARNER_RUNNER_003');
   });
 });
@@ -239,7 +262,7 @@ describe('learner runner behaviour', () => {
 
     expect(observed.status).toBe(1);
     expect(observed.invoked).toEqual([]);
-    expect(observed.stderr).not.toContain('learner contract: satisfied');
+    expect(observed.stdout).not.toContain('learner contract: satisfied');
   });
 
   /**
@@ -258,6 +281,22 @@ describe('learner runner behaviour', () => {
   });
 
   /**
+   * The sharpest version of an unevaluated suite: delete the file carrying the
+   * contract. Paired with `passWithNoTests`, a test runner reports "no tests" as
+   * success, so the runner checks the suite file still exists rather than trusting
+   * the child's exit code.
+   */
+  it('reports a deleted learner suite file as a runner failure', async () => {
+    const observed = await runRunner({ suiteless: ['@workshop/web'] });
+
+    expect(observed.stderr).toContain('LEARNER_RUNNER_003');
+    expect(observed.stderr).toContain('no longer contains test/learner.test.tsx');
+    expect(observed.status).toBe(1);
+    expect(observed.invoked).toEqual(['@workshop/api']);
+    expect(observed.stdout).not.toContain('web learner contract: satisfied');
+  });
+
+  /**
    * Proves the option object is genuinely in force rather than merely present in
    * the source: a suite that writes past `maxBuffer` is killed, and the runner
    * classifies that as its own failure instead of letting it pass for the expected
@@ -269,9 +308,10 @@ describe('learner runner behaviour', () => {
 
     expect(observed.stderr).toContain('LEARNER_RUNNER_002');
     expect(observed.stderr).toContain('ENOBUFS');
-    expect(observed.stderr).not.toContain('LEARNER_API_ENROLLMENT_001');
-    // The overflow must not swallow the remaining suite, and it must not be
-    // mistaken for a satisfied contract.
+    // The overflow must not be mistaken for the learner's declared failure, and it
+    // must not swallow the remaining suite. (The runner's own per-suite header names
+    // the declared diagnostic on every run, so the verdict line is what discriminates.)
+    expect(observed.stdout).not.toContain('api learner contract: satisfied');
     expect(observed.invoked).toEqual(['@workshop/api', '@workshop/web']);
     expect(observed.status).toBe(1);
   });
@@ -335,9 +375,13 @@ describe('generated starter verification scripts', () => {
 
   it('never tolerates a non-zero exit in any declared script', async () => {
     for (const [name, command] of Object.entries(await starterScripts())) {
-      expect(command, name).not.toMatch(
-        /\|\|\s*(true|:|exit\s+0)|continue-on-error|set \+e|exit\s+0\s*$/,
-      );
+      // Same rule as `verify`, applied to every script: strip the legitimate `&&`
+      // operators and nothing shell-significant may remain. An enumeration of bad
+      // suffixes missed `|| echo ok` and `|| node -e ""`, either of which turns a
+      // red command green — including `verify:baseline`, which is the publication
+      // gate and the CI baseline job.
+      expect(command.replaceAll('&&', ''), name).not.toMatch(/[|;&]/);
+      expect(command, name).not.toMatch(/continue-on-error|set \+e|exit\s+0\s*$/);
     }
   });
 

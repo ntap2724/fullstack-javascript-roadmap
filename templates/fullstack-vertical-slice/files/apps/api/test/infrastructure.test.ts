@@ -1,7 +1,7 @@
 // Permanent infrastructure suite.
 //
-// Everything asserted here must hold on an untouched starter AND on a finished
-// one. `pnpm verify:baseline` runs this suite, and `pnpm verify` runs
+// Everything asserted here is meant to hold on an untouched starter AND on a
+// finished one. `pnpm verify:baseline` runs this suite, and `pnpm verify` runs
 // `verify:baseline` before the learner contract, so an assertion that pinned
 // unimplemented behaviour would make a completed milestone unverifiable: the
 // baseline would go red at the exact moment the learner succeeded.
@@ -10,6 +10,14 @@
 // therefore belong to the learner contract and to the repository-owned
 // publication test, not here. This suite proves the scaffolding: construction,
 // routing, headers, wire schemas, and configuration parsing.
+//
+// Two assertions here will need adapting as you build, and doing so is expected
+// work rather than a bypass — see README.md and AGENTS.md:
+//
+//   * `GET /api/workshops` returning 200 needs `createApp()` to accept a workshop
+//     source once that route reads from PostgreSQL, so this suite can inject a
+//     fake one and the baseline can stay database-free.
+//   * the `loadConfig` expectations list today's five variables; add yours.
 
 import { Server } from 'node:http';
 import { WorkshopListResponseSchema } from '@workshop/contracts';

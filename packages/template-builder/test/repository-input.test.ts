@@ -257,7 +257,7 @@ describe('Git failure handling', () => {
    * safe: trusting it publishes another repository's file list, and falling back to
    * the walk publishes whatever is on disk. Refusing is the only honest answer.
    */
-  it.each(['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'])(
+  it.each(['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'])(
     'refuses to enumerate when %s relocates the repository',
     async (variable) => {
       const root = await createTemplate({ git: true, gitignore: 'node_modules/\ndist/\n' });

@@ -50,10 +50,16 @@ expectations:
       - infrastructure tests
       - build
       - verify:baseline
-    # Deliberately absent from baseline coverage: the initial seam values. The
-    # baseline must stay green after the learner implements the milestone, so it
-    # asserts scaffolding only and never the unfinished behaviour. The seam values
-    # are proven by `untouchedSeams` below instead.
+    # Deliberately absent from baseline coverage: the enrollment seam. The baseline
+    # must stay green after the learner implements enrollment, so it asserts
+    # scaffolding and never that unfinished behaviour. The seam values are proven by
+    # `untouchedSeams` below instead.
+    #
+    # Not yet fully achieved for the workshop list: the baseline still asserts that
+    # `GET /api/workshops` returns 200, which a PostgreSQL-backed list cannot satisfy
+    # without a database unless `createApp()` accepts a workshop source. That
+    # adaptation is documented in the starter README and permitted by its AGENTS.md;
+    # removing the coupling outright needs a change to `apps/api/src/app.ts`.
     excludesByDesign:
       - the enrollment response status
       - the number of workshops in the list response

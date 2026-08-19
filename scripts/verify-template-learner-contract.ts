@@ -342,7 +342,11 @@ async function assertVerificationControlsShipVerbatim(
   artifactRoot: string,
 ): Promise<readonly string[]> {
   const failures: string[] = [];
-  for (const relativePath of ['package.json', '.github/workflows/verify.yml']) {
+  for (const relativePath of [
+    'package.json',
+    '.github/workflows/verify.yml',
+    'scripts/verify-learner.mjs',
+  ]) {
     const source = await readFile(path.join(templateRoot, 'files', relativePath), 'utf8');
     let generated: string;
     try {
