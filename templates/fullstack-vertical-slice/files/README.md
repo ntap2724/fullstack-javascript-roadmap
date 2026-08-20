@@ -142,6 +142,10 @@ packages/database/src/**     schema, migrations, and adapters
 evidence/**                  your own evidence records
 ```
 
+Add the dependencies the milestone needs to any `package.json` — a PostgreSQL driver, a session
+store, whatever your design calls for. Only the verification scripts in those manifests are fixed;
+their dependency lists are yours, subject to the boundary below.
+
 You may **add** cases to `apps/api/test/learner.test.ts` and `apps/web/test/learner.test.tsx`.
 
 The infrastructure tests are yours to maintain as the architecture moves. They assert scaffolding,
@@ -155,7 +159,8 @@ Updating one to hide a defect in your code is not. See `AGENTS.md`.
 ```text
 apps/api/test/learner.test.ts        the API enrollment contract
 apps/web/test/learner.test.tsx       the web enrollment contract
-apps/*/package.json                  the test:learner script each suite is reached through
+apps/*/package.json                  its test:learner script only — dependencies are yours
+apps/*/vitest.config.ts              which files each suite collects
 scripts/verify-learner.mjs           the learner-contract runner
 package.json                         the verify:baseline / test:learner / verify contract
 pnpm-workspace.yaml                  the projects the learner suites are found in
@@ -166,8 +171,9 @@ packages/contracts/test/dependency-policy.ts   the dependency-boundary implement
 
 Do not weaken the existing learner assertions to obtain a green run, and do not reach the same
 result indirectly — by pointing the `learner-contract` job at `pnpm verify:baseline`, by narrowing
-its triggers, by rewriting `verify` to stop at the baseline, or by renaming a package so its suite
-can no longer be found. The commands exist to tell you the truth about your code.
+its triggers, by rewriting `verify` to stop at the baseline, by renaming a package so its suite can
+no longer be found, or by narrowing a suite's `include`/`exclude` so its tests are never collected.
+The commands exist to tell you the truth about your code.
 
 ## Continuous integration
 
@@ -234,7 +240,10 @@ liệu kỹ thuật thực tế. Một vài điểm cần nhớ:
 - Hai mã `LEARNER_API_ENROLLMENT_001` và `LEARNER_WEB_ENROLLMENT_001` là phần việc của bạn.
   Các mã `LEARNER_RUNNER_001`, `LEARNER_RUNNER_002` hoặc `LEARNER_RUNNER_003` nghĩa là môi trường
   chạy sai, không phải bài học.
-- Không được xóa hoặc làm yếu các bài kiểm tra learner, `scripts/verify-learner.mjs`,
-  `package.json`, `pnpm-workspace.yaml`, hay `.github/workflows/verify.yml` để có kết quả xanh. Các
+- Không được xóa hoặc làm yếu những thứ sau để có kết quả xanh: hai bài kiểm tra learner,
+  `scripts/verify-learner.mjs`, `package.json`, `pnpm-workspace.yaml`,
+  `.github/workflows/verify.yml`, script `test:learner` trong `apps/*/package.json`,
+  `apps/*/vitest.config.ts`, `packages/contracts/test/dependency-policy.ts`, và `.roadmap/`. Các
   bài kiểm tra infrastructure thì được phép cập nhật khi kiến trúc thay đổi — xem `AGENTS.md`.
+  Riêng danh sách dependency trong mọi `package.json` là của bạn.
 - Kho này là bản xem trước kỹ thuật. Hoàn thành nó không có nghĩa là bạn đã sẵn sàng đi làm.

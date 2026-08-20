@@ -66,6 +66,7 @@ describe('dependency boundary policy', () => {
     const source = await packageSource('contracts');
     expect(source).not.toContain('@workshop/database');
     expect(source).not.toContain('drizzle-orm');
+    expect(source).not.toContain('pg');
     expect(source).not.toContain('react');
   });
 

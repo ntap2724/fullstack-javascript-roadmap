@@ -133,7 +133,21 @@ for (const suite of suites) {
     continue;
   }
 
-  const result = runPnpm(['--fail-if-no-match', '--filter', suite.filter, 'test:learner']);
+  // `--passWithNoTests=false` is the second half of the "did it actually run?"
+  // question. Locating the suite file proves it exists; this proves the test
+  // runner collected it. A suite config that sets `passWithNoTests: true` and
+  // narrows `include`/`exclude` past the learner suite would otherwise report
+  // "no test files found" as success, and an untouched starter would read green
+  // with zero learner assertions executed. The flag overrides the config, and
+  // both suites are vitest — which the repository-owned script contract pins.
+  const result = runPnpm([
+    '--fail-if-no-match',
+    '--filter',
+    suite.filter,
+    'run',
+    'test:learner',
+    '--passWithNoTests=false',
+  ]);
 
   // Print both streams for every suite before deciding anything, so a reader
   // never has to guess which suite produced which output.

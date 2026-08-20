@@ -45,13 +45,14 @@ freely; never weaken, skip, delete, or route around them.
 ```text
 apps/api/test/learner.test.ts     add cases; keep LEARNER_API_ENROLLMENT_001 intact
 apps/web/test/learner.test.tsx    add cases; keep LEARNER_WEB_ENROLLMENT_001 intact
-apps/*/package.json               the test:learner script each suite is reached through
+apps/*/package.json               its test:learner script only — dependencies are the learner's
+apps/*/vitest.config.ts           which files each suite collects
 scripts/verify-learner.mjs        the aggregate learner-contract runner
 package.json                      the verification-script contract described below
 pnpm-workspace.yaml               the projects the learner suites are found in
 .github/workflows/verify.yml      the baseline and learner-contract jobs and their triggers
 packages/contracts/test/dependency-policy.ts   the dependency-boundary implementation
-evidence/**                       the evidence requirements in evidence/README.md
+evidence/**                       the evidence requirements in evidence/README.md, not the records
 .roadmap/**                       generated provenance for this template
 ```
 
@@ -64,10 +65,11 @@ Downgrading the `learner-contract` job to `pnpm verify:baseline`, narrowing its
 triggers so it never runs, or adding `continue-on-error` is the same offence as
 deleting the test. So is rewriting `verify` to stop at the baseline.
 
-Renaming a workspace package, or narrowing `pnpm-workspace.yaml`, so that a
-declared learner suite can no longer be found is the same offence again. The
-runner reports that as `LEARNER_RUNNER_003` rather than as a pass, but do not go
-looking for the next version of that trick.
+Renaming a workspace package, narrowing `pnpm-workspace.yaml`, or narrowing a
+suite's `include`/`exclude` so that a declared learner suite can no longer be found
+or collected is the same offence again. The runner reports those as
+`LEARNER_RUNNER_003`, or as a failure via `--passWithNoTests=false`, rather than as
+a pass — but do not go looking for the next version of that trick.
 
 Acceptance contracts and rubric criteria are equally out of bounds. An assistant
 may argue that a criterion is wrong; it may not restate the criterion to match
