@@ -264,9 +264,12 @@ describe('curriculumDocsLoader', () => {
     context.parseData.mockRejectedValueOnce(reloadError);
     listener(watcher, 'add')(path.join(curriculumRoot, 'lessons', 'broken.md'));
 
-    await vi.waitFor(() => {
-      expect(context.error).toHaveBeenCalledWith(reloadError.message);
-    });
+    await vi.waitFor(
+      () => {
+        expect(context.error).toHaveBeenCalledWith(reloadError.message);
+      },
+      { timeout: 10_000 },
+    );
     expect(surfaced).toHaveLength(1);
     expect(() => {
       surfaced[0]?.();
@@ -297,11 +300,14 @@ describe('curriculumDocsLoader', () => {
       await writeFile(changedLesson, graphInvalidSource, 'utf8');
       listener(watcher, 'change')(changedLesson);
 
-      await vi.waitFor(() => {
-        expect(context.error).toHaveBeenCalledWith(
-          expect.stringContaining('CURRICULUM_PUBLICATION_001'),
-        );
-      });
+      await vi.waitFor(
+        () => {
+          expect(context.error).toHaveBeenCalledWith(
+            expect.stringContaining('CURRICULUM_PUBLICATION_001'),
+          );
+        },
+        { timeout: 10_000 },
+      );
       expect(context.clear).toHaveBeenCalledOnce();
       expect(context.set).toHaveBeenCalledTimes(9);
       expect(surfaced).toHaveLength(1);

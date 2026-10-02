@@ -76,12 +76,39 @@ const validPlan = (): ReleasePlan =>
     ],
   });
 
+function twoItems(plan: ReleasePlan): [ReleasePlan['items'][number], ReleasePlan['items'][number]] {
+  const [first, second] = plan.items;
+  if (first === undefined || second === undefined)
+    throw new Error('fixture requires two work items');
+  return [first, second];
+}
+
+function firstModule(
+  plan: ReleasePlan,
+): ReleasePlan['items'][number]['coverage']['modules'][number] {
+  const [module] = twoItems(plan)[0].coverage.modules;
+  if (module === undefined) throw new Error('fixture requires module coverage');
+  return module;
+}
+
+function firstCriterion(
+  plan: ReleasePlan,
+): ReleasePlan['items'][number]['coverage']['criteria'][number] {
+  const [criterion] = twoItems(plan)[1].coverage.criteria;
+  if (criterion === undefined) throw new Error('fixture requires criterion coverage');
+  return criterion;
+}
+
+const firstItem = (plan: ReleasePlan): ReleasePlan['items'][number] => twoItems(plan)[0];
+const secondItem = (plan: ReleasePlan): ReleasePlan['items'][number] => twoItems(plan)[1];
+
 describe('ReleasePlanSchema', () => {
   it('rejects shell strings, absolute paths, and ready items with open questions', () => {
     const invalid = structuredClone(validPlan());
-    invalid.items[0]!.acceptance[0]!.command = 'pnpm test && rm -rf .';
-    invalid.items[0]!.files = ['C:\\private\\answer.ts'];
-    invalid.items[0]!.openQuestions = ['Which runtime should we use?'];
+    const first = firstItem(invalid);
+    first.acceptance[0] = { ...first.acceptance[0], command: 'pnpm test && rm -rf .' };
+    first.files = ['C:\\private\\answer.ts'];
+    first.openQuestions = ['Which runtime should we use?'];
     expect(() => ReleasePlanSchema.parse(invalid)).toThrow();
   });
 });
@@ -100,43 +127,43 @@ describe('validateReleasePlan', () => {
     [
       'RELEASE_PLAN_ID_001',
       (plan: ReleasePlan) => {
-        plan.items[1]!.id = plan.items[0]!.id;
+        secondItem(plan).id = firstItem(plan).id;
       },
     ],
     [
       'RELEASE_PLAN_DEPENDENCY_001',
       (plan: ReleasePlan) => {
-        plan.items[1]!.dependsOn = ['R1-MISSING-001'];
+        secondItem(plan).dependsOn = ['R1-MISSING-001'];
       },
     ],
     [
       'RELEASE_PLAN_CYCLE_001',
       (plan: ReleasePlan) => {
-        plan.items[0]!.dependsOn = ['R1-DB-002'];
+        firstItem(plan).dependsOn = ['R1-DB-002'];
       },
     ],
     [
       'RELEASE_PLAN_SCOPE_001',
       (plan: ReleasePlan) => {
-        plan.items[0]!.objective = 'Finish Release 1';
+        firstItem(plan).objective = 'Finish Release 1';
       },
     ],
     [
       'RELEASE_PLAN_TRACEABILITY_001',
       (plan: ReleasePlan) => {
-        plan.items[0]!.coverage.competencies = [];
+        firstItem(plan).coverage.competencies = [];
       },
     ],
     [
       'RELEASE_PLAN_MODULE_001',
       (plan: ReleasePlan) => {
-        plan.items[0]!.coverage.modules[0]!.roles = ['content'];
+        firstModule(plan).roles = ['content'];
       },
     ],
     [
       'RELEASE_PLAN_CRITERION_001',
       (plan: ReleasePlan) => {
-        plan.items[1]!.coverage.criteria[0]!.roles = ['implementation'];
+        firstCriterion(plan).roles = ['implementation'];
       },
     ],
   ] as const)('emits %s for the exact invalid contract', (code, mutate) => {

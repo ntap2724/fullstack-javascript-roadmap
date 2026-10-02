@@ -14,6 +14,9 @@ export const requiredEvidence = [
   'spikes/leak-prevention.json',
   'negative-fixtures/report.json',
   'templates/javascript-engineering/report.json',
+  'wp10/vertical-slice-skeleton.json',
+  'wp10/release-1-backlog.json',
+  'wp10/fullstack-template.json',
 ];
 
 export async function verifyRelease0Evidence(root) {

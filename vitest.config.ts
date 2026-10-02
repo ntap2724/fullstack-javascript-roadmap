@@ -8,6 +8,13 @@ export default defineConfig({
       'tooling/*/vitest.config.ts',
       'apps/*/vitest.config.ts',
       'projects/milestones/*/vitest.config.ts',
+      {
+        test: {
+          name: 'root-scripts',
+          environment: 'node',
+          include: ['scripts/**/*.test.ts'],
+        },
+      },
     ],
   },
 });

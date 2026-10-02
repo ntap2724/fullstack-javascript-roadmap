@@ -87,6 +87,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
       - uses: actions/download-artifact@v8
         with:
           name: release-platform-ubuntu-24.04
@@ -99,6 +102,7 @@ jobs:
         with:
           name: release-browser
           path: .tmp/downloaded/browser
+      - run: pnpm install --frozen-lockfile
       - run: node scripts/ci/collect-release-evidence.mjs
       - run: node scripts/verify-release-0.mjs .tmp/release-evidence
       - uses: actions/upload-artifact@v7

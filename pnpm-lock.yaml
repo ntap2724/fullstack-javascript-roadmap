@@ -80,6 +80,33 @@ importers:
       '@eslint/js':
         specifier: 'catalog:'
         version: 10.0.1(eslint@10.8.0)
+      '@roadmap/assessment-core':
+        specifier: workspace:*
+        version: link:packages/assessment-core
+      '@roadmap/command-runner':
+        specifier: workspace:*
+        version: link:packages/command-runner
+      '@roadmap/curriculum-graph':
+        specifier: workspace:*
+        version: link:packages/curriculum-graph
+      '@roadmap/curriculum-loader':
+        specifier: workspace:*
+        version: link:packages/curriculum-loader
+      '@roadmap/curriculum-schema':
+        specifier: workspace:*
+        version: link:packages/curriculum-schema
+      '@roadmap/publish-templates':
+        specifier: workspace:*
+        version: link:tooling/publish-templates
+      '@roadmap/release-plan-schema':
+        specifier: workspace:*
+        version: link:packages/release-plan-schema
+      '@roadmap/rubric-schema':
+        specifier: workspace:*
+        version: link:packages/rubric-schema
+      '@roadmap/validation-core':
+        specifier: workspace:*
+        version: link:packages/validation-core
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
