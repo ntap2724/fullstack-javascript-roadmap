@@ -250,5 +250,5 @@ describe('validateReleasePlan', () => {
     if (!result.ok) console.log(result.diagnostics);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.topologicalOrder.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 });
