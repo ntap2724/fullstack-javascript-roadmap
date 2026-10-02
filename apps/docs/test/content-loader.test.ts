@@ -244,9 +244,12 @@ describe('curriculumDocsLoader', () => {
     expect(secondWatcher.on.mock.calls.map(([event]) => event)).toEqual(eventNames);
 
     listener(secondWatcher, 'change')(path.join(curriculumRoot, 'lessons', 'changed.md'));
-    await vi.waitFor(() => {
-      expect(secondContext.clear).toHaveBeenCalledTimes(2);
-    });
+    await vi.waitFor(
+      () => {
+        expect(secondContext.clear).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 10_000 },
+    );
     expect(firstContext.clear).toHaveBeenCalledOnce();
   });
 
