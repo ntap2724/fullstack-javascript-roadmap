@@ -15,7 +15,7 @@ exitAssessment: assessment-remediation-wrong-kind
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-remediation-support
+  - assessment-remediation-wrong-kind
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

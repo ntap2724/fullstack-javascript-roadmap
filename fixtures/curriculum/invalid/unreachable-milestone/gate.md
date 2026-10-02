@@ -15,7 +15,7 @@ exitAssessment: assessment-milestone-evidence
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-milestone-evidence
+  - assessment-milestone-evidence
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

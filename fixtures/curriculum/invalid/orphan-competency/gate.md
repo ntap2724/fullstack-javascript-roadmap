@@ -15,7 +15,7 @@ exitAssessment: assessment-orphan-evidence
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-orphan-evidence
+  - assessment-orphan-evidence
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

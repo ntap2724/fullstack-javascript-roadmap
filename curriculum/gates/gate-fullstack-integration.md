@@ -17,7 +17,7 @@ exitAssessment: assessment-fullstack-integration
 criticalCriteria:
   - Demonstrates the gate competency focus with observable evidence
 remediation:
-  - lesson-fullstack-integration-orientation
+  - assessment-fullstack-integration
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

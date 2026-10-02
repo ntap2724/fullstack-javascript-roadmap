@@ -15,7 +15,7 @@ exitAssessment: assessment-fixture-missing-assessment
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-assessment-wrong-kind
+  - assessment-fixture-missing-assessment
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

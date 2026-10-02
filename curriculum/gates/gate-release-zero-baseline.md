@@ -16,7 +16,7 @@ exitAssessment: assessment-js-closure
 criticalCriteria:
   - Repository boots and validates without error
 remediation:
-  - lesson-js-closure-private-state
+  - assessment-js-closure
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

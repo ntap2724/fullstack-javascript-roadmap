@@ -17,7 +17,7 @@ exitAssessment: assessment-react-spa
 criticalCriteria:
   - Demonstrates the gate competency focus with observable evidence
 remediation:
-  - lesson-react-spa-orientation
+  - assessment-react-spa
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

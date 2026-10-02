@@ -15,7 +15,7 @@ exitAssessment: assessment-js-function-values
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-js-function-values
+  - assessment-js-function-values
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

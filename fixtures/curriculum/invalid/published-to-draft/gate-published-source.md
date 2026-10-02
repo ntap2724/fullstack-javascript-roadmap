@@ -15,7 +15,7 @@ exitAssessment: assessment-fixture-published-source
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-fixture-published-source
+  - assessment-fixture-published-source
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

@@ -20,13 +20,7 @@ function publishedTrackReachability(graph: CurriculumGraph): ReadonlySet<string>
     .filter((document) => document.data.status === 'published')
     .map((document) => document.data.id);
 
-  // Also include tracks referenced by releases as reachability roots,
-  // so experimental/review release paths are considered reachable
-  const releaseTrackIds = documentsOfKind(graph, 'release').map(
-    (document) => (document.data as Extract<CurriculumDocument['data'], { kind: 'release' }>).track,
-  );
-
-  const roots = [...new Set([...publishedTracks, ...releaseTrackIds])];
+  const roots = publishedTracks;
   if (roots.length === 0) return undefined;
 
   const adjacency = new Map<string, string[]>();
@@ -145,7 +139,9 @@ export function completenessDiagnostics(graph: CurriculumGraph): readonly Diagno
   const diagnostics: Diagnostic[] = [];
   const reachable = publishedTrackReachability(graph);
 
-  for (const competency of documentsOfKind(graph, 'competency')) {
+  for (const competency of documentsOfKind(graph, 'competency').filter(
+    (document) => document.data.status === 'published',
+  )) {
     if (reachable !== undefined && !reachable.has(competency.data.id)) {
       diagnostics.push(unreachableCompetencyDiagnostic(competency));
     }
@@ -158,7 +154,9 @@ export function completenessDiagnostics(graph: CurriculumGraph): readonly Diagno
   }
 
   if (reachable !== undefined) {
-    for (const milestone of documentsOfKind(graph, 'milestone')) {
+    for (const milestone of documentsOfKind(graph, 'milestone').filter(
+      (document) => document.data.status === 'published',
+    )) {
       if (!reachable.has(milestone.data.id)) {
         diagnostics.push(unreachableMilestoneDiagnostic(milestone));
       }

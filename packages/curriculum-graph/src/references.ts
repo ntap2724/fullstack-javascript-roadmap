@@ -321,6 +321,7 @@ const EXPECTED_TARGET_KINDS: Partial<
   'release.exitGate': 'gate',
   'gate.competencies': 'competency',
   'gate.exitAssessment': 'assessment',
+  'gate.remediation': 'assessment',
   'project.competencies': 'competency',
 };
 

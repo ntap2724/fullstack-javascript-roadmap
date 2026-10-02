@@ -20,7 +20,7 @@ exitAssessment: assessment-js-browser-essentials
 criticalCriteria:
   - Demonstrates the gate competency focus with observable evidence
 remediation:
-  - lesson-javascript-essentials-orientation
+  - assessment-js-browser-essentials
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

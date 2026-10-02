@@ -16,7 +16,7 @@ exitAssessment: assessment-typescript-bridge
 criticalCriteria:
   - Demonstrates the gate competency focus with observable evidence
 remediation:
-  - lesson-typescript-bridge-orientation
+  - assessment-typescript-bridge
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

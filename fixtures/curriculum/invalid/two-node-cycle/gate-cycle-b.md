@@ -15,7 +15,7 @@ exitAssessment: assessment-fixture-cycle-two-node-cycle
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-fixture-cycle-two-node-cycle
+  - assessment-fixture-cycle-two-node-cycle
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

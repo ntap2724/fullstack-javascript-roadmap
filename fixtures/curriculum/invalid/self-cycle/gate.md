@@ -15,7 +15,7 @@ exitAssessment: assessment-fixture-cycle-self-cycle
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-fixture-cycle-self-cycle
+  - assessment-fixture-cycle-self-cycle
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

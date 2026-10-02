@@ -16,7 +16,7 @@ exitAssessment: assessment-engineering-baseline
 criticalCriteria:
   - Demonstrates the gate competency focus with observable evidence
 remediation:
-  - lesson-engineering-baseline-orientation
+  - assessment-engineering-baseline
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

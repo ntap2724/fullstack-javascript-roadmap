@@ -16,7 +16,7 @@ exitAssessment: assessment-fixture-claims
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-fixture-claims
+  - assessment-fixture-claims
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0

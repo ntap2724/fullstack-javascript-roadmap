@@ -170,12 +170,48 @@ function competencyEvidenceReferences(): readonly DeclaredReference[] {
  */
 export function buildIsolatedGraph({
   trackStatus,
+  releaseReferencesTrackRoot = false,
 }: {
   trackStatus: PublicationStatus;
+  releaseReferencesTrackRoot?: boolean;
 }): CurriculumGraph {
   const documents = isolatedDocuments(trackStatus);
+  const publishedReferenceRoot =
+    releaseReferencesTrackRoot ? trackDocument('track-published-reference-root', 'published') : undefined;
+  const release =
+    !releaseReferencesTrackRoot
+      ? undefined
+      : ({
+          filePath: 'release-reference.md',
+          body: '',
+          data: {
+            schemaVersion: 1,
+            kind: 'release',
+            id: 'release-reference',
+            slug: 'releases/reference',
+            title: 'Reference release',
+            description: 'Release pointing at a non-published track for root testing',
+            status: 'review',
+            prerequisites: [],
+            introducedIn: '0.1.0',
+            lastReviewedIn: '0.1.0',
+            version: '0.1.0',
+            maturity: 'experimental',
+            track: 'track-root',
+            entryGate: 'gate-reference',
+            exitGate: 'gate-reference',
+            claims: ['Reference root regression fixture'],
+            nonClaims: ['Complete curriculum'],
+          },
+        } satisfies CurriculumDocument);
   return {
-    nodes: new Map(documents.map((document) => [document.data.id, document])),
+    nodes: new Map(
+      [
+        ...documents,
+        ...(publishedReferenceRoot === undefined ? [] : [publishedReferenceRoot]),
+        ...(release === undefined ? [] : [release]),
+      ].map((document) => [document.data.id, document]),
+    ),
     declaredReferences: competencyEvidenceReferences(),
     edges: [
       { from: 'track-root', to: 'module-contained', type: 'contains', sourceFile: 'track-root.md' },

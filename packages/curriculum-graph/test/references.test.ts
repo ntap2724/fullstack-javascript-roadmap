@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { normalizeEdges } from '../src/edges.js';
 import { resolveReferences } from '../src/references.js';
 import { graphFixture } from './support/graph-fixture.js';
 
@@ -83,6 +84,7 @@ describe('declared references and normalized containment', () => {
     ['lesson.assessments', 'lesson-js-function-values', 'lesson', 'assessment'],
     ['assessment.competencies', 'milestone-js-foundations', 'milestone', 'competency'],
     ['milestone.competencies', 'lesson-js-function-values', 'lesson', 'competency'],
+    ['gate.remediation', 'lesson-js-function-values', 'lesson', 'assessment'],
   ] as const)(
     'rejects %s target %s whose existing kind is %s instead of %s',
     async (relation, targetId, actualKind, expectedKind) => {
@@ -141,6 +143,29 @@ describe('declared references and normalized containment', () => {
       );
     },
   );
+
+  it('normalizes gate remediation to its assessment target', async () => {
+    const outcome = await graphFixture('valid/minimal');
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    const declared = {
+      declaringId: 'gate-fixture',
+      targetId: 'assessment-js-function-values',
+      relation: 'gate.remediation' as const,
+      sourceFile: 'gate-fixture.md',
+      pointer: 'remediation.0',
+    };
+    expect(resolveReferences(outcome.value.nodes, [declared])).toEqual([]);
+    expect(normalizeEdges([declared])).toEqual([
+      {
+        from: 'gate-fixture',
+        to: 'assessment-js-function-values',
+        type: 'remediates',
+        sourceFile: 'gate-fixture.md',
+      },
+    ]);
+  });
 
   it('deduplicates reciprocal structural declarations without losing declaration locations', async () => {
     const outcome = await graphFixture('valid/minimal');

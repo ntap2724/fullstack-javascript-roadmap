@@ -15,7 +15,7 @@ exitAssessment: assessment-fixture-target
 criticalCriteria:
   - Fixture criterion
 remediation:
-  - lesson-fixture-target
+  - assessment-fixture-target
 maturity: experimental
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
