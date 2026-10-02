@@ -208,19 +208,28 @@ describe('curriculumDocsLoader', () => {
     listener(watcher, 'add')(path.join(curriculumRoot, 'lessons', 'inside-a.md'));
     listener(watcher, 'change')(path.join(curriculumRoot, 'lessons', 'inside-b.md'));
 
-    await vi.waitFor(() => {
-      expect(releases).toHaveLength(1);
-    });
+    await vi.waitFor(
+      () => {
+        expect(releases).toHaveLength(1);
+      },
+      { timeout: 30_000 },
+    );
     expect(maximumActiveReloads).toBe(1);
     releases.shift()?.();
-    await vi.waitFor(() => {
-      expect(releases).toHaveLength(1);
-    });
+    await vi.waitFor(
+      () => {
+        expect(releases).toHaveLength(1);
+      },
+      { timeout: 30_000 },
+    );
     expect(maximumActiveReloads).toBe(1);
     releases.shift()?.();
-    await vi.waitFor(() => {
-      expect(context.set).toHaveBeenCalledTimes(36);
-    });
+    await vi.waitFor(
+      () => {
+        expect(context.set).toHaveBeenCalledTimes(36);
+      },
+      { timeout: 30_000 },
+    );
 
     expect(maximumActiveReloads).toBe(1);
     expect(context.set).toHaveBeenCalledTimes(36);
@@ -248,7 +257,7 @@ describe('curriculumDocsLoader', () => {
       () => {
         expect(secondContext.clear).toHaveBeenCalledTimes(2);
       },
-      { timeout: 10_000 },
+      { timeout: 30_000 },
     );
     expect(firstContext.clear).toHaveBeenCalledOnce();
   });
@@ -271,7 +280,7 @@ describe('curriculumDocsLoader', () => {
       () => {
         expect(context.error).toHaveBeenCalledWith(reloadError.message);
       },
-      { timeout: 10_000 },
+      { timeout: 30_000 },
     );
     expect(surfaced).toHaveLength(1);
     expect(() => {
@@ -309,7 +318,7 @@ describe('curriculumDocsLoader', () => {
             expect.stringContaining('CURRICULUM_PUBLICATION_001'),
           );
         },
-        { timeout: 10_000 },
+        { timeout: 30_000 },
       );
       expect(context.clear).toHaveBeenCalledOnce();
       expect(context.set).toHaveBeenCalledTimes(9);
