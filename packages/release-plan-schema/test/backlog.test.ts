@@ -218,6 +218,26 @@ describe('validateReleasePlan', () => {
     }
   });
 
+  it('rejects an extra active content item without one sequence module', () => {
+    const plan = validPlan();
+    plan.items.push({
+      ...structuredClone(firstItem(plan)),
+      id: 'R1-CONTENT-GHOST-001',
+      dependsOn: [],
+      coverage: { competencies: [], modules: [], criteria: [] },
+    });
+    const result = validateReleasePlan(plan, {
+      ...context,
+      contentSequenceModules: context.moduleIds,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.map((entry) => entry.code)).toContain(
+        'RELEASE_PLAN_CONTENT_SEQUENCE_001',
+      );
+    }
+  });
+
   it('rejects prefix-lookalike issue headings', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'roadmap-contract-heading-'));
     scratchRoots.push(root);

@@ -127,6 +127,15 @@ function sameCommand(left: CommandContract, right: CommandContract): boolean {
   );
 }
 
+export function isCanonicalLearnerProbe(contract: CommandContract): boolean {
+  return (
+    contract.command === 'pnpm' &&
+    contract.cwd === '.' &&
+    contract.args.length === 1 &&
+    contract.args[0] === 'verify'
+  );
+}
+
 /**
  * The seams a freshly generated starter must present.
  *
@@ -173,11 +182,12 @@ async function assertBaselineCommandContract(): Promise<readonly string[]> {
       `TEMPLATE_ACCEPTANCE_002: template.yaml baseline ${describeCommand(definition.verification.baseline)} does not match acceptance/baseline.yaml publication.baseline ${describeCommand(acceptance.publication.baseline)}`,
     );
   }
-  if (sameCommand(definition.verification.baseline, acceptance.learnerProbe)) {
+  if (!isCanonicalLearnerProbe(acceptance.learnerProbe)) {
     failures.push(
-      `TEMPLATE_ACCEPTANCE_003: publication baseline must not be the learner probe ${describeCommand(acceptance.learnerProbe)}; publication would then require a completed solution to pass`,
+      `TEMPLATE_ACCEPTANCE_006: learnerProbe must be exactly pnpm verify from cwd ., found ${describeCommand(acceptance.learnerProbe)}`,
     );
   }
+
   const baselineArgs = definition.verification.baseline.args;
   if (baselineArgs.length !== 1 || baselineArgs[0] !== 'verify:baseline') {
     failures.push(

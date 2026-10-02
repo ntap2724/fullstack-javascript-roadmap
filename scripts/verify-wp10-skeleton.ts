@@ -35,6 +35,7 @@ import {
 } from '@roadmap/validation-core';
 import { runTemplateDryRun } from '../tooling/publish-templates/src/pipeline.js';
 import {
+  isCanonicalLearnerProbe,
   readAcceptanceContract,
   verifyUntouchedSeamContract,
 } from './verify-template-learner-contract.js';
@@ -264,6 +265,10 @@ async function readDecisionStatus(
   const match = /^\*\*Status:\*\*\s+(.+)$/m.exec(source);
   if (match?.[1] === undefined) throw new Error(`Decision status is missing: ${id}`);
   return { id, status: match[1].trim() };
+}
+
+function pnpmCommand(): string {
+  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 }
 
 function curriculumModuleCompetencies(
@@ -511,12 +516,24 @@ export async function verifyWp10Repository(
     if (dryRun.status === 'passed' && dryRun.artifact !== undefined) {
       const templateRoot = path.join(root, 'templates', 'fullstack-vertical-slice');
       const acceptance = await readAcceptanceContract(templateRoot);
+      if (!isCanonicalLearnerProbe(acceptance.learnerProbe)) {
+        throw Object.assign(new Error('WP-10 learner probe contract is not canonical'), {
+          diagnostics: [
+            diagnostic(
+              'WP10_TEMPLATE_LEARNER_001',
+              'The acceptance learner probe is not the starter’s canonical pnpm verify command',
+              acceptance.learnerProbe,
+              'command pnpm, args ["verify"], cwd ".", with the declared timeout',
+            ),
+          ],
+        });
+      }
       const seamFailures = await verifyUntouchedSeamContract(dryRun.artifact.root);
       const learnerProbe = classifyLearnerProbe(
         await runCommand({
-          command: acceptance.learnerProbe.command,
-          args: acceptance.learnerProbe.args,
-          cwd: path.resolve(dryRun.artifact.root, acceptance.learnerProbe.cwd),
+          command: pnpmCommand(),
+          args: ['verify'],
+          cwd: dryRun.artifact.root,
           timeoutMs: acceptance.learnerProbe.timeoutMs,
         }),
         seamFailures,

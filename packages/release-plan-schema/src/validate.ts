@@ -267,12 +267,26 @@ export function validateReleasePlan(
   if (contentSequenceModules !== undefined) {
     const contentItems = activeItems.filter((item) => item.id.startsWith('R1-CONTENT-'));
     const moduleToItems = new Map<string, string[]>();
+    const contentItemProblems: string[] = [];
     for (const item of contentItems) {
-      for (const module of item.coverage.modules) {
-        if (module.roles.includes('content')) {
-          moduleToItems.set(module.id, [...(moduleToItems.get(module.id) ?? []), item.id]);
-        }
+      const contentModules = item.coverage.modules.filter((module) =>
+        module.roles.includes('content'),
+      );
+      if (contentModules.length !== 1) {
+        contentItemProblems.push(
+          `${item.id}:expected-one-content-module-found-${String(contentModules.length)}`,
+        );
+        continue;
       }
+      const [contentModule] = contentModules;
+      if (contentModule === undefined || !contentSequenceModules.includes(contentModule.id)) {
+        contentItemProblems.push(`${item.id}:content-module-is-not-in-sequence`);
+        continue;
+      }
+      moduleToItems.set(contentModule.id, [
+        ...(moduleToItems.get(contentModule.id) ?? []),
+        item.id,
+      ]);
     }
     const sequenceProblems = contentSequenceModules.flatMap((moduleId, index) => {
       const matches = moduleToItems.get(moduleId) ?? [];
@@ -295,6 +309,7 @@ export function validateReleasePlan(
       }
       return problems;
     });
+    sequenceProblems.push(...contentItemProblems);
     const extraModules = [...moduleToItems.keys()].filter(
       (moduleId) => !contentSequenceModules.includes(moduleId),
     );
