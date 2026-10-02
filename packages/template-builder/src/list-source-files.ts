@@ -196,10 +196,14 @@ export async function listSourceFiles(root: string): Promise<readonly SourceFile
     let metadata;
     try {
       metadata = await lstat(absolutePath);
-    } catch {
-      // Git can list a path that was deleted after enumeration; a vanished
-      // candidate is simply not publication input.
-      continue;
+    } catch (error) {
+      // Git can list a path that was deleted after enumeration; only that
+      // disappearance race is safe to ignore. Permission and I/O failures must
+      // fail closed rather than silently dropping publication input.
+      if (isMissingPath(error)) continue;
+      throw new Error(`TEMPLATE_INPUT_001:${relativePath}:cannot inspect publication input`, {
+        cause: error,
+      });
     }
     if (metadata.isSymbolicLink()) {
       throw new Error(`TEMPLATE_SYMLINK_001:${relativePath}`);

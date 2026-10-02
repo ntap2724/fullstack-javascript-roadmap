@@ -16,8 +16,8 @@ const CommandNameSchema = z
   .string()
   .min(1)
   .refine(
-    (value) => !/[;&|`$<>\r\n]/.test(value),
-    'Command must be one executable name without shell syntax',
+    (value) => !/[\s;&|`$<>\r\n\0]/.test(value),
+    'Command must be one executable name without shell syntax or whitespace',
   );
 
 export const ReleasePlanCommandSchema = z

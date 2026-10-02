@@ -6,6 +6,7 @@ import { loadCurriculum } from '@roadmap/curriculum-loader';
 import { RubricSchema } from '@roadmap/rubric-schema';
 import {
   ReleasePlanSchema,
+  validateIssueContracts,
   validateReleasePlan,
   type ReleasePlan,
   type ReleasePlanValidationContext,
@@ -106,7 +107,14 @@ describe('ReleasePlanSchema', () => {
   it('rejects shell strings, absolute paths, and ready items with open questions', () => {
     const invalid = structuredClone(validPlan());
     const first = firstItem(invalid);
-    first.acceptance[0] = { ...first.acceptance[0], command: 'pnpm test && rm -rf .' };
+    const [acceptance] = first.acceptance;
+    if (acceptance === undefined) throw new Error('fixture requires an acceptance command');
+    first.acceptance[0] = {
+      command: 'pnpm test && rm -rf .',
+      args: [...acceptance.args],
+      cwd: acceptance.cwd,
+      timeoutMs: acceptance.timeoutMs,
+    };
     first.files = ['C:\\private\\answer.ts'];
     first.openQuestions = ['Which runtime should we use?'];
     expect(() => ReleasePlanSchema.parse(invalid)).toThrow();
@@ -195,6 +203,8 @@ describe('validateReleasePlan', () => {
     const plan = ReleasePlanSchema.parse(
       YAML.parse(await readFile(path.join(root, 'planning', 'release-1', 'backlog.yaml'), 'utf8')),
     );
+    const contracts = await validateIssueContracts(root, plan);
+    expect(contracts).toEqual([]);
     const result = validateReleasePlan(plan, {
       competencyIds: track.data.requiredCompetencies,
       moduleIds: track.data.modules,
@@ -202,8 +212,42 @@ describe('validateReleasePlan', () => {
       criticalCriteria: rubric.criteria
         .filter((criterion) => criterion.critical)
         .map((criterion) => criterion.id),
+      moduleCompetencies: new Map([
+        [
+          'module-engineering-baseline',
+          ['engineering.repository.reproducible-setup', 'engineering.git.pull-request'],
+        ],
+        [
+          'module-javascript-essentials',
+          ['js.value.object-identity', 'js.function.closure', 'js.async.promise-error'],
+        ],
+        ['module-browser-interaction', ['browser.dom.event-flow', 'browser.fetch.http-boundary']],
+        ['module-typescript-bridge', ['ts.narrowing.untrusted-input']],
+        ['module-react-spa', ['react.state.ownership', 'react.server-state.lifecycle']],
+        [
+          'module-http-express',
+          [
+            'http.request-response-semantics',
+            'api.validation.runtime-boundary',
+            'api.authentication.session-lifecycle',
+            'api.authorization.resource-ownership',
+          ],
+        ],
+        [
+          'module-postgresql-drizzle',
+          ['db.model.relational-constraints', 'db.transaction.atomic-enrollment'],
+        ],
+        [
+          'module-fullstack-integration',
+          ['fullstack.contract.error-mapping', 'fullstack.incident.duplicate-submission'],
+        ],
+        ['module-mini-capstone', ['career.evidence.technical-walkthrough']],
+      ]),
+      criterionCompetencies: new Map(
+        rubric.criteria.map((criterion) => [criterion.id, criterion.competency]),
+      ),
     });
-
+    if (!result.ok) console.log(result.diagnostics);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.topologicalOrder.length).toBeGreaterThan(0);
   });

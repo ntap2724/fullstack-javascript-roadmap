@@ -32,6 +32,31 @@ describe('stable identifiers', () => {
   });
 });
 
+describe('competency schema', () => {
+  it.each([
+    'competencies/http/request-response-semantics-',
+    '/competencies/http',
+    'competencies//http',
+  ])('rejects malformed route slug %s', (slug) => {
+    expect(() =>
+      CurriculumEntitySchema.parse({
+        schemaVersion: 1,
+        kind: 'competency',
+        id: 'http.request-response-semantics',
+        slug,
+        title: 'HTTP request and response semantics',
+        description: 'Validates canonical competency routes',
+        status: 'review',
+        prerequisites: [],
+        requiredLevel: 'explain',
+        assessments: ['assessment-express-postgresql'],
+        remediation: ['lesson-http-express-orientation'],
+        introducedIn: '0.1.0',
+        lastReviewedIn: '0.1.0',
+      }),
+    ).toThrow();
+  });
+});
 describe('lesson schema', () => {
   it('accepts a minimal published lesson', () => {
     const lesson = LessonSchema.parse({

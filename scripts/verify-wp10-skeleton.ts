@@ -1,22 +1,32 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { RemediationCatalogSchema, validateRemediationCoverage } from '@roadmap/assessment-core';
 import { runCommand } from '@roadmap/command-runner';
-import { buildCurriculumGraph, validateCurriculumGraph } from '@roadmap/curriculum-graph';
+import {
+  buildCurriculumGraph,
+  validateCurriculumGraph,
+  type CurriculumGraph,
+} from '@roadmap/curriculum-graph';
 import { loadCurriculum } from '@roadmap/curriculum-loader';
 import {
   CompetencySchema,
+  AssessmentSchema,
   GateSchema,
   ModuleSchema,
+  ProjectSchema,
   ReleaseSchema,
   TrackSchema,
 } from '@roadmap/curriculum-schema';
-import { loadReleasePlan, validateReleasePlan } from '@roadmap/release-plan-schema';
-import { RubricSchema } from '@roadmap/rubric-schema';
+import {
+  loadReleasePlan,
+  validateIssueContracts,
+  validateReleasePlan,
+} from '@roadmap/release-plan-schema';
+import { RubricSchema, type Rubric } from '@roadmap/rubric-schema';
 import {
   failure,
   success,
@@ -256,16 +266,132 @@ function pnpmCommand(): string {
   return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 }
 
-function classifyLearnerProbe(result: Awaited<ReturnType<typeof runCommand>>) {
+function curriculumModuleCompetencies(
+  graph: CurriculumGraph,
+  moduleIds: readonly string[],
+): ReadonlyMap<string, readonly string[]> {
+  return new Map(
+    moduleIds.map((id) => {
+      const document = graph.nodes.get(id);
+      const module =
+        document?.data.kind === 'module' ? ModuleSchema.parse(document.data) : undefined;
+      return [id, module?.competencies ?? []] as const;
+    }),
+  );
+}
+
+function rubricCriterionCompetencies(rubric: Rubric): ReadonlyMap<string, string> {
+  return new Map(rubric.criteria.map((criterion) => [criterion.id, criterion.competency]));
+}
+
+function projectDiagnostic(reason: string, observed: unknown): Diagnostic {
+  return diagnostic(
+    'WP10_PROJECT_001',
+    reason,
+    observed,
+    'A mini-capstone assessment artifact linked to a contained Workshop Enrollment project contract',
+  );
+}
+
+async function readWorkshopProjectContract(
+  root: string,
+  getDocument: (
+    id: string,
+  ) => CurriculumGraph['nodes'] extends ReadonlyMap<string, infer T> ? T : never,
+  miniCapstoneGate: ReturnType<typeof GateSchema.parse>,
+): Promise<void> {
+  try {
+    const assessment = AssessmentSchema.parse(getDocument(miniCapstoneGate.exitAssessment).data);
+    if (
+      assessment.assessmentType !== 'milestone-project' ||
+      assessment.artifact !== 'project-workshop-enrollment'
+    ) {
+      throw new Error(
+        'The mini-capstone exit assessment does not declare project-workshop-enrollment',
+      );
+    }
+    const project = ProjectSchema.parse(getDocument(assessment.artifact).data);
+    const resolvedRoot = await realpath(root);
+    const contractPath = path.resolve(root, project.contractPath);
+    const resolvedContractPath = await realpath(contractPath);
+    const relative = path.relative(resolvedRoot, resolvedContractPath);
+    if (
+      relative === '' ||
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      throw new Error(`Project contract escapes repository root: ${project.contractPath}`);
+    }
+    const contract: unknown = YAML.parse(await readFile(resolvedContractPath, 'utf8'));
+    if (typeof contract !== 'object' || contract === null || Array.isArray(contract)) {
+      throw new Error('Project contract must be a YAML object');
+    }
+    const value = contract as Record<string, unknown>;
+    const required = {
+      schemaVersion: 1,
+      id: project.id,
+      version: '0.1.0',
+      status: 'review',
+      track: 'track-core-vertical-slice',
+      starterTemplate: 'template-fullstack-vertical-slice',
+      rubric: 'rubric-workshop-enrollment',
+      remediation: 'remediation-workshop-enrollment',
+      changeRequest: 'change-request-workshop-multiple-sessions',
+      debuggingTask: 'debugging-workshop-duplicate-enrollment',
+    } as const;
+    for (const [field, expected] of Object.entries(required)) {
+      if (value[field] !== expected) {
+        throw new Error(`Project contract ${field} does not match ${String(expected)}`);
+      }
+    }
+    if (
+      !Array.isArray(value.competencies) ||
+      !sameStringSet(value.competencies, project.competencies)
+    ) {
+      throw new Error('Project contract competencies do not match its curriculum project');
+    }
+  } catch (error) {
+    throw Object.assign(new Error('WP-10 project contract validation failed'), {
+      diagnostics: [
+        projectDiagnostic(error instanceof Error ? error.message : String(error), error),
+      ],
+    });
+  }
+}
+
+function sameStringSet(value: unknown[], expected: readonly string[]): boolean {
+  return (
+    value.length === expected.length &&
+    value.every((entry) => typeof entry === 'string' && expected.includes(entry)) &&
+    new Set(value).size === value.length
+  );
+}
+
+export function classifyLearnerProbe(result: Awaited<ReturnType<typeof runCommand>>) {
   const output = `${result.stdout}\n${result.stderr}`;
   const expected = ['LEARNER_API_ENROLLMENT_001', 'LEARNER_WEB_ENROLLMENT_001'] as const;
+  const suiteResults = [
+    '--- api learner contract: NOT SATISFIED',
+    '--- web learner contract: NOT SATISFIED',
+  ] as const;
   const diagnostics = expected.filter((code) => output.includes(code));
+  const runnerFailure = /LEARNER_RUNNER_00[1-3]/i.test(output);
   const infrastructureFailure =
-    /ERR_MODULE_NOT_FOUND|Cannot find module|DATABASE_URL|ECONNREFUSED|LEARNER_RUNNER_00[1-3]/i.test(
+    /ERR_MODULE_NOT_FOUND|Cannot find module|DATABASE_URL|ECONNREFUSED|browser|build failed|lockfile/i.test(
       output,
     );
+  const completeExpectedFailure =
+    result.exitCode !== null &&
+    result.exitCode !== 0 &&
+    result.signal === null &&
+    !result.timedOut &&
+    diagnostics.length === expected.length &&
+    suiteResults.every((marker) => output.includes(marker)) &&
+    !runnerFailure &&
+    !infrastructureFailure;
   if (result.exitCode === 0) return { status: 'passed' as const, diagnostics };
-  if (!infrastructureFailure && diagnostics.length === expected.length) {
+  if (completeExpectedFailure) {
     return { status: 'expected-failure' as const, diagnostics: [...expected] };
   }
   return { status: 'unexpected-failure' as const, diagnostics };
@@ -301,6 +427,13 @@ export async function verifyWp10Repository(
       return { id: data.id, body: document.body };
     });
     const gates = track.gates.map((id) => GateSchema.parse(getDocument(id).data));
+    const miniCapstoneGate = gates.find(({ id }) => id === 'gate-mini-capstone');
+    if (miniCapstoneGate === undefined) {
+      throw Object.assign(new Error('WP-10 mini-capstone gate is missing'), {
+        diagnostics: [projectDiagnostic('Track does not declare gate-mini-capstone', track.gates)],
+      });
+    }
+    await readWorkshopProjectContract(root, (id) => getDocument(id), miniCapstoneGate);
 
     const rubricPath = path.join(
       root,
@@ -330,6 +463,12 @@ export async function verifyWp10Repository(
     const loadedPlan = unwrap(
       await loadReleasePlan(path.join(root, 'planning', 'release-1', 'backlog.yaml')),
     );
+    const issueContractDiagnostics = await validateIssueContracts(root, loadedPlan);
+    if (issueContractDiagnostics.length > 0) {
+      throw Object.assign(new Error('WP-10 issue-contract validation failed'), {
+        diagnostics: issueContractDiagnostics,
+      });
+    }
     const validatedPlan = unwrap(
       validateReleasePlan(loadedPlan, {
         competencyIds: track.requiredCompetencies,
@@ -338,6 +477,8 @@ export async function verifyWp10Repository(
         criticalCriteria: rubric.criteria
           .filter((criterion) => criterion.critical)
           .map((criterion) => criterion.id),
+        moduleCompetencies: curriculumModuleCompetencies(graph, track.modules),
+        criterionCompetencies: rubricCriterionCompetencies(rubric),
       }),
     );
 

@@ -1,5 +1,49 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateWp10Skeleton, type Wp10SkeletonInput } from './verify-wp10-skeleton.js';
+import {
+  classifyLearnerProbe,
+  evaluateWp10Skeleton,
+  type Wp10SkeletonInput,
+} from './verify-wp10-skeleton.js';
+
+const learnerOutput = [
+  'LEARNER_API_ENROLLMENT_001',
+  'LEARNER_WEB_ENROLLMENT_001',
+  '--- api learner contract: NOT SATISFIED (exit 1) ---',
+  '--- web learner contract: NOT SATISFIED (exit 1) ---',
+].join('\n');
+
+function learnerResult(overrides: Partial<Parameters<typeof classifyLearnerProbe>[0]> = {}) {
+  return {
+    command: { command: 'pnpm', args: ['verify'], cwd: '.', timeoutMs: 300_000 },
+    exitCode: 1,
+    signal: null,
+    timedOut: false,
+    stdout: learnerOutput,
+    stderr: '',
+    durationMs: 1,
+    ...overrides,
+  };
+}
+
+describe('learner probe classification', () => {
+  it.each([
+    [
+      'requires both failed suite markers',
+      { stdout: 'LEARNER_API_ENROLLMENT_001\nLEARNER_WEB_ENROLLMENT_001' },
+    ],
+    ['rejects a runner diagnostic', { stderr: 'LEARNER_RUNNER_002' }],
+    ['rejects a timeout', { timedOut: true }],
+    ['rejects signal termination', { signal: 'SIGTERM', exitCode: null }],
+    ['rejects a passing command', { exitCode: 0 }],
+  ])('%s', (_name, overrides) => {
+    const classified = classifyLearnerProbe(learnerResult(overrides as never));
+    expect(classified.status).not.toBe('expected-failure');
+  });
+
+  it('accepts exactly the two observed learner failures', () => {
+    expect(classifyLearnerProbe(learnerResult()).status).toBe('expected-failure');
+  });
+});
 
 const numberText = (value: number): string => String(value);
 

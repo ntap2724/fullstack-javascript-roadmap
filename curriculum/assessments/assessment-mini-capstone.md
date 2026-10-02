@@ -8,6 +8,7 @@ description: Verify technical walkthrough and project evidence
 status: review
 prerequisites: []
 assessmentType: milestone-project
+artifact: project-workshop-enrollment
 competencies:
   - career.evidence.technical-walkthrough
 introducedIn: 0.1.0

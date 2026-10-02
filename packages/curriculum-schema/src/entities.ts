@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { ArtifactIdSchema, CompetencyIdSchema } from './ids.js';
+import { ArtifactIdSchema, CompetencyIdSchema, RouteSlugSchema } from './ids.js';
 import { CommonArtifactFields, MasteryLevelSchema } from './common.js';
 
 export const TrackSchema = z
@@ -18,7 +18,7 @@ export const CompetencySchema = z
     schemaVersion: z.literal(1),
     kind: z.literal('competency'),
     id: CompetencyIdSchema,
-    slug: z.string().min(1),
+    slug: RouteSlugSchema,
     title: z.string().min(1),
     description: z.string().min(1),
     status: z.enum(['draft', 'review', 'published', 'deprecated', 'withdrawn']),

@@ -11,6 +11,8 @@ export interface ReleasePlanValidationContext {
   moduleIds: readonly string[];
   criterionIds: readonly string[];
   criticalCriteria: readonly string[];
+  moduleCompetencies?: ReadonlyMap<string, readonly string[]>;
+  criterionCompetencies?: ReadonlyMap<string, string>;
 }
 
 export interface ValidatedReleasePlan {
@@ -156,6 +158,26 @@ export function validateReleasePlan(
     );
   }
 
+  const misalignedCompetencies = plan.items.flatMap((item) => {
+    if (context.moduleCompetencies === undefined) return [];
+    const supported = new Set(
+      item.coverage.modules.flatMap((target) => context.moduleCompetencies?.get(target.id) ?? []),
+    );
+    return item.coverage.competencies
+      .filter((competency) => !supported.has(competency))
+      .map((competency) => `${item.id}->${competency}`);
+  });
+  if (misalignedCompetencies.length > 0) {
+    diagnostics.push(
+      issue(
+        'RELEASE_PLAN_COMPETENCY_MODULE_001',
+        misalignedCompetencies.sort(),
+        "Every item competency belongs to one of that item's covered modules",
+        'A work item claims competency coverage outside its declared module scope',
+      ),
+    );
+  }
+
   const moduleRoles = new Map<string, Set<string>>();
   for (const target of plan.items.flatMap((item) => item.coverage.modules)) {
     const roles = moduleRoles.get(target.id) ?? new Set<string>();
@@ -176,6 +198,32 @@ export function validateReleasePlan(
         { invalidModules, unknownModules },
         'Every known module has content and assessment work',
         'Module coverage is incomplete or references an unknown module',
+      ),
+    );
+  }
+
+  const misalignedCriteria = plan.items.flatMap((item) => {
+    if (context.criterionCompetencies === undefined) return [];
+    const supported = new Set([
+      ...item.coverage.competencies,
+      ...item.coverage.modules.flatMap(
+        (target) => context.moduleCompetencies?.get(target.id) ?? [],
+      ),
+    ]);
+    return item.coverage.criteria
+      .filter((target) => {
+        const competency = context.criterionCompetencies?.get(target.id);
+        return competency !== undefined && !supported.has(competency);
+      })
+      .map((target) => `${item.id}->${target.id}`);
+  });
+  if (misalignedCriteria.length > 0) {
+    diagnostics.push(
+      issue(
+        'RELEASE_PLAN_CRITERION_ALIGNMENT_001',
+        misalignedCriteria.sort(),
+        "Every covered criterion aligns with the item's competency and module scope",
+        'A work item claims a rubric criterion outside its declared competency scope',
       ),
     );
   }

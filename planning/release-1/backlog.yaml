@@ -50,7 +50,12 @@ items:
     lane: curriculum
     risk: R2
     objective: Write and validate the closure mental-model lesson and executable examples
-    specReferences: [curriculum/competencies/js.function.closure.md]
+    specReferences:
+      [
+        curriculum/competencies/js.function.closure.md,
+        curriculum/competencies/browser.dom.event-flow.md,
+        curriculum/competencies/browser.fetch.http-boundary.md,
+      ]
     dependsOn: [R1-EXERCISE-JS-001]
     files: [curriculum/lessons/lesson-js-closure-private-state.md]
     acceptance:
@@ -62,8 +67,10 @@ items:
     evidence: [executable-example-report, assessment-alignment-review]
     openQuestions: []
     coverage:
-      competencies: [js.function.closure, browser.dom.event-flow, browser.fetch.http-boundary]
-      modules: [{ id: module-browser-interaction, roles: [content, assessment] }]
+      competencies: [js.function.closure]
+      modules:
+        - { id: module-javascript-essentials, roles: [content, assessment] }
+        - { id: module-browser-interaction, roles: [content, assessment] }
       criteria: []
 
   - id: R1-CONTENT-TS-001
@@ -104,8 +111,16 @@ items:
     evidence: [browser-test-report]
     openQuestions: []
     coverage:
-      competencies: [react.state.ownership, react.server-state.lifecycle]
-      modules: [{ id: module-react-spa, roles: [content, assessment] }]
+      competencies:
+        [
+          react.state.ownership,
+          react.server-state.lifecycle,
+          browser.dom.event-flow,
+          browser.fetch.http-boundary,
+        ]
+      modules:
+        - { id: module-react-spa, roles: [content, assessment] }
+        - { id: module-browser-interaction, roles: [content, assessment] }
       criteria:
         - { id: accessible.primary-workflow, roles: [implementation, test, remediation] }
         - { id: loading.empty-error-states, roles: [implementation, test, remediation] }
@@ -173,7 +188,9 @@ items:
     openQuestions: []
     coverage:
       competencies: [api.authentication.session-lifecycle, api.authorization.resource-ownership]
-      modules: [{ id: module-postgresql-drizzle, roles: [content, assessment] }]
+      modules:
+        - { id: module-http-express, roles: [content, assessment] }
+        - { id: module-postgresql-drizzle, roles: [content, assessment] }
       criteria:
         - { id: backend.authorization, roles: [implementation, test, remediation] }
         - { id: password.session-handling, roles: [implementation, test, remediation] }
@@ -219,7 +236,8 @@ items:
     coverage:
       competencies: [fullstack.contract.error-mapping, fullstack.incident.duplicate-submission]
       modules: [{ id: module-fullstack-integration, roles: [content, assessment] }]
-      criteria: []
+      criteria:
+        - { id: debugging.report, roles: [implementation, test, remediation] }
 
   - id: R1-ASSESS-001
     status: ready
@@ -242,7 +260,6 @@ items:
       modules: [{ id: module-mini-capstone, roles: [content, assessment] }]
       criteria:
         - { id: english.readme, roles: [implementation, test, remediation] }
-        - { id: debugging.report, roles: [implementation, test, remediation] }
 
   - id: R1-PILOT-001
     status: ready

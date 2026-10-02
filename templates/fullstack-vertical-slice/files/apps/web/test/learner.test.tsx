@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('enrollment learner contract', () => {
-  it('LEARNER_WEB_ENROLLMENT_001 completes the authenticated enrollment workflow', async () => {
+  it('completes the authenticated enrollment workflow', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>

@@ -100,29 +100,27 @@ function locateSuite(suite) {
 }
 
 /**
- * Each entry declares the diagnostic code its suite is expected to report while
- * the milestone is unimplemented. The codes are documented here for the reader;
- * they are asserted by the suites, not printed by this runner.
+ * Each entry names the suite to execute. The stable diagnostics stay inside the
+ * learner assertions: printing them here would let an unevaluated or interrupted
+ * suite look like its intended failure to repository-owned verification.
  */
 const suites = [
   {
     name: 'api',
     filter: '@workshop/api',
     suiteFile: 'test/learner.test.ts',
-    declaredDiagnostic: 'LEARNER_API_ENROLLMENT_001',
   },
   {
     name: 'web',
     filter: '@workshop/web',
     suiteFile: 'test/learner.test.tsx',
-    declaredDiagnostic: 'LEARNER_WEB_ENROLLMENT_001',
   },
 ];
 
 let failed = false;
 
 for (const suite of suites) {
-  console.log(`\n=== learner contract: ${suite.name} (${suite.declaredDiagnostic}) ===`);
+  console.log(`\n=== learner contract: ${suite.name} ===`);
 
   const missing = locateSuite(suite);
   if (missing) {

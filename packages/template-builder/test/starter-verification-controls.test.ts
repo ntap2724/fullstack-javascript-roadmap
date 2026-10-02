@@ -84,6 +84,10 @@ describe('learner runner subprocess limits', () => {
     expect(source).toContain('declares no test:learner script');
     expect(source).toContain('no longer contains');
     expect(source).toContain('LEARNER_RUNNER_003');
+    expect(source).not.toContain('declaredDiagnostic');
+    expect(source).toContain('console.log(`\\n=== learner contract: ${suite.name} ===`);');
+    expect(source).not.toContain('LEARNER_API_ENROLLMENT_001)');
+    expect(source).not.toContain('LEARNER_WEB_ENROLLMENT_001)');
   });
 });
 
@@ -220,6 +224,25 @@ describe('generated starter verification scripts', () => {
    * the runner unable to locate a suite, so the globs are pinned rather than merely
    * documented as protected.
    */
+  it('does not emit learner diagnostics before a learner assertion fails', async () => {
+    const runner = await readFile(runnerPath, 'utf8');
+    const apiLearner = await readFile(
+      path.join(starterRoot, 'apps', 'api', 'test', 'learner.test.ts'),
+      'utf8',
+    );
+    const webLearner = await readFile(
+      path.join(starterRoot, 'apps', 'web', 'test', 'learner.test.tsx'),
+      'utf8',
+    );
+
+    expect(runner).not.toContain('LEARNER_API_ENROLLMENT_001');
+    expect(runner).not.toContain('LEARNER_WEB_ENROLLMENT_001');
+    expect(apiLearner).toContain("expect(response.status, 'LEARNER_API_ENROLLMENT_001')");
+    expect(apiLearner).not.toContain("it('LEARNER_API_ENROLLMENT_001");
+    expect(webLearner).toContain("expect(button, 'LEARNER_WEB_ENROLLMENT_001')");
+    expect(webLearner).not.toContain("it('LEARNER_WEB_ENROLLMENT_001");
+  });
+
   it('keeps the workspace globs that make the learner suites reachable', async () => {
     const workspace: unknown = parse(
       await readFile(path.join(starterRoot, 'pnpm-workspace.yaml'), 'utf8'),
