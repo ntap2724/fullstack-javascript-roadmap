@@ -13,6 +13,8 @@ export interface ReleasePlanValidationContext {
   criticalCriteria: readonly string[];
   moduleCompetencies?: ReadonlyMap<string, readonly string[]>;
   criterionCompetencies?: ReadonlyMap<string, string>;
+  /** Ordered modules that require exactly one active R1-CONTENT-* planning record each. */
+  contentSequenceModules?: readonly string[];
 }
 
 export interface ValidatedReleasePlan {
@@ -34,12 +36,15 @@ function issue(code: string, observed: unknown, expected: string, reason: string
   };
 }
 
-function topologicalOrder(plan: ReleasePlan): { order: string[]; unresolved: string[] } {
-  const byId = new Map(plan.items.map((item) => [item.id, item]));
-  const indegree = new Map(plan.items.map((item) => [item.id, 0]));
-  const outgoing = new Map(plan.items.map((item) => [item.id, [] as string[]]));
+function topologicalOrder(items: readonly ReleasePlan['items'][number][]): {
+  order: string[];
+  unresolved: string[];
+} {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const indegree = new Map(items.map((item) => [item.id, 0]));
+  const outgoing = new Map(items.map((item) => [item.id, [] as string[]]));
 
-  for (const item of plan.items) {
+  for (const item of items) {
     for (const dependency of item.dependsOn) {
       if (!byId.has(dependency)) continue;
       indegree.set(item.id, (indegree.get(item.id) ?? 0) + 1);
@@ -80,7 +85,9 @@ export function validateReleasePlan(
   context: ReleasePlanValidationContext,
 ): ValidationOutcome<ValidatedReleasePlan> {
   const diagnostics: Diagnostic[] = [];
+  const activeItems = plan.items.filter((item) => item.status !== 'withdrawn');
   const ids = plan.items.map((item) => item.id);
+  const contentSequenceModules = context.contentSequenceModules;
   const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))].sort();
   if (duplicateIds.length > 0) {
     diagnostics.push(
@@ -93,10 +100,15 @@ export function validateReleasePlan(
     );
   }
 
-  const known = new Set(ids);
-  const missingDependencies = plan.items
+  const known = new Set(activeItems.map((item) => item.id));
+  const withdrawnIds = new Set(
+    plan.items.filter((item) => item.status === 'withdrawn').map((item) => item.id),
+  );
+  const missingDependencies = activeItems
     .flatMap((item) =>
-      item.dependsOn.filter((id) => !known.has(id)).map((id) => `${item.id}->${id}`),
+      item.dependsOn
+        .filter((id) => !known.has(id))
+        .map((id) => `${item.id}->${id}${withdrawnIds.has(id) ? ' (withdrawn)' : ''}`),
     )
     .sort();
   if (missingDependencies.length > 0) {
@@ -110,7 +122,7 @@ export function validateReleasePlan(
     );
   }
 
-  const sorted = topologicalOrder(plan);
+  const sorted = topologicalOrder(activeItems);
   if (sorted.unresolved.length > 0) {
     diagnostics.push(
       issue(
@@ -122,7 +134,7 @@ export function validateReleasePlan(
     );
   }
 
-  const unbounded = plan.items
+  const unbounded = activeItems
     .filter((item) =>
       /^(?:finish|complete|build|improve)\s+(?:all\s+)?release\s+1\b|production-ready|entire curriculum/i.test(
         item.objective,
@@ -140,7 +152,7 @@ export function validateReleasePlan(
     );
   }
 
-  const coveredCompetencies = new Set(plan.items.flatMap((item) => item.coverage.competencies));
+  const coveredCompetencies = new Set(activeItems.flatMap((item) => item.coverage.competencies));
   const unknownCompetencies = [...coveredCompetencies]
     .filter((id) => !context.competencyIds.includes(id))
     .sort();
@@ -158,7 +170,7 @@ export function validateReleasePlan(
     );
   }
 
-  const misalignedCompetencies = plan.items.flatMap((item) => {
+  const misalignedCompetencies = activeItems.flatMap((item) => {
     if (context.moduleCompetencies === undefined) return [];
     const supported = new Set(
       item.coverage.modules.flatMap((target) => context.moduleCompetencies?.get(target.id) ?? []),
@@ -179,7 +191,7 @@ export function validateReleasePlan(
   }
 
   const moduleRoles = new Map<string, Set<string>>();
-  for (const target of plan.items.flatMap((item) => item.coverage.modules)) {
+  for (const target of activeItems.flatMap((item) => item.coverage.modules)) {
     const roles = moduleRoles.get(target.id) ?? new Set<string>();
     target.roles.forEach((role) => roles.add(role));
     moduleRoles.set(target.id, roles);
@@ -202,7 +214,7 @@ export function validateReleasePlan(
     );
   }
 
-  const misalignedCriteria = plan.items.flatMap((item) => {
+  const misalignedCriteria = activeItems.flatMap((item) => {
     if (context.criterionCompetencies === undefined) return [];
     const supported = new Set([
       ...item.coverage.competencies,
@@ -229,7 +241,7 @@ export function validateReleasePlan(
   }
 
   const criterionRoles = new Map<string, Set<string>>();
-  for (const target of plan.items.flatMap((item) => item.coverage.criteria)) {
+  for (const target of activeItems.flatMap((item) => item.coverage.criteria)) {
     const roles = criterionRoles.get(target.id) ?? new Set<string>();
     target.roles.forEach((role) => roles.add(role));
     criterionRoles.set(target.id, roles);
@@ -252,7 +264,57 @@ export function validateReleasePlan(
     );
   }
 
+  if (contentSequenceModules !== undefined) {
+    const contentItems = activeItems.filter((item) => item.id.startsWith('R1-CONTENT-'));
+    const moduleToItems = new Map<string, string[]>();
+    for (const item of contentItems) {
+      for (const module of item.coverage.modules) {
+        if (module.roles.includes('content')) {
+          moduleToItems.set(module.id, [...(moduleToItems.get(module.id) ?? []), item.id]);
+        }
+      }
+    }
+    const sequenceProblems = contentSequenceModules.flatMap((moduleId, index) => {
+      const matches = moduleToItems.get(moduleId) ?? [];
+      const problems: string[] = [];
+      if (matches.length !== 1)
+        problems.push(`${moduleId}:expected-one-found-${String(matches.length)}`);
+      if (index > 0 && matches.length === 1) {
+        const previous = moduleToItems.get(contentSequenceModules[index - 1] ?? '') ?? [];
+        const contentItemId = matches[0];
+        const previousItemId = previous[0];
+        const item = activeItems.find((candidate) => candidate.id === contentItemId);
+        if (
+          previous.length === 1 &&
+          contentItemId !== undefined &&
+          previousItemId !== undefined &&
+          !item?.dependsOn.includes(previousItemId)
+        ) {
+          problems.push(`${contentItemId} must depend on ${previousItemId}`);
+        }
+      }
+      return problems;
+    });
+    const extraModules = [...moduleToItems.keys()].filter(
+      (moduleId) => !contentSequenceModules.includes(moduleId),
+    );
+    sequenceProblems.push(
+      ...extraModules.map((moduleId) => `${moduleId}:unexpected-content-sequence`),
+    );
+    if (sequenceProblems.length > 0) {
+      diagnostics.push(
+        issue(
+          'RELEASE_PLAN_CONTENT_SEQUENCE_001',
+          sequenceProblems.sort(),
+          'Exactly one active R1-CONTENT-* item per ordered module, chained in module order',
+          'Release 1 content sequencing is incomplete, duplicated, or out of order',
+        ),
+      );
+    }
+  }
+
   if (diagnostics.length > 0) return failure(diagnostics);
+
   return success({
     plan,
     topologicalOrder: sorted.order,

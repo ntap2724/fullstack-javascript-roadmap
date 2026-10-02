@@ -24,6 +24,27 @@ items:
         - { id: fresh-clone.reproducibility, roles: [implementation, test, remediation] }
         - { id: no-credential.in-repository, roles: [implementation, test, remediation] }
 
+  - id: R1-CONTENT-ENGINEERING-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the reproducible setup content sequence for the vertical slice
+    specReferences: [curriculum/modules/module-engineering-baseline.md]
+    dependsOn: [R1-GOV-001]
+    files: [planning/release-1/sequences/engineering-baseline.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-engineering-baseline, roles: [content] }]
+      criteria: []
+
   - id: R1-EXERCISE-JS-001
     status: ready
     lane: exercise
@@ -50,13 +71,8 @@ items:
     lane: curriculum
     risk: R2
     objective: Write and validate the closure mental-model lesson and executable examples
-    specReferences:
-      [
-        curriculum/competencies/js.function.closure.md,
-        curriculum/competencies/browser.dom.event-flow.md,
-        curriculum/competencies/browser.fetch.http-boundary.md,
-      ]
-    dependsOn: [R1-EXERCISE-JS-001]
+    specReferences: [curriculum/competencies/js.function.closure.md]
+    dependsOn: [R1-CONTENT-ENGINEERING-001, R1-EXERCISE-JS-001]
     files: [curriculum/lessons/lesson-js-closure-private-state.md]
     acceptance:
       - command: pnpm
@@ -68,9 +84,7 @@ items:
     openQuestions: []
     coverage:
       competencies: [js.function.closure]
-      modules:
-        - { id: module-javascript-essentials, roles: [content, assessment] }
-        - { id: module-browser-interaction, roles: [content, assessment] }
+      modules: [{ id: module-javascript-essentials, roles: [content, assessment] }]
       criteria: []
 
   - id: R1-CONTENT-TS-001
@@ -79,7 +93,7 @@ items:
     risk: R2
     objective: Author the untrusted-input narrowing sequence and its review assessment
     specReferences: [curriculum/competencies/ts.narrowing.untrusted-input.md]
-    dependsOn: [R1-CONTENT-JS-001]
+    dependsOn: [R1-CONTENT-BROWSER-001]
     files: [curriculum/lessons/lesson-typescript-bridge-orientation.md]
     acceptance:
       - command: pnpm
@@ -94,13 +108,139 @@ items:
       modules: [{ id: module-typescript-bridge, roles: [content, assessment] }]
       criteria: []
 
+  - id: R1-CONTENT-BROWSER-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the browser event and fetch boundary content sequence
+    specReferences: [curriculum/modules/module-browser-interaction.md]
+    dependsOn: [R1-CONTENT-JS-001]
+    files: [curriculum/modules/module-browser-interaction.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-browser-interaction, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-REACT-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the React state ownership and server-state content sequence
+    specReferences: [curriculum/modules/module-react-spa.md]
+    dependsOn: [R1-CONTENT-TS-001]
+    files: [curriculum/modules/module-react-spa.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-react-spa, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-HTTP-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the HTTP and Express request boundary content sequence
+    specReferences: [curriculum/modules/module-http-express.md]
+    dependsOn: [R1-CONTENT-REACT-001]
+    files: [curriculum/modules/module-http-express.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-http-express, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-DB-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the relational constraints and transaction content sequence
+    specReferences: [curriculum/modules/module-postgresql-drizzle.md]
+    dependsOn: [R1-CONTENT-HTTP-001]
+    files: [curriculum/modules/module-postgresql-drizzle.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-postgresql-drizzle, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-FULLSTACK-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the cross-layer contract and incident content sequence
+    specReferences: [curriculum/modules/module-fullstack-integration.md]
+    dependsOn: [R1-CONTENT-DB-001]
+    files: [curriculum/modules/module-fullstack-integration.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-fullstack-integration, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-CAPSTONE-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the technical walkthrough and mini-capstone content sequence
+    specReferences: [curriculum/modules/module-mini-capstone.md]
+    dependsOn: [R1-CONTENT-FULLSTACK-001]
+    files: [curriculum/modules/module-mini-capstone.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-mini-capstone, roles: [content] }]
+      criteria: []
+
   - id: R1-WEB-001
     status: ready
     lane: frontend
     risk: R3
     objective: Implement the workshop-list server-state workflow and accessible enrollment entry
     specReferences: [projects/milestones/workshop-enrollment/acceptance/contract.yaml]
-    dependsOn: [R1-CONTENT-TS-001]
+    dependsOn: [R1-CONTENT-BROWSER-001]
     files: [templates/fullstack-vertical-slice/files/apps/web/src]
     acceptance:
       - command: pnpm

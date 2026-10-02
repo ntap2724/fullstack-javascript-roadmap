@@ -34,6 +34,10 @@ import {
   type ValidationOutcome,
 } from '@roadmap/validation-core';
 import { runTemplateDryRun } from '../tooling/publish-templates/src/pipeline.js';
+import {
+  readAcceptanceContract,
+  verifyUntouchedSeamContract,
+} from './verify-template-learner-contract.js';
 
 export interface Wp10SkeletonInput {
   sourceCommit: string;
@@ -262,10 +266,6 @@ async function readDecisionStatus(
   return { id, status: match[1].trim() };
 }
 
-function pnpmCommand(): string {
-  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-}
-
 function curriculumModuleCompetencies(
   graph: CurriculumGraph,
   moduleIds: readonly string[],
@@ -368,7 +368,10 @@ function sameStringSet(value: unknown[], expected: readonly string[]): boolean {
   );
 }
 
-export function classifyLearnerProbe(result: Awaited<ReturnType<typeof runCommand>>) {
+export function classifyLearnerProbe(
+  result: Awaited<ReturnType<typeof runCommand>>,
+  seamFailures: readonly string[] = [],
+) {
   const output = `${result.stdout}\n${result.stderr}`;
   const expected = ['LEARNER_API_ENROLLMENT_001', 'LEARNER_WEB_ENROLLMENT_001'] as const;
   const suiteResults = [
@@ -382,6 +385,7 @@ export function classifyLearnerProbe(result: Awaited<ReturnType<typeof runComman
       output,
     );
   const completeExpectedFailure =
+    seamFailures.length === 0 &&
     result.exitCode !== null &&
     result.exitCode !== 0 &&
     result.signal === null &&
@@ -479,6 +483,7 @@ export async function verifyWp10Repository(
           .map((criterion) => criterion.id),
         moduleCompetencies: curriculumModuleCompetencies(graph, track.modules),
         criterionCompetencies: rubricCriterionCompetencies(rubric),
+        contentSequenceModules: track.modules,
       }),
     );
 
@@ -504,13 +509,17 @@ export async function verifyWp10Repository(
     let learnerStatus: Wp10SkeletonInput['template']['learnerStatus'] = 'unexpected-failure';
     let learnerDiagnostics: string[] = [];
     if (dryRun.status === 'passed' && dryRun.artifact !== undefined) {
+      const templateRoot = path.join(root, 'templates', 'fullstack-vertical-slice');
+      const acceptance = await readAcceptanceContract(templateRoot);
+      const seamFailures = await verifyUntouchedSeamContract(dryRun.artifact.root);
       const learnerProbe = classifyLearnerProbe(
         await runCommand({
-          command: pnpmCommand(),
-          args: ['verify'],
-          cwd: dryRun.artifact.root,
-          timeoutMs: 300_000,
+          command: acceptance.learnerProbe.command,
+          args: acceptance.learnerProbe.args,
+          cwd: path.resolve(dryRun.artifact.root, acceptance.learnerProbe.cwd),
+          timeoutMs: acceptance.learnerProbe.timeoutMs,
         }),
+        seamFailures,
       );
       learnerStatus = learnerProbe.status;
       learnerDiagnostics = [...learnerProbe.diagnostics];

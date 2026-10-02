@@ -208,7 +208,12 @@ export async function listSourceFiles(root: string): Promise<readonly SourceFile
     if (metadata.isSymbolicLink()) {
       throw new Error(`TEMPLATE_SYMLINK_001:${relativePath}`);
     }
-    if (metadata.isFile()) output.push({ absolutePath, relativePath });
+    if (!metadata.isFile()) {
+      throw new Error(
+        `TEMPLATE_INPUT_002:${relativePath}:publication input must be a regular file`,
+      );
+    }
+    output.push({ absolutePath, relativePath });
   }
 
   return output.sort((left, right) => left.relativePath.localeCompare(right.relativePath));

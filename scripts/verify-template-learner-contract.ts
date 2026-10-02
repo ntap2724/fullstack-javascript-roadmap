@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -88,6 +89,23 @@ const AcceptanceContractSchema = z
   })
   .loose();
 
+export type AcceptanceContract = z.infer<typeof AcceptanceContractSchema>;
+
+export async function readAcceptanceContract(
+  templateRoot = 'templates/fullstack-vertical-slice',
+): Promise<AcceptanceContract> {
+  const acceptancePath = path.join(templateRoot, 'acceptance', 'baseline.yaml');
+  const parsed = AcceptanceContractSchema.safeParse(parse(await readFile(acceptancePath, 'utf8')));
+  if (!parsed.success) {
+    throw new Error(
+      `TEMPLATE_ACCEPTANCE_001: acceptance/baseline.yaml does not declare a valid command contract: ${parsed.error.issues
+        .map((issue) => `${issue.path.join('.')} ${issue.message}`)
+        .join('; ')}`,
+    );
+  }
+  return parsed.data;
+}
+
 interface CommandContract {
   command: string;
   args: readonly string[];
@@ -141,16 +159,8 @@ const expectedSeams = {
  */
 async function assertBaselineCommandContract(): Promise<readonly string[]> {
   const { definition } = await loadTemplateDefinition(templateRoot);
-  const acceptancePath = path.join(templateRoot, 'acceptance', 'baseline.yaml');
-  const parsed = AcceptanceContractSchema.safeParse(parse(await readFile(acceptancePath, 'utf8')));
-  if (!parsed.success) {
-    return [
-      `TEMPLATE_ACCEPTANCE_001: acceptance/baseline.yaml does not declare an argv-shaped command contract: ${parsed.error.issues
-        .map((issue) => `${issue.path.join('.')} ${issue.message}`)
-        .join('; ')}`,
-    ];
-  }
-  const acceptance = parsed.data;
+  const parsed = await readAcceptanceContract(templateRoot);
+  const acceptance = parsed;
   const failures: string[] = [];
 
   if (!sameCommand(definition.verification.install, acceptance.publication.install)) {
@@ -409,7 +419,9 @@ function seamProbeSource(): string {
  * never part of the published file set, so it pins the starting point without ever
  * constraining a learner who moves past it.
  */
-async function assertUntouchedSeamContract(artifactRoot: string): Promise<readonly string[]> {
+export async function verifyUntouchedSeamContract(
+  artifactRoot: string,
+): Promise<readonly string[]> {
   const probeRelativePath = 'test/__publication-seam-probe__.test.ts';
   const probePath = path.join(artifactRoot, 'apps', 'api', probeRelativePath);
   try {
@@ -492,7 +504,14 @@ async function assertGeneratedStarterContract(artifactRoot: string): Promise<Sta
     };
   }
 
-  const probe = await observe('pnpm verify', pnpmCommand(), ['verify'], artifactRoot, 900_000);
+  const declaredProbe = (await readAcceptanceContract(templateRoot)).learnerProbe;
+  const probe = await observe(
+    'the learner contract',
+    declaredProbe.command,
+    declaredProbe.args,
+    path.resolve(artifactRoot, declaredProbe.cwd),
+    declaredProbe.timeoutMs,
+  );
   if ('failure' in probe) return { failures: [probe.failure], installed: true };
   if (probe.result.timedOut) {
     failures.push('TEMPLATE_LEARNER_001: pnpm verify timed out inside the generated starter');
@@ -576,7 +595,7 @@ async function main(): Promise<void> {
     // seam, so it is skipped only when install itself failed — and that failure is
     // already recorded above.
     if (starter.installed) {
-      failures.push(...(await assertUntouchedSeamContract(built.value.root)));
+      failures.push(...(await verifyUntouchedSeamContract(built.value.root)));
     }
 
     if (failures.length > 0) {
@@ -588,4 +607,7 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+const invoked = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
+if (invoked === fileURLToPath(import.meta.url)) {
+  await main();
+}

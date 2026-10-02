@@ -151,6 +151,16 @@ describe('publication input assembly', () => {
     expect(selected).toEqual(['files/README.md', 'files/src/index.ts']);
   });
 
+  it('fails closed when a Git-listed directory replaces a file candidate', async () => {
+    const root = await createTemplate({ git: true });
+    await write(root, 'files/replaced.txt', 'candidate\n');
+    await run('git', ['-C', root, 'add', '-A']);
+    await rm(path.join(root, 'files', 'replaced.txt'), { force: true });
+    await mkdir(path.join(root, 'files', 'replaced.txt'), { recursive: true });
+
+    await expect(listSourceFiles(root)).rejects.toThrow(/TEMPLATE_INPUT_002/);
+  });
+
   it('fails closed when a generated directory is committed rather than ignored', async () => {
     const root = await createTemplate({ git: true });
     await write(root, 'files/dist/leaked.js', 'export const built = 1;\n');

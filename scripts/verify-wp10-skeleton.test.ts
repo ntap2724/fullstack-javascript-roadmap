@@ -40,8 +40,14 @@ describe('learner probe classification', () => {
     expect(classified.status).not.toBe('expected-failure');
   });
 
-  it('accepts exactly the two observed learner failures', () => {
+  it('accepts exactly the two observed learner failures when the seam is proven', () => {
     expect(classifyLearnerProbe(learnerResult()).status).toBe('expected-failure');
+  });
+
+  it('rejects output when the independently probed seam is unhealthy', () => {
+    expect(classifyLearnerProbe(learnerResult(), ['TEMPLATE_SEAM_002'] as const).status).toBe(
+      'unexpected-failure',
+    );
   });
 });
 

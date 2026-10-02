@@ -1,7 +1,8 @@
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import YAML from 'yaml';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { loadCurriculum } from '@roadmap/curriculum-loader';
 import { RubricSchema } from '@roadmap/rubric-schema';
 import {
@@ -11,6 +12,14 @@ import {
   type ReleasePlan,
   type ReleasePlanValidationContext,
 } from '../src/index.js';
+
+const scratchRoots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    scratchRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
+});
 
 const context: ReleasePlanValidationContext = {
   competencyIds: ['js.function.closure', 'db.transaction.atomic-enrollment'],
@@ -181,6 +190,78 @@ describe('validateReleasePlan', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('excludes withdrawn work from active coverage and ordering', () => {
+    const plan = validPlan();
+    const [first] = twoItems(plan);
+    first.status = 'withdrawn';
+    const result = validateReleasePlan(plan, context);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.map((entry) => entry.code)).toContain(
+        'RELEASE_PLAN_TRACEABILITY_001',
+      );
+    }
+  });
+
+  it('rejects active work that depends on withdrawn work', () => {
+    const plan = validPlan();
+    const [first, second] = twoItems(plan);
+    first.status = 'withdrawn';
+    second.dependsOn = [first.id];
+    const result = validateReleasePlan(plan, context);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const dependency = result.diagnostics.find(
+        (entry) => entry.code === 'RELEASE_PLAN_DEPENDENCY_001',
+      );
+      expect(dependency?.observed).toEqual([`${second.id}->${first.id} (withdrawn)`]);
+    }
+  });
+
+  it('rejects prefix-lookalike issue headings', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'roadmap-contract-heading-'));
+    scratchRoots.push(root);
+    const plan = validPlan();
+    const first = firstItem(plan);
+    const contractRoot = path.join(root, 'planning', 'release-1', 'issue-contracts');
+    await mkdir(contractRoot, { recursive: true });
+    const sections = [
+      'Objective',
+      'Context',
+      'In scope',
+      'Out of scope',
+      'Allowed boundaries',
+      'Required behavior',
+      'Failure behavior',
+      'Acceptance criteria',
+      'Commands',
+      'Evidence',
+      'Constraints',
+      'Open questions',
+    ];
+    const contractIds = [
+      'R1-EXERCISE-JS-001',
+      'R1-CONTENT-JS-001',
+      'R1-WEB-001',
+      'R1-API-001',
+      'R1-DB-001',
+      'R1-SEC-001',
+      'R1-DB-002',
+      'R1-FULLSTACK-001',
+    ];
+    await Promise.all(
+      contractIds.map((id) =>
+        writeFile(
+          path.join(contractRoot, `${id}.md`),
+          [`# ${id}`, ...sections.map((heading) => `## ${heading} details\ntext`)].join('\n'),
+          'utf8',
+        ),
+      ),
+    );
+    const diagnostics = await validateIssueContracts(root, plan);
+    expect(diagnostics.some((entry) => entry.observed === `${first.id}:Objective`)).toBe(true);
+  });
+
   it('validates the repository Release 1 backlog against curriculum and rubric coverage', async () => {
     const root = path.resolve(import.meta.dirname, '..', '..', '..');
     const corpus = await loadCurriculum(path.join(root, 'curriculum'));
@@ -246,6 +327,7 @@ describe('validateReleasePlan', () => {
       criterionCompetencies: new Map(
         rubric.criteria.map((criterion) => [criterion.id, criterion.competency]),
       ),
+      contentSequenceModules: track.data.modules,
     });
     if (!result.ok) console.log(result.diagnostics);
     expect(result.ok).toBe(true);

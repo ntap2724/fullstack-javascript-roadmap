@@ -43,10 +43,10 @@ function issue(observed: unknown, reason: string): Diagnostic {
 }
 
 function sectionBody(source: string, heading: string): string | undefined {
-  const marker = `## ${heading}`;
-  const start = source.indexOf(marker);
-  if (start < 0) return undefined;
-  const after = source.slice(start + marker.length);
+  const matches = [...source.matchAll(new RegExp(`^## ${heading}$`, 'gm'))];
+  const [match] = matches;
+  if (matches.length !== 1 || match === undefined) return undefined;
+  const after = source.slice(match.index + match[0].length);
   const next = after.search(/^##\s+/m);
   return (next < 0 ? after : after.slice(0, next)).trim();
 }
