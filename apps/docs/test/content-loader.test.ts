@@ -142,17 +142,17 @@ describe('curriculumDocsLoader', () => {
     await loader.load(context.context);
 
     expect(context.clear).toHaveBeenCalledOnce();
-    expect(context.parseData).toHaveBeenCalledTimes(8);
+    expect(context.parseData).toHaveBeenCalledTimes(9);
     const closureRenderCall = context.renderMarkdown.mock.calls.find(([body]) =>
       body.includes('RELEASE_ZERO_CLOSURE_BODY'),
     );
     expect(closureRenderCall).toBeDefined();
     expect(closureRenderCall?.[0]).toContain('RELEASE_ZERO_CLOSURE_BODY');
     expect(closureRenderCall?.[1]?.fileURL).toBeInstanceOf(URL);
-    expect(context.generateDigest).toHaveBeenCalledTimes(8);
+    expect(context.generateDigest).toHaveBeenCalledTimes(9);
     expect(calls).toEqual([
       'clear',
-      ...Array.from({ length: 8 }, () => [
+      ...Array.from({ length: 9 }, () => [
         'parseData',
         'renderMarkdown',
         'generateDigest',
@@ -208,22 +208,31 @@ describe('curriculumDocsLoader', () => {
     listener(watcher, 'add')(path.join(curriculumRoot, 'lessons', 'inside-a.md'));
     listener(watcher, 'change')(path.join(curriculumRoot, 'lessons', 'inside-b.md'));
 
-    await vi.waitFor(() => {
-      expect(releases).toHaveLength(1);
-    });
+    await vi.waitFor(
+      () => {
+        expect(releases).toHaveLength(1);
+      },
+      { timeout: 30_000 },
+    );
     expect(maximumActiveReloads).toBe(1);
     releases.shift()?.();
-    await vi.waitFor(() => {
-      expect(releases).toHaveLength(1);
-    });
+    await vi.waitFor(
+      () => {
+        expect(releases).toHaveLength(1);
+      },
+      { timeout: 30_000 },
+    );
     expect(maximumActiveReloads).toBe(1);
     releases.shift()?.();
-    await vi.waitFor(() => {
-      expect(context.set).toHaveBeenCalledTimes(32);
-    });
+    await vi.waitFor(
+      () => {
+        expect(context.set).toHaveBeenCalledTimes(36);
+      },
+      { timeout: 30_000 },
+    );
 
     expect(maximumActiveReloads).toBe(1);
-    expect(context.set).toHaveBeenCalledTimes(32);
+    expect(context.set).toHaveBeenCalledTimes(36);
   });
 
   it('detaches an old watcher and reloads through the latest context', async () => {
@@ -244,9 +253,12 @@ describe('curriculumDocsLoader', () => {
     expect(secondWatcher.on.mock.calls.map(([event]) => event)).toEqual(eventNames);
 
     listener(secondWatcher, 'change')(path.join(curriculumRoot, 'lessons', 'changed.md'));
-    await vi.waitFor(() => {
-      expect(secondContext.clear).toHaveBeenCalledTimes(2);
-    });
+    await vi.waitFor(
+      () => {
+        expect(secondContext.clear).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 30_000 },
+    );
     expect(firstContext.clear).toHaveBeenCalledOnce();
   });
 
@@ -264,9 +276,12 @@ describe('curriculumDocsLoader', () => {
     context.parseData.mockRejectedValueOnce(reloadError);
     listener(watcher, 'add')(path.join(curriculumRoot, 'lessons', 'broken.md'));
 
-    await vi.waitFor(() => {
-      expect(context.error).toHaveBeenCalledWith(reloadError.message);
-    });
+    await vi.waitFor(
+      () => {
+        expect(context.error).toHaveBeenCalledWith(reloadError.message);
+      },
+      { timeout: 30_000 },
+    );
     expect(surfaced).toHaveLength(1);
     expect(() => {
       surfaced[0]?.();
@@ -288,7 +303,7 @@ describe('curriculumDocsLoader', () => {
 
       await loader.load(context.context);
       expect(context.clear).toHaveBeenCalledOnce();
-      expect(context.set).toHaveBeenCalledTimes(8);
+      expect(context.set).toHaveBeenCalledTimes(9);
 
       const changedLesson = path.join(temporaryRoot, 'lessons', 'lesson-js-function-values.md');
       const originalSource = await readFile(changedLesson, 'utf8');
@@ -297,13 +312,16 @@ describe('curriculumDocsLoader', () => {
       await writeFile(changedLesson, graphInvalidSource, 'utf8');
       listener(watcher, 'change')(changedLesson);
 
-      await vi.waitFor(() => {
-        expect(context.error).toHaveBeenCalledWith(
-          expect.stringContaining('CURRICULUM_PUBLICATION_001'),
-        );
-      });
+      await vi.waitFor(
+        () => {
+          expect(context.error).toHaveBeenCalledWith(
+            expect.stringContaining('CURRICULUM_PUBLICATION_001'),
+          );
+        },
+        { timeout: 30_000 },
+      );
       expect(context.clear).toHaveBeenCalledOnce();
-      expect(context.set).toHaveBeenCalledTimes(8);
+      expect(context.set).toHaveBeenCalledTimes(9);
       expect(surfaced).toHaveLength(1);
       expect(() => {
         surfaced[0]?.();

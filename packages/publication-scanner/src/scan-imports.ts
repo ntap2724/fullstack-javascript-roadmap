@@ -7,6 +7,24 @@ import { forbiddenPathSegments } from './policies.js';
 const moduleExtensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '.jsx', '.tsx', '.json'];
 const parseableExtensions = new Set(moduleExtensions.filter((extension) => extension !== '.json'));
 
+/**
+ * TypeScript's NodeNext output convention: a source file imports its sibling by the
+ * EMITTED specifier (`./health.js`) while the file on disk is `./health.ts`. Without
+ * this mapping every TypeScript starter reports unresolved edges for imports that
+ * compile and run, which would make the unresolved-import control unusable exactly
+ * where it matters most.
+ *
+ * This widens resolution only. Containment, symlink rejection, the private-path
+ * check, and the selected-set membership check all still run on whatever resolves,
+ * so a `.js` specifier that lands on an unselected or out-of-root `.ts` file is
+ * still reported.
+ */
+const typescriptSourceEquivalents = new Map<string, readonly string[]>([
+  ['.js', ['.ts', '.tsx', '.jsx']],
+  ['.mjs', ['.mts']],
+  ['.cjs', ['.cts']],
+]);
+
 function diagnostic(
   code: string,
   importer: string,
@@ -45,7 +63,12 @@ async function resolveRelative(
   const absolute = path.resolve(root, unresolved);
   const extension = path.posix.extname(unresolved);
   const candidates = extension
-    ? [absolute]
+    ? [
+        absolute,
+        ...(typescriptSourceEquivalents.get(extension) ?? []).map(
+          (replacement) => `${absolute.slice(0, -extension.length)}${replacement}`,
+        ),
+      ]
     : [
         absolute,
         ...moduleExtensions.map((candidate) => `${absolute}${candidate}`),

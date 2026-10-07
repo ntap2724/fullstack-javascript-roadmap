@@ -14,6 +14,8 @@ requiredCompetencies:
   - test.orphan
 modules:
   - module-orphan-competency
+gates:
+  - gate-fixture-orphan-competency
 ---
 
 Completeness reachability fixture.

@@ -8,4 +8,5 @@ await runPipeline([
   'docs:build',
   'verify:negative-fixtures',
   'verify:templates',
+  'verify:wp10',
 ]);

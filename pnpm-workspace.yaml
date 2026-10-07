@@ -4,6 +4,7 @@ packages:
   - tooling/*
   - exercises/*/*
   - templates/*
+  - projects/milestones/*
 
 catalogMode: strict
 cleanupUnusedCatalogs: true

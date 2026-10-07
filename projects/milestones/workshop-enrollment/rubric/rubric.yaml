@@ -1,0 +1,148 @@
+schemaVersion: 1
+id: rubric-workshop-enrollment
+version: 0.1.0
+title: Workshop Enrollment Rubric
+criteria:
+  - id: backend.authorization
+    title: Server-side authorization
+    critical: true
+    required: false
+    competency: api.authorization.resource-ownership
+    evidence: [test-report, source-diff]
+    levels:
+      '0': No authorization checks exist on protected endpoints
+      '1': Authorization is checked for one role or one endpoint only
+      '2': All protected endpoints verify session and resource ownership server-side
+      '3': Authorization is enforced uniformly with negative tests for each forbidden transition
+
+  - id: password.session-handling
+    title: Password and session handling
+    critical: true
+    required: false
+    competency: api.authentication.session-lifecycle
+    evidence: [test-report, source-diff]
+    levels:
+      '0': Credentials stored in plaintext or session not implemented
+      '1': Session exists but lacks expiry or secure cookie attributes
+      '2': Passwords hashed with adaptive algorithm; sessions use HttpOnly Secure SameSite cookies
+      '3': Session rotation on login, revocation on logout, and CSRF token bound to session
+
+  - id: unique.enrollment-invariant
+    title: Unique enrollment invariant
+    critical: true
+    required: false
+    competency: db.model.relational-constraints
+    evidence: [test-report, source-diff]
+    levels:
+      '0': No uniqueness constraint exists
+      '1': Uniqueness enforced only in application code
+      '2': Database composite primary key prevents duplicate enrollment rows
+      '3': Constraint violation returns 409 with a contract-defined error body and no partial state
+
+  - id: atomic.capacity-workflow
+    title: Atomic capacity workflow
+    critical: true
+    required: false
+    competency: db.transaction.atomic-enrollment
+    evidence: [test-report, observation-report]
+    levels:
+      '0': Capacity not checked before enrollment
+      '1': Capacity checked in application code without a transaction
+      '2': Enrollment runs inside a database transaction with capacity verification
+      '3': Transaction uses locking or serializable isolation; concurrent test demonstrates no oversell
+
+  - id: runtime.request-validation
+    title: Runtime request validation
+    critical: true
+    required: false
+    competency: api.validation.runtime-boundary
+    evidence: [test-report, source-diff]
+    levels:
+      '0': No input validation on API endpoints
+      '1': Validation exists for one endpoint or one field
+      '2': All external input validated with Zod schemas at the API boundary
+      '3': Invalid payloads return contract-defined 400 errors with field-level details
+
+  - id: fresh-clone.reproducibility
+    title: Fresh-clone reproducibility
+    critical: true
+    required: false
+    competency: engineering.repository.reproducible-setup
+    evidence: [observation-report, explanation]
+    levels:
+      '0': Project cannot be installed from a fresh clone
+      '1': Install succeeds but baseline verification fails
+      '2': pnpm install --frozen-lockfile and pnpm verify:baseline pass on a fresh clone
+      '3': Full verification passes on both supported operating systems without manual steps
+
+  - id: no-credential.in-repository
+    title: No credential in repository
+    critical: true
+    required: false
+    competency: engineering.repository.reproducible-setup
+    evidence: [source-diff, observation-report]
+    levels:
+      '0': Secrets committed to the repository
+      '1': Secrets exist in untracked files but .env.example is incomplete
+      '2': No secrets in tracked files; .env.example documents all required variables
+      '3': CI verifies no secret patterns and the health endpoint discloses no credentials
+
+  - id: accessible.primary-workflow
+    title: Accessible primary workflow
+    critical: false
+    required: true
+    competency: react.state.ownership
+    evidence: [test-report, observation-report]
+    levels:
+      '0': No semantic HTML or landmarks
+      '1': Heading and landmark present but states not announced
+      '2': Loading, empty, and error states use correct ARIA roles
+      '3': Full keyboard navigation for enroll and cancel workflows
+
+  - id: loading.empty-error-states
+    title: Loading, empty, error, and retry states
+    critical: false
+    required: true
+    competency: react.server-state.lifecycle
+    evidence: [test-report, observation-report]
+    levels:
+      '0': Only the success state renders
+      '1': Loading indicator exists but error state missing
+      '2': All four states render with correct content
+      '3': Retry re-fetches data and error state is keyboard reachable
+
+  - id: english.readme
+    title: English README
+    critical: false
+    required: true
+    competency: career.evidence.technical-walkthrough
+    evidence: [explanation, source-diff]
+    levels:
+      '0': No README
+      '1': README exists but lacks setup instructions
+      '2': README documents prerequisites, commands, and architecture
+      '3': README includes editable paths, verification commands, and non-goals
+
+  - id: api.documentation
+    title: API documentation
+    critical: false
+    required: true
+    competency: http.request-response-semantics
+    evidence: [explanation, source-diff]
+    levels:
+      '0': No API documentation
+      '1': Endpoints listed without request/response shapes
+      '2': Each endpoint documents method, path, request schema, and response schema
+      '3': Error contract documented with all possible status codes and error codes
+
+  - id: debugging.report
+    title: Debugging report
+    critical: false
+    required: true
+    competency: fullstack.incident.duplicate-submission
+    evidence: [debugging-report, test-report]
+    levels:
+      '0': No debugging report submitted
+      '1': Report describes symptoms without root cause
+      '2': Report traces the bug through at least three layers with evidence
+      '3': Report includes a regression test and explains the chosen fix among alternatives

@@ -1,0 +1,19 @@
+{
+  "name": "@roadmap/workshop-enrollment-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@roadmap/assessment-core": "workspace:*",
+    "@roadmap/rubric-schema": "workspace:*",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

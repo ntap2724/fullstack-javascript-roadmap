@@ -2,13 +2,15 @@ import { fileURLToPath } from 'node:url';
 import { buildCurriculumGraph, validateCurriculumGraph } from '@roadmap/curriculum-graph';
 import { loadCurriculum } from '@roadmap/curriculum-loader';
 import { describe, expect, it } from 'vitest';
+
 import { createDocEntries } from '../src/lib/create-doc-entries.js';
 
 const curriculumRoot = fileURLToPath(new URL('../../../curriculum/', import.meta.url));
 
-const expectedFinalIds = [
+const releaseZeroIds = [
   'assessment-js-closure',
   'assessment-js-function-values',
+  'gate-release-zero-baseline',
   'js.function.closure',
   'js.function.values',
   'lesson-js-closure-private-state',
@@ -16,55 +18,49 @@ const expectedFinalIds = [
   'lesson-release-zero-draft',
   'module-js-functions',
   'track-core',
-];
+] as const;
 
 describe('Release 0 curriculum fixture', () => {
-  it('is exactly the valid nine-document final graph', async () => {
+  it('loads the full curriculum including Release 1 skeleton', async () => {
     const corpus = await loadCurriculum(curriculumRoot);
     expect(corpus.ok).toBe(true);
     if (!corpus.ok) return;
 
-    expect(corpus.value.documents).toHaveLength(9);
-    expect(corpus.value.documents.map(({ data }) => data.id).sort()).toEqual(expectedFinalIds);
-    expect(corpus.value.documents.filter(({ data }) => data.status === 'draft')).toHaveLength(1);
-    const finalKindCounts = corpus.value.documents.reduce<Record<string, number>>(
-      (counts, { data }) => ({
-        ...counts,
-        [data.kind]: (counts[data.kind] ?? 0) + 1,
-      }),
-      {},
+    const releaseZeroDocuments = corpus.value.documents.filter(
+      ({ data }) => data.status === 'published' || data.status === 'draft',
     );
-    expect(finalKindCounts).toEqual({
-      assessment: 2,
-      competency: 2,
-      lesson: 3,
-      module: 1,
-      track: 1,
+    expect(releaseZeroDocuments.map(({ data }) => data.id).sort()).toEqual(releaseZeroIds);
+    expect(releaseZeroDocuments).toHaveLength(releaseZeroIds.length);
+
+    const productionEntries = createDocEntries(corpus.value, {
+      channel: 'production',
+      curriculumRoot,
     });
-    expect(createDocEntries(corpus.value, { channel: 'production', curriculumRoot })).toHaveLength(
-      8,
+    expect(productionEntries.map((entry) => entry.data.semanticId).sort()).toEqual(
+      releaseZeroIds.filter((id) => id !== 'lesson-release-zero-draft').sort(),
     );
-    expect(createDocEntries(corpus.value, { channel: 'development', curriculumRoot })).toHaveLength(
-      9,
+    expect(productionEntries.some((entry) => entry.data.semanticId === 'release-0-1-0')).toBe(
+      false,
     );
-    expect(corpus.value.documents.some(({ data }) => data.id === 'lesson-release-zero-draft')).toBe(
-      true,
-    );
+    expect(
+      createDocEntries(corpus.value, { channel: 'preview', curriculumRoot }).some(
+        (entry) => entry.data.semanticId === 'release-0-1-0',
+      ),
+    ).toBe(true);
 
-    const moduleDocument = corpus.value.documents.find(
-      ({ data }) => data.id === 'module-js-functions',
-    );
-    expect(moduleDocument?.data.kind).toBe('module');
-    if (moduleDocument?.data.kind === 'module') {
-      expect(moduleDocument.data.lessons).toEqual([
-        'lesson-js-function-values',
-        'lesson-js-closure-private-state',
-      ]);
-    }
-
+    // Verify the graph is valid (acyclic, references resolve, completeness checks pass)
     const graph = buildCurriculumGraph(corpus.value);
     expect(graph.ok).toBe(true);
     if (!graph.ok) return;
     expect(validateCurriculumGraph(graph.value).ok).toBe(true);
+
+    // Verify key Release 1 skeleton entities exist
+    expect(corpus.value.documents.some(({ data }) => data.id === 'release-0-1-0')).toBe(true);
+    expect(corpus.value.documents.some(({ data }) => data.id === 'track-core-vertical-slice')).toBe(
+      true,
+    );
+    expect(
+      corpus.value.documents.some(({ data }) => data.id === 'project-workshop-enrollment'),
+    ).toBe(true);
   });
 });

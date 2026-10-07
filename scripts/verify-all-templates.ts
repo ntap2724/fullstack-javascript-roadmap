@@ -16,7 +16,10 @@ if (dirty.length > 0) throw new Error('TEMPLATE_RELEASE_001: worktree must be cl
 const sourceCommit = git('rev-parse', 'HEAD');
 const nodeVersion = (await readFile('.node-version', 'utf8')).trim();
 const pnpmVersion = (await readFile('.pnpm-version', 'utf8')).trim();
-const templateRoots = ['templates/javascript-engineering'];
+// Every publishable template is verified on every run. Skipping one would let an
+// unscanned starter reach publication, so the list is exhaustive by contract and
+// each entry writes exactly one report named after its directory.
+const templateRoots = ['templates/fullstack-vertical-slice', 'templates/javascript-engineering'];
 
 for (const templateRoot of templateRoots) {
   const reportPath = path.join(

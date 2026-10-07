@@ -108,4 +108,15 @@ describe('published-track root definition', () => {
       expect(codes).not.toContain('CURRICULUM_COMPLETENESS_004');
     }
   });
+
+  it('does not make a review track active merely because a release references it', () => {
+    const graph = buildIsolatedGraph({
+      trackStatus: 'review',
+      releaseReferencesTrackRoot: true,
+    });
+    const codes = completenessDiagnostics(graph).map(({ code }) => code);
+
+    expect(codes).toContain('CURRICULUM_COMPLETENESS_001');
+    expect(codes).toContain('CURRICULUM_COMPLETENESS_004');
+  });
 });

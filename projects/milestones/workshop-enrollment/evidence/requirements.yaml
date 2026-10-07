@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: evidence-workshop-enrollment
+version: 0.1.0
+status: review
+requiredEvidence:
+  - id: repository
+    description: Public or reviewable repository at a 40-hex commit
+    type: repository-url
+
+  - id: ci-run
+    description: CI run for the pinned commit showing all checks pass
+    type: ci-artifact
+
+  - id: deployed-web-url
+    description: Deployed web application URL (required after deployment module)
+    type: url
+    optional: true
+
+  - id: deployed-api-url
+    description: Deployed API URL (required after deployment module)
+    type: url
+    optional: true
+
+  - id: architecture-overview
+    description: Architecture overview covering package boundaries and data flow
+    type: document
+
+  - id: data-model
+    description: Data model diagram or description showing tables and constraints
+    type: document
+
+  - id: authorization-matrix
+    description: Matrix mapping roles to endpoints with allowed and denied actions
+    type: document
+
+  - id: selected-pull-requests
+    description: At least three pull requests demonstrating incremental development
+    type: pull-request-links
+
+  - id: debugging-report
+    description: Completed debugging report tracing duplicate enrollment across layers
+    type: document
+
+  - id: technical-walkthrough
+    description: Technical walkthrough explaining architecture decisions and trade-offs
+    type: document

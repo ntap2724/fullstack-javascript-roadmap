@@ -10,6 +10,8 @@ prerequisites:
   - track-cycle-a
 requiredCompetencies: []
 modules: []
+gates:
+  - gate-fixture-multi-cycle-c
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
 ---

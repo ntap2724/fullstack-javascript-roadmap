@@ -89,14 +89,16 @@ test('TypeScript base config is strict and emits no build artifacts', async () =
 test('root compiler entry point extends the base contract', async () => {
   const config = await readJson('tsconfig.json');
   assert.equal(config.extends, './tsconfig.base.json');
-  // Exact deepEqual, deliberately: this is a LOCK on the root program's contents.
-  // It must fail if the include list changes unannounced, so relaxing it to a
-  // substring, length, or .includes() check is refused. scripts/verify-all-templates.ts
-  // was added under Owner ruling R5 so that pnpm typecheck genuinely covers it.
+  // scripts/verify-wp10-skeleton.ts and its focused evaluator test are both root
+  // programs under the Task 9 final-gate contract, so they must be covered by the
+  // root compiler rather than relying on Vitest transformation alone.
   assert.deepEqual(config.include, [
     'vitest.config.ts',
     'scripts/generate-json-schema.ts',
     'scripts/verify-all-templates.ts',
+    'scripts/verify-template-learner-contract.ts',
+    'scripts/verify-wp10-skeleton.ts',
+    'scripts/verify-wp10-skeleton.test.ts',
   ]);
 });
 

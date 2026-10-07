@@ -13,6 +13,8 @@ requiredCompetencies:
   - js.function.values
 modules:
   - module-js-functions
+gates:
+  - gate-fixture-js-core-baseline
 ---
 
 Fixture tối thiểu cho track.

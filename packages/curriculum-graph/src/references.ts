@@ -64,6 +64,7 @@ function enumerateForDocument(document: CurriculumDocument): DeclaredReference[]
           filePath,
         ),
         ...referencesFromArray(data.modules, 'track.modules', 'modules', declaringId, filePath),
+        ...referencesFromArray(data.gates, 'track.gates', 'gates', declaringId, filePath),
       );
       break;
     case 'module':
@@ -182,6 +183,67 @@ function enumerateForDocument(document: CurriculumDocument): DeclaredReference[]
         },
       );
       break;
+    case 'release':
+      refs.push(
+        {
+          declaringId,
+          targetId: data.track,
+          relation: 'release.track',
+          sourceFile: filePath,
+          pointer: 'track',
+        },
+        {
+          declaringId,
+          targetId: data.entryGate,
+          relation: 'release.entryGate',
+          sourceFile: filePath,
+          pointer: 'entryGate',
+        },
+        {
+          declaringId,
+          targetId: data.exitGate,
+          relation: 'release.exitGate',
+          sourceFile: filePath,
+          pointer: 'exitGate',
+        },
+      );
+      break;
+    case 'gate':
+      refs.push(
+        ...referencesFromArray(
+          data.competencies,
+          'gate.competencies',
+          'competencies',
+          declaringId,
+          filePath,
+        ),
+        {
+          declaringId,
+          targetId: data.exitAssessment,
+          relation: 'gate.exitAssessment',
+          sourceFile: filePath,
+          pointer: 'exitAssessment',
+        },
+        ...referencesFromArray(
+          data.remediation,
+          'gate.remediation',
+          'remediation',
+          declaringId,
+          filePath,
+        ),
+      );
+      break;
+    case 'project':
+      refs.push(
+        ...referencesFromArray(
+          data.competencies,
+          'project.competencies',
+          'competencies',
+          declaringId,
+          filePath,
+        ),
+      );
+      break;
   }
 
   return refs;
@@ -210,6 +272,7 @@ const RESOLVE_LOCALLY: Record<DeclaredReferenceRelation, boolean> = {
   prerequisites: true,
   'track.requiredCompetencies': true,
   'track.modules': true,
+  'track.gates': true,
   'module.competencies': true,
   'module.lessons': true,
   'module.milestone': true,
@@ -224,6 +287,13 @@ const RESOLVE_LOCALLY: Record<DeclaredReferenceRelation, boolean> = {
   'milestone.competencies': true,
   'milestone.project': false,
   'milestone.rubric': false,
+  'release.track': true,
+  'release.entryGate': true,
+  'release.exitGate': true,
+  'gate.competencies': true,
+  'gate.exitAssessment': true,
+  'gate.remediation': true,
+  'project.competencies': true,
 };
 
 /**
@@ -237,6 +307,7 @@ const EXPECTED_TARGET_KINDS: Partial<
 > = {
   'track.requiredCompetencies': 'competency',
   'track.modules': 'module',
+  'track.gates': 'gate',
   'module.competencies': 'competency',
   'module.lessons': 'lesson',
   'module.milestone': 'milestone',
@@ -245,6 +316,13 @@ const EXPECTED_TARGET_KINDS: Partial<
   'lesson.assessments': 'assessment',
   'assessment.competencies': 'competency',
   'milestone.competencies': 'competency',
+  'release.track': 'track',
+  'release.entryGate': 'gate',
+  'release.exitGate': 'gate',
+  'gate.competencies': 'competency',
+  'gate.exitAssessment': 'assessment',
+  'gate.remediation': 'assessment',
+  'project.competencies': 'competency',
 };
 
 /**

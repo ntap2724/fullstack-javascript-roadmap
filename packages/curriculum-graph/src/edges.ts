@@ -22,6 +22,7 @@ interface EdgeSpec {
 const EDGE_SPECS: Partial<Record<DeclaredReferenceRelation, EdgeSpec>> = {
   prerequisites: { type: 'prerequisite', direction: 'forward' },
   'track.modules': { type: 'contains', direction: 'forward' },
+  'track.gates': { type: 'contains', direction: 'forward' },
   'module.competencies': { type: 'contains', direction: 'forward' },
   'module.lessons': { type: 'contains', direction: 'forward' },
   'module.milestone': { type: 'contains', direction: 'forward' },
@@ -29,6 +30,13 @@ const EDGE_SPECS: Partial<Record<DeclaredReferenceRelation, EdgeSpec>> = {
   'competency.assessments': { type: 'assesses', direction: 'forward' },
   'competency.remediation': { type: 'remediates', direction: 'forward' },
   'assessment.competencies': { type: 'assesses', direction: 'reverse' },
+  'release.track': { type: 'contains', direction: 'forward' },
+  'release.entryGate': { type: 'contains', direction: 'forward' },
+  'release.exitGate': { type: 'contains', direction: 'forward' },
+  'gate.competencies': { type: 'contains', direction: 'forward' },
+  'gate.exitAssessment': { type: 'assesses', direction: 'forward' },
+  'gate.remediation': { type: 'remediates', direction: 'forward' },
+  'project.competencies': { type: 'contains', direction: 'forward' },
 };
 
 /**

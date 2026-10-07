@@ -12,6 +12,8 @@ requiredCompetencies:
   - js.function.closure
 modules:
   - module-js-functions
+gates:
+  - gate-release-zero-baseline
 introducedIn: 0.1.0
 lastReviewedIn: 0.1.0
 ---

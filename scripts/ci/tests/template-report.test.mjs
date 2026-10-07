@@ -13,7 +13,13 @@ const require = createRequire(import.meta.url);
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const candidateScript = path.join(repoRoot, 'scripts', 'verify-all-templates.ts');
 const tsxCli = require.resolve('tsx/cli');
-const templateId = 'javascript-engineering';
+
+// Every template the production script verifies, sorted exactly as readdir returns
+// them. This stays an exhaustive whitelist: the guard's intent is that a run writes
+// one report per verified template and nothing else, so adding a template here is a
+// deliberate, reviewed act rather than a side effect of loosening the assertion.
+const templateIds = ['fullstack-vertical-slice', 'javascript-engineering'];
+const reportedTemplateId = 'javascript-engineering';
 const functionalSha256 = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 async function writeGitObject(gitDirectory, type, body) {
@@ -57,7 +63,7 @@ async function createHarness(t, dryRunReport, staleReport) {
   const root = path.join(scratch, 'repository');
   const scriptPath = path.join(root, 'scripts', 'verify-all-templates.ts');
   const pipelinePath = path.join(root, 'tooling', 'publish-templates', 'src', 'pipeline.js');
-  const reportPath = path.join(root, '.tmp', 'reports', 'templates', `${templateId}.json`);
+  const reportPath = path.join(root, '.tmp', 'reports', 'templates', `${reportedTemplateId}.json`);
   const childTemp = path.join(scratch, 'os-temp');
   await mkdir(root);
   await mkdir(path.dirname(scriptPath), { recursive: true });
@@ -175,7 +181,7 @@ test('failed template dry run invalidates stale passing evidence for the same te
     schemaVersion: 1,
     status: 'passed',
     sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    templateId,
+    templateId: reportedTemplateId,
     functionalSha256,
     diagnostics: [],
   };
@@ -199,7 +205,7 @@ test('failed template dry run invalidates stale passing evidence for the same te
   );
 });
 
-test('successful template dry run writes exactly one declared passing report', async (t) => {
+test('successful template dry run writes exactly one declared passing report per template', async (t) => {
   const diagnostics = [{ code: 'SYNTHETIC_TEMPLATE_NOTICE' }];
   const harness = await createHarness(t, {
     status: 'passed',
@@ -207,15 +213,6 @@ test('successful template dry run writes exactly one declared passing report', a
     diagnostics,
   });
   const outcome = runTemplateVerifier(harness);
-  const report = await readReport(harness.reportPath);
-  const expected = {
-    schemaVersion: 1,
-    status: 'passed',
-    sourceCommit: harness.sourceCommit,
-    templateId,
-    functionalSha256,
-    diagnostics,
-  };
 
   assert.deepEqual(
     {
@@ -226,6 +223,27 @@ test('successful template dry run writes exactly one declared passing report', a
     },
     { exitCode: 0, signal: null, stdout: '', stderr: '' },
   );
-  assert.deepEqual(await readdir(path.dirname(harness.reportPath)), [`${templateId}.json`]);
-  assert.equal(report?.text, `${JSON.stringify(expected, null, 2)}\n`);
+
+  // Exhaustive, deliberately: one report per verified template and nothing else.
+  // A run that silently skipped a template, or emitted a stray file, must fail here.
+  assert.deepEqual(
+    await readdir(path.dirname(harness.reportPath)),
+    templateIds.map((id) => `${id}.json`),
+  );
+
+  // Every report is checked byte-for-byte, so a template cannot be "verified" with
+  // a report that omits or reshapes the declared evidence fields.
+  for (const templateId of templateIds) {
+    const reportPath = path.join(path.dirname(harness.reportPath), `${templateId}.json`);
+    const report = await readReport(reportPath);
+    const expected = {
+      schemaVersion: 1,
+      status: 'passed',
+      sourceCommit: harness.sourceCommit,
+      templateId,
+      functionalSha256,
+      diagnostics,
+    };
+    assert.equal(report?.text, `${JSON.stringify(expected, null, 2)}\n`, templateId);
+  }
 });

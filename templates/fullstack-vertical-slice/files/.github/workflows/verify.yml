@@ -1,0 +1,63 @@
+name: Verify
+
+# Read-only verification for a learner repository.
+#
+# Two jobs with deliberately different meanings:
+#
+#   baseline          proves the scaffolding is healthy. Runs on every event,
+#                     including the first push, so a freshly generated
+#                     repository starts green.
+#   learner-contract  proves whether the milestone is implemented. Runs on pull
+#                     requests and manual dispatch only. It is EXPECTED to fail
+#                     until enrollment is implemented; that red result is the
+#                     signal, not a defect.
+#
+# The learner failure is never suppressed. No step tolerates a non-zero exit and
+# no shell inversion appears anywhere in this workflow: `pnpm verify` decides the
+# job result directly.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:baseline
+
+  learner-contract:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify

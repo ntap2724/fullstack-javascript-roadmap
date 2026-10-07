@@ -13,6 +13,8 @@ requiredCompetencies:
   - test.missing-assessment
 modules:
   - module-missing-assessment
+gates:
+  - gate-fixture-missing-assessment
 ---
 
 Wrong-kind assessment completeness fixture.

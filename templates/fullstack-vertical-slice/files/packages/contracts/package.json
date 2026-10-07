@@ -1,0 +1,24 @@
+{
+  "name": "@workshop/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json --noEmit",
+    "build": "tsc --project tsconfig.build.json",
+    "test:infrastructure": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
+  }
+}

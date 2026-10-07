@@ -13,6 +13,9 @@ const inputFiles = {
   browser: `${downloaded}/browser/all.json`,
   negative: `${downloaded}/ubuntu/negative-fixtures/report.json`,
   template: `${downloaded}/ubuntu/templates/javascript-engineering.json`,
+  wp10Skeleton: `${downloaded}/ubuntu/wp10/vertical-slice-skeleton.json`,
+  wp10Backlog: `${downloaded}/ubuntu/wp10/release-1-backlog.json`,
+  wp10Template: `${downloaded}/ubuntu/wp10/fullstack-template.json`,
 };
 
 for (const [name, file] of Object.entries(inputFiles)) {
@@ -63,6 +66,9 @@ await collectEvidence({
     { source: inputFiles.browser, target: 'browser/all.json' },
     { source: inputFiles.negative, target: 'negative-fixtures/report.json' },
     { source: inputFiles.template, target: 'templates/javascript-engineering/report.json' },
+    { source: inputFiles.wp10Skeleton, target: 'wp10/vertical-slice-skeleton.json' },
+    { source: inputFiles.wp10Backlog, target: 'wp10/release-1-backlog.json' },
+    { source: inputFiles.wp10Template, target: 'wp10/fullstack-template.json' },
     ...spikes.map(([id]) => ({
       source: `${derivedRoot}/${id}.json`,
       target: `spikes/${id}.json`,

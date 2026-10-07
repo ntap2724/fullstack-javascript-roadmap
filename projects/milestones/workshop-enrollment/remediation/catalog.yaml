@@ -1,0 +1,98 @@
+schemaVersion: 1
+entries:
+  - criterion: backend.authorization
+    competency: api.authorization.resource-ownership
+    lessons:
+      - lesson-http-express-orientation
+    exercises: []
+    retake:
+      - Implement server-side authorization on one protected endpoint with a negative test
+
+  - criterion: password.session-handling
+    competency: api.authentication.session-lifecycle
+    lessons:
+      - lesson-http-express-orientation
+    exercises: []
+    retake:
+      - Implement session creation with HttpOnly Secure cookie and verify expiry behavior
+
+  - criterion: unique.enrollment-invariant
+    competency: db.model.relational-constraints
+    lessons:
+      - lesson-postgresql-drizzle-orientation
+    exercises: []
+    retake:
+      - Add composite primary key to enrollment table and write a constraint violation test
+
+  - criterion: atomic.capacity-workflow
+    competency: db.transaction.atomic-enrollment
+    lessons:
+      - lesson-postgresql-drizzle-orientation
+    exercises: []
+    retake:
+      - Wrap enrollment in a transaction with capacity check and run a concurrent access test
+
+  - criterion: runtime.request-validation
+    competency: api.validation.runtime-boundary
+    lessons:
+      - lesson-typescript-bridge-orientation
+      - lesson-http-express-orientation
+    exercises: []
+    retake:
+      - Add Zod validation to one API endpoint and return contract-defined 400 on invalid input
+
+  - criterion: fresh-clone.reproducibility
+    competency: engineering.repository.reproducible-setup
+    lessons:
+      - lesson-engineering-baseline-orientation
+    exercises: []
+    retake:
+      - Clone to a clean directory, run frozen install and baseline verification, fix any failures
+
+  - criterion: no-credential.in-repository
+    competency: engineering.repository.reproducible-setup
+    lessons:
+      - lesson-engineering-baseline-orientation
+    exercises: []
+    retake:
+      - Audit tracked files for secrets, add .env.example, and verify health endpoint output
+
+  - criterion: accessible.primary-workflow
+    competency: react.state.ownership
+    lessons:
+      - lesson-react-spa-orientation
+    exercises: []
+    retake:
+      - Add semantic landmarks and ARIA roles to the workshop list and enrollment form
+
+  - criterion: loading.empty-error-states
+    competency: react.server-state.lifecycle
+    lessons:
+      - lesson-react-spa-orientation
+    exercises: []
+    retake:
+      - Implement all four product states with correct ARIA roles and keyboard retry
+
+  - criterion: english.readme
+    competency: career.evidence.technical-walkthrough
+    lessons:
+      - lesson-engineering-baseline-orientation
+    exercises: []
+    retake:
+      - Write README with prerequisites, commands, architecture map, and non-goals
+
+  - criterion: api.documentation
+    competency: http.request-response-semantics
+    lessons:
+      - lesson-http-express-orientation
+    exercises: []
+    retake:
+      - Document each endpoint with method, path, request/response schemas, and error codes
+
+  - criterion: debugging.report
+    competency: fullstack.incident.duplicate-submission
+    lessons:
+      - lesson-fullstack-integration-orientation
+    exercises: []
+    retake:
+      - Complete the duplicate-enrollment debugging task and submit a trace-through report

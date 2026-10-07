@@ -1,0 +1,20 @@
+schemaVersion: 1
+id: project-workshop-enrollment
+version: 0.1.0
+title: Workshop Enrollment
+status: review
+track: track-core-vertical-slice
+competencies:
+  - react.state.ownership
+  - api.validation.runtime-boundary
+  - api.authentication.session-lifecycle
+  - api.authorization.resource-ownership
+  - db.model.relational-constraints
+  - db.transaction.atomic-enrollment
+  - fullstack.contract.error-mapping
+  - fullstack.incident.duplicate-submission
+starterTemplate: template-fullstack-vertical-slice
+rubric: rubric-workshop-enrollment
+remediation: remediation-workshop-enrollment
+changeRequest: change-request-workshop-multiple-sessions
+debuggingTask: debugging-workshop-duplicate-enrollment

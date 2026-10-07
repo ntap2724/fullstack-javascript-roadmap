@@ -17,4 +17,14 @@ describe('stable-ID registry', () => {
       expect.arrayContaining([expect.objectContaining({ code: 'CURRICULUM_REFERENCE_001' })]),
     );
   });
+
+  it('rejects a release whose exit gate does not resolve', async () => {
+    const outcome = await graphFixture('invalid/release-missing-exit-gate');
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.diagnostics).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'CURRICULUM_REFERENCE_001' })]),
+      );
+    }
+  });
 });

@@ -1,0 +1,423 @@
+schemaVersion: 1
+releaseId: release-0-1-0
+items:
+  - id: R1-GOV-001
+    status: ready
+    lane: governance
+    risk: R2
+    objective: Define contributor decision records for Release 1 implementation boundaries
+    specReferences: [docs/decisions/0003-workshop-enrollment-boundaries.md]
+    dependsOn: []
+    files: [docs/authoring/release-1-governance.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum]
+    evidence: [decision-review]
+    openQuestions: []
+    coverage:
+      competencies: [engineering.repository.reproducible-setup, engineering.git.pull-request]
+      modules: [{ id: module-engineering-baseline, roles: [content, assessment] }]
+      criteria:
+        - { id: fresh-clone.reproducibility, roles: [implementation, test, remediation] }
+        - { id: no-credential.in-repository, roles: [implementation, test, remediation] }
+
+  - id: R1-CONTENT-ENGINEERING-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the reproducible setup content sequence for the vertical slice
+    specReferences: [curriculum/modules/module-engineering-baseline.md]
+    dependsOn: [R1-GOV-001]
+    files: [planning/release-1/sequences/engineering-baseline.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-engineering-baseline, roles: [content] }]
+      criteria: []
+
+  - id: R1-EXERCISE-JS-001
+    status: ready
+    lane: exercise
+    risk: R2
+    objective: Build an event-loop mechanism laboratory with observable promise failures
+    specReferences: [curriculum/competencies/js.async.promise-error.md]
+    dependsOn: [R1-GOV-001]
+    files: [exercises/release-1/javascript/event-loop-lab]
+    acceptance:
+      - command: pnpm
+        args: [test]
+        cwd: .
+        timeoutMs: 300000
+    review: [curriculum, testing]
+    evidence: [exercise-test-report]
+    openQuestions: []
+    coverage:
+      competencies: [js.async.promise-error, js.value.object-identity]
+      modules: [{ id: module-javascript-essentials, roles: [content, assessment] }]
+      criteria: []
+
+  - id: R1-CONTENT-JS-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Write and validate the closure mental-model lesson and executable examples
+    specReferences: [curriculum/competencies/js.function.closure.md]
+    dependsOn: [R1-CONTENT-ENGINEERING-001, R1-EXERCISE-JS-001]
+    files: [curriculum/lessons/lesson-js-closure-private-state.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [executable-example-report, assessment-alignment-review]
+    openQuestions: []
+    coverage:
+      competencies: [js.function.closure]
+      modules: [{ id: module-javascript-essentials, roles: [content, assessment] }]
+      criteria: []
+
+  - id: R1-CONTENT-TS-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Author the untrusted-input narrowing sequence and its review assessment
+    specReferences: [curriculum/competencies/ts.narrowing.untrusted-input.md]
+    dependsOn: [R1-CONTENT-BROWSER-001]
+    files: [curriculum/lessons/lesson-typescript-bridge-orientation.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-review]
+    openQuestions: []
+    coverage:
+      competencies: [ts.narrowing.untrusted-input]
+      modules: [{ id: module-typescript-bridge, roles: [content, assessment] }]
+      criteria: []
+
+  - id: R1-CONTENT-BROWSER-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the browser event and fetch boundary content sequence
+    specReferences: [curriculum/modules/module-browser-interaction.md]
+    dependsOn: [R1-CONTENT-JS-001]
+    files: [curriculum/modules/module-browser-interaction.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-browser-interaction, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-REACT-001
+    status: ready
+    lane: curriculum
+    risk: R2
+    objective: Define the React state ownership and server-state content sequence
+    specReferences: [curriculum/modules/module-react-spa.md]
+    dependsOn: [R1-CONTENT-TS-001]
+    files: [curriculum/modules/module-react-spa.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-react-spa, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-HTTP-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the HTTP and Express request boundary content sequence
+    specReferences: [curriculum/modules/module-http-express.md]
+    dependsOn: [R1-CONTENT-REACT-001]
+    files: [curriculum/modules/module-http-express.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-http-express, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-DB-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the relational constraints and transaction content sequence
+    specReferences: [curriculum/modules/module-postgresql-drizzle.md]
+    dependsOn: [R1-CONTENT-HTTP-001]
+    files: [curriculum/modules/module-postgresql-drizzle.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-postgresql-drizzle, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-FULLSTACK-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the cross-layer contract and incident content sequence
+    specReferences: [curriculum/modules/module-fullstack-integration.md]
+    dependsOn: [R1-CONTENT-DB-001]
+    files: [curriculum/modules/module-fullstack-integration.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-fullstack-integration, roles: [content] }]
+      criteria: []
+
+  - id: R1-CONTENT-CAPSTONE-001
+    status: ready
+    lane: curriculum
+    risk: R3
+    objective: Define the technical walkthrough and mini-capstone content sequence
+    specReferences: [curriculum/modules/module-mini-capstone.md]
+    dependsOn: [R1-CONTENT-FULLSTACK-001]
+    files: [curriculum/modules/module-mini-capstone.md]
+    acceptance:
+      - command: pnpm
+        args: [content:validate, curriculum, --format, json]
+        cwd: .
+        timeoutMs: 120000
+    review: [architecture, curriculum, testing]
+    evidence: [content-sequence-review]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: [{ id: module-mini-capstone, roles: [content] }]
+      criteria: []
+
+  - id: R1-WEB-001
+    status: ready
+    lane: frontend
+    risk: R3
+    objective: Implement the workshop-list server-state workflow and accessible enrollment entry
+    specReferences: [projects/milestones/workshop-enrollment/acceptance/contract.yaml]
+    dependsOn: [R1-CONTENT-BROWSER-001]
+    files: [templates/fullstack-vertical-slice/files/apps/web/src]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [browser-test-report]
+    openQuestions: []
+    coverage:
+      competencies:
+        [
+          react.state.ownership,
+          react.server-state.lifecycle,
+          browser.dom.event-flow,
+          browser.fetch.http-boundary,
+        ]
+      modules:
+        - { id: module-react-spa, roles: [content, assessment] }
+        - { id: module-browser-interaction, roles: [content, assessment] }
+      criteria:
+        - { id: accessible.primary-workflow, roles: [implementation, test, remediation] }
+        - { id: loading.empty-error-states, roles: [implementation, test, remediation] }
+
+  - id: R1-API-001
+    status: ready
+    lane: backend
+    risk: R3
+    objective: Implement the runtime request and response boundary for workshop enrollment
+    specReferences: [projects/milestones/workshop-enrollment/acceptance/contract.yaml]
+    dependsOn: [R1-CONTENT-TS-001]
+    files: [templates/fullstack-vertical-slice/files/apps/api/src]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [api-contract-test-report]
+    openQuestions: []
+    coverage:
+      competencies: [http.request-response-semantics, api.validation.runtime-boundary]
+      modules: [{ id: module-http-express, roles: [content, assessment] }]
+      criteria:
+        - { id: runtime.request-validation, roles: [implementation, test, remediation] }
+        - { id: api.documentation, roles: [implementation, test, remediation] }
+
+  - id: R1-DB-001
+    status: ready
+    lane: database
+    risk: R4
+    objective: Create the initial Drizzle migration with relational constraint integration tests
+    specReferences: [docs/decisions/0003-workshop-enrollment-boundaries.md]
+    dependsOn: [R1-API-001]
+    files: [templates/fullstack-vertical-slice/files/packages/database]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [migration-test-report]
+    openQuestions: []
+    coverage:
+      competencies: [db.model.relational-constraints]
+      modules: [{ id: module-postgresql-drizzle, roles: [content, assessment] }]
+      criteria:
+        - { id: unique.enrollment-invariant, roles: [implementation, test, remediation] }
+
+  - id: R1-SEC-001
+    status: ready
+    lane: backend
+    risk: R4
+    objective: Implement session creation storage revocation and server-side resource authorization
+    specReferences: [docs/decisions/0002-reference-authentication.md]
+    dependsOn: [R1-API-001, R1-DB-001]
+    files: [templates/fullstack-vertical-slice/files/apps/api/src/auth]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [security-test-report]
+    openQuestions: []
+    coverage:
+      competencies: [api.authentication.session-lifecycle, api.authorization.resource-ownership]
+      modules:
+        - { id: module-http-express, roles: [content, assessment] }
+        - { id: module-postgresql-drizzle, roles: [content, assessment] }
+      criteria:
+        - { id: backend.authorization, roles: [implementation, test, remediation] }
+        - { id: password.session-handling, roles: [implementation, test, remediation] }
+
+  - id: R1-DB-002
+    status: ready
+    lane: database
+    risk: R4
+    objective: Implement the atomic enrollment transaction with capacity and uniqueness guarantees
+    specReferences: [projects/milestones/workshop-enrollment/rubric/rubric.yaml]
+    dependsOn: [R1-DB-001, R1-SEC-001]
+    files: [templates/fullstack-vertical-slice/files/apps/api/src/enrollment.ts]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [transaction-integration-report]
+    openQuestions: []
+    coverage:
+      competencies: [db.transaction.atomic-enrollment]
+      modules: [{ id: module-postgresql-drizzle, roles: [content, assessment] }]
+      criteria:
+        - { id: atomic.capacity-workflow, roles: [implementation, test, remediation] }
+
+  - id: R1-FULLSTACK-001
+    status: ready
+    lane: fullstack
+    risk: R4
+    objective: Resolve duplicate submissions through contract errors and regression coverage
+    specReferences: [projects/milestones/workshop-enrollment/debugging/duplicate-enrollment.vi.md]
+    dependsOn: [R1-WEB-001, R1-DB-002]
+    files: [templates/fullstack-vertical-slice/files/apps]
+    acceptance:
+      - command: pnpm
+        args: [verify:templates]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, testing, security]
+    evidence: [incident-regression-report]
+    openQuestions: []
+    coverage:
+      competencies: [fullstack.contract.error-mapping, fullstack.incident.duplicate-submission]
+      modules: [{ id: module-fullstack-integration, roles: [content, assessment] }]
+      criteria:
+        - { id: debugging.report, roles: [implementation, test, remediation] }
+
+  - id: R1-ASSESS-001
+    status: ready
+    lane: assessment
+    risk: R3
+    objective: Validate technical walkthrough evidence and mini-capstone assessment alignment
+    specReferences: [projects/milestones/workshop-enrollment/evidence/requirements.yaml]
+    dependsOn: [R1-FULLSTACK-001]
+    files: [projects/milestones/workshop-enrollment]
+    acceptance:
+      - command: pnpm
+        args: [test]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, curriculum, testing]
+    evidence: [assessment-review]
+    openQuestions: []
+    coverage:
+      competencies: [career.evidence.technical-walkthrough]
+      modules: [{ id: module-mini-capstone, roles: [content, assessment] }]
+      criteria:
+        - { id: english.readme, roles: [implementation, test, remediation] }
+
+  - id: R1-PILOT-001
+    status: ready
+    lane: pilot
+    risk: R3
+    objective: Conduct a fresh-clone learner pilot and record bounded Release 1 blockers
+    specReferences: [planning/release-1/pilot-protocol.md]
+    dependsOn: [R1-ASSESS-001]
+    files: [planning/release-1/pilot-protocol.md]
+    acceptance:
+      - command: pnpm
+        args: [verify]
+        cwd: .
+        timeoutMs: 300000
+    review: [architecture, curriculum, testing, security, release]
+    evidence: [pilot-report]
+    openQuestions: []
+    coverage:
+      competencies: []
+      modules: []
+      criteria: []

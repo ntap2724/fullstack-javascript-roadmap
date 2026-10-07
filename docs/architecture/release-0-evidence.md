@@ -12,6 +12,9 @@
 | `spikes/template-publication.json`    | aggregate derivation      | Linux           | R4           |
 | `spikes/cross-platform.json`          | aggregate derivation      | Linux + Windows | R3           |
 | `spikes/leak-prevention.json`         | aggregate derivation      | Linux           | R4           |
+| `wp10/vertical-slice-skeleton.json`   | `pnpm verify:wp10`        | Linux           | R3           |
+| `wp10/release-1-backlog.json`         | `pnpm verify:wp10`        | Linux           | R3           |
+| `wp10/fullstack-template.json`        | `pnpm verify:wp10`        | Linux           | R4           |
 
 ## Negative fixtures
 
@@ -30,7 +33,7 @@
 
 `verify-release-0.mjs` enforces:
 
-1. **RELEASE_EVIDENCE_001** — All 10 required records present
+1. **RELEASE_EVIDENCE_001** — All required records present
 2. **RELEASE_EVIDENCE_002** — Every record names the same source commit as the manifest
 3. **RELEASE_EVIDENCE_003** — Every record has status `passed`
 4. **RELEASE_EVIDENCE_004** — Every file matches its recorded byte count and SHA-256
